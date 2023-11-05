@@ -1,0 +1,28 @@
+[package]
+name = "test_no_std"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+strobe = { path="../strobe", default-features = false }
+# panic-never = "0.1.0"
+
+[profile.dev]
+panic = "abort"
+opt-level = "s"
+lto = true       # Use full link-time optimization to reduce file size and eliminate panic branches
+codegen-units = 1
+debug = false
+debug-assertions = false
+overflow-checks = false
+
+[profile.release]
+panic = "abort"
+opt-level = "s"  # Compiler optimization for minimum file size
+lto = true       # Use full link-time optimization to reduce file size and eliminate panic branches
+codegen-units = 1
+debug = false
+debug-assertions = false
+overflow-checks = false
