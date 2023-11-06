@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-strobe = { path="../strobe", default-features = false }
+interpn = { path="../interpn", default-features = false }
 # panic-never = "0.1.0"
 
 [profile.dev]

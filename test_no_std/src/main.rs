@@ -5,7 +5,7 @@
 
 use core::panic::PanicInfo;
 
-use interpn::*;
+use interpn::{multilinear_rectilinear, multilinear_regular};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -15,11 +15,27 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[no_mangle]
 pub fn _start() -> ! {
-    // let a = [1.0_f64, 2.0, 3.0, 4.0];
-    // let b = [1.0_f64, 2.0, 3.0, 4.0];
-    // let mut c = [0.0; 4];
+    let x = [1.0_f64, 2.0];
+    let y = [1.0_f64, 2.0];
 
-    // add(&mut array(&a), &mut array(&b)).eval_into_slice(&mut c);
+    let mut z = [2.0; 4];
+
+    let mut out = [0.0; 4];
+
+    let dims = [nx, ny];
+    let starts = [x[0], y[0]];
+    let steps = [1.0, 1.0];
+
+    let xy = [0.0, 0.0];
+
+    multilinear_regular::interpn(
+        &xy[..],
+        &mut out[..],
+        &z[..],
+        &dims[..],
+        &starts[..],
+        &steps[..],
+    );
 
     loop {} // We don't actually run this, just compile it
 }
