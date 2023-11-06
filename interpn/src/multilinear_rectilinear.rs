@@ -26,7 +26,7 @@ where
         // Check dimensions
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
-        (0..ndims).for_each(|i| dims[i] = grids[i].as_ref().len());
+        (0..ndims).for_each(|i| dims[i] = grids[i].len());
         let nvals = dims[..ndims].iter().fold(1, |acc, x| acc * x);
         assert!(vals.len() == nvals && ndims > 0, "Dimension mismatch");
 
@@ -137,7 +137,7 @@ where
             let mut vol = T::one();
             for j in 0..ndims {
                 let iloc = inds[j] + iops[j]; // Index of location of opposite vertex
-                let loc = self.grids[j].as_ref()[iloc]; // Loc. of opposite vertex
+                let loc = self.grids[j][iloc]; // Loc. of opposite vertex
                 let dx = x[j] - loc; // Delta position from opposite vertex to obs. loc
                 vol = vol * dx;
             }
@@ -157,7 +157,7 @@ where
     /// point in order to capture a full cube, then saturates to 0 if the resulting
     /// index would be off the grid (meaning, if a dimension has size one).
     fn get_loc(&self, v: T, dim: usize) -> usize {
-        let iloc = self.grids[dim].as_ref().partition_point(|x| *x <= v) as isize - 1;
+        let iloc = self.grids[dim].partition_point(|x| *x <= v) as isize - 1;
         iloc.min(self.dims[dim] as isize - 2).max(0) as usize
     }
 
@@ -166,7 +166,7 @@ where
         let mut vol = T::one();
         for i in 0..self.grids.len() {
             let j = (inds[i] + 1).min(self.dims[i] - 1).max(0); // Index of upper corner (saturating to bounds)
-            let mut dx = self.grids[i].as_ref()[j] - self.grids[i].as_ref()[inds[i]];
+            let mut dx = self.grids[i][j] - self.grids[i][inds[i]];
             if dx == T::zero() {
                 dx = T::one();
             }
