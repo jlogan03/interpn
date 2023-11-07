@@ -103,7 +103,6 @@ where
         // reduces memory overhead, but has not effect on throughput rate.
         let inds: &mut [usize] = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
-        let iops = &mut [false; MAXDIMS][..ndims]; // Offset index for opposite vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
 
         // Populate lower corner and saturation flag for each dimension
@@ -147,16 +146,11 @@ where
             // Get the value at this vertex
             let v = self.vals[k];
 
-            // Populate the index offsets for the opposing vertex
-            for j in 0..ndims {
-                iops[j] = !ioffs[j];
-            }
-
             // Accumulate the volume of the prism formed by the
             // observation location and the opposing vertex
             let mut vol = T::one();
             for j in 0..ndims {
-                let iloc = inds[j] + iops[j] as usize; // Index of location of opposite vertex
+                let iloc = inds[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let loc = self.starts[j] + self.steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
                 let dx = x[j] - loc; // Delta position from opposite vertex to obs. loc
                 vol = vol * dx;
