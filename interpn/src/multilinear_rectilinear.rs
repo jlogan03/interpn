@@ -22,6 +22,7 @@ where
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    #[inline(always)]
     pub fn new(vals: &'a [T], grids: &'a [&'a [T]]) -> Self {
         // Check dimensions
         let ndims = grids.len();
@@ -52,6 +53,7 @@ where
 
     /// Interpolate on interleaved list of points.
     /// Assumes C-style ordering of points ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    #[inline(always)]
     pub fn interp(&self, x: &[T], out: &mut [T]) {
         let n = out.len();
         let ndims = self.grids.len();
@@ -75,6 +77,7 @@ where
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
+    #[inline(always)]
     pub fn interp_one(&self, x: &[T]) -> T {
         // Check sizes
         let ndims = self.grids.len();
@@ -156,12 +159,14 @@ where
     /// At the high bound of a given dimension, saturates to the next-most-internal
     /// point in order to capture a full cube, then saturates to 0 if the resulting
     /// index would be off the grid (meaning, if a dimension has size one).
+    #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> usize {
         let iloc = self.grids[dim].partition_point(|x| *x <= v) as isize - 1;
         iloc.min(self.dims[dim] as isize - 2).max(0) as usize
     }
 
     /// Get the volume of the grid prism with `inds` as its lower corner
+    #[inline(always)]
     fn get_vol(&self, inds: &[usize]) -> T {
         let mut vol = T::one();
         for i in 0..self.grids.len() {
@@ -184,6 +189,7 @@ where
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
+#[inline(always)]
 pub fn interpn<'a>(x: &'a [f64], out: &'a mut [f64], vals: &'a [f64], grids: &'a [&'a [f64]]) {
     let interpolator: RectilinearGridInterpolator<'_, _, 10> =
         RectilinearGridInterpolator::new(vals, grids);
