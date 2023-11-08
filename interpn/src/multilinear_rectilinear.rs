@@ -93,9 +93,14 @@ where
 
         // Populate lower corner
         for i in 0..ndims {
-            inds[i] = self.get_loc(x[i], i)
+            (inds[i], sat[i]) = self.get_loc(x[i], i)
         }
 
+        // Check if any dimension is saturated.
+        // This gives a ~15% overall speedup for points on the interior.
+        let maybe_neg = (0..ndims).any(|j| sat[j] != 0);
+
+        // Calculate the total volume of this cell
         let cell_vol = self.get_vol(inds);
 
         // Traverse vertices, summing contributions to the interpolated value.
@@ -140,6 +145,21 @@ where
                 vol = vol * dx;
             }
 
+            // Determine the sign of the contribution.
+            // For observation points outside the grid, negate the contribution
+            // of the inner points on the dimensions that are saturated, in order
+            // to naturally transition to extrapolation.
+            // If there are any saturated points, check if the current vertex
+            // is on a saturated dimension. If it is, return 
+            if maybe_neg {
+                let neg =
+                    (0..ndims).any(|j| (((!ioffs[j]) && sat[j] == 2) || (ioffs[j] && sat[j] == 1)));
+                if neg {
+                    interped = interped + v.neg() * vol.abs();
+                    continue;
+                }
+            }
+
             // Add contribution from this vertex, leaving the division
             // by the total cell volume for later to save a few flops
             interped = interped + v * vol.abs();
@@ -154,10 +174,51 @@ where
     /// At the high bound of a given dimension, saturates to the next-most-internal
     /// point in order to capture a full cube, then saturates to 0 if the resulting
     /// index would be off the grid (meaning, if a dimension has size one).
+    ///
+    /// Returned value like (lower_corner_index, saturation_flag).
+    ///
+    /// Saturation flag
+    /// * 0 => inside
+    /// * 1 => low
+    /// * 2 => high
+    ///
+    /// Unfortunately, using a repr(u8) enum for the saturation flag is a >10% perf hit.
     #[inline(always)]
-    fn get_loc(&self, v: T, dim: usize) -> usize {
-        let iloc = self.grids[dim].partition_point(|x| *x <= v) as isize - 1;
-        iloc.min(self.dims[dim] as isize - 2).max(0) as usize
+    fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
+        let loc: usize; // Lower corner index
+        let saturation: u8; // Saturated low/high/not at all
+
+        // Bisection search to find location on the grid
+        // The search will return `0` if the point is outside-low,
+        // and will return `self.dims[dim]` if outside-high.
+        // We still need to convert to a signed integer here, because
+        // if the grid has less than 2 points in this dimension,
+        // we may need to (briefly) represent a negative index.
+        let iloc = self.grids[dim].partition_point(|x| *x < v) as isize - 1;
+
+        // Handle points outside the grid on the low side
+        if iloc < 0 {
+            loc = 0;
+            saturation = 1;
+        }
+        // Handle points outside the grid on the high side
+        // This is for the lower corner of the cell, so if we saturate high,
+        // we have to return the value that is the next-most-interior
+        else if iloc > (self.dims[dim] as isize - 2) {
+            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
+            saturation = 2;
+        }
+        // Handle points on the interior.
+        // These points may still saturate the index, which needs to be
+        // farther inside than the last grid point for the lower corner,
+        // but clipping to the most-inside point may, in turn, saturate
+        // at the lower bound if the
+        else {
+            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
+            saturation = 0;
+        }
+
+        (loc, saturation)
     }
 
     /// Get the volume of the grid prism with `inds` as its lower corner
