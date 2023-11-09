@@ -346,25 +346,24 @@ mod test {
 
         let x = linspace(0.0, 10.0, nx);
         let y = linspace(-5.0, 5.0, ny);
-        let mut out = vec![0.0; nx.max(ny)];
 
         let grid = meshgrid(Vec::from([&x, &y]));
-        // let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
 
         // Make a function that is linear in both dimensions
-        // and should behave reasonably well under extrapolation
+        // and should behave reasonably well under extrapolation in one
+        // dimension at a time, but not necessarily when extrapolating in both at once.
         let z: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
 
         // Make some grids to extrapolate
+        //   High/low x
         let xe1 = vec![-1.0; ny];
         let xe2 = vec![11.0; ny];
         let ye1 = linspace(-5.0, 5.0, ny);
-        // let xye1: Vec<f64> = xe1.iter().zip(ye1.iter()).map(|(xi, yi)| [*xi, *yi]).flatten().collect();
         let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
         let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
         let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
         let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
-
+        //   High/low y
         let ye2 = vec![-6.0; nx];
         let ye3 = vec![6.0; nx];
         let xe3 = linspace(0.0, 10.0, nx);
@@ -372,12 +371,17 @@ mod test {
         let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
         let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
         let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
+        //   High/low corners and all over the place
+        let xw = linspace(0.0, 10.0, nx * 2);
+        let yw = linspace(-5.0, 5.0, ny * 2);
+        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw]).iter().flatten().map(|xx| *xx).collect();
+        let zw: Vec<f64> = (0..xyw.len() / 2).map(|i| xyw[2 * i] * xyw[2 * i + 1]).collect();
+
+        let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
         let dims = [nx, ny];
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
-
-        println!("{nx} {ny} {} {} {}", out.len(), xye3.len(), xye4.len());
 
         // Check extrapolating low x
         interpn(&xye1, &mut out[..ny], &z, &dims, &starts, &steps);
@@ -394,5 +398,9 @@ mod test {
         // Check extrapolating high y
         interpn(&xye4, &mut out[..nx], &z, &dims, &starts, &steps);
         (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
+
+        // Check interpolating off grid on the interior
+        interpn(&xyw, &mut out[..zw.len()], &z, &dims, &starts, &steps);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }
