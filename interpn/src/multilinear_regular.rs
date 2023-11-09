@@ -228,7 +228,7 @@ where
     }
 }
 
-/// Initialize and evaluate up-to-10-dimensional multilinear interpolation on a regular grid.
+/// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
 /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
