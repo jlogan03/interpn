@@ -67,13 +67,15 @@ where
     /// Assumes C-style ordering of points ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     #[inline(always)]
     pub fn interp(&self, x: &[T], out: &mut [T]) {
-        let n = out.len();
         let ndims = self.dims.len();
-        assert!(x.len() % ndims == 0, "Dimension mismatch");
+        assert!(
+            x.len() % ndims == 0 && x.len() / ndims == out.len(),
+            "Dimension mismatch"
+        );
 
         let mut start = 0;
         let mut end = 0;
-        (0..n).for_each(|i| {
+        (0..out.len()).for_each(|i| {
             end = start + ndims;
             out[i] = self.interp_one(&x[start..end]);
             start = end;
@@ -161,10 +163,11 @@ where
             // of the inner points on the dimensions that are saturated, in order
             // to naturally transition to extrapolation.
             // If there are any saturated points, check if the current vertex
-            // is on a saturated dimension. If it is, return 
+            // is on a saturated dimension. If it is, return
             if maybe_neg {
                 let neg =
                     (0..ndims).any(|j| (((!ioffs[j]) && sat[j] == 2) || (ioffs[j] && sat[j] == 1)));
+
                 if neg {
                     interped = interped + v.neg() * vol.abs();
                     continue;
@@ -210,7 +213,7 @@ where
         // Handle points outside the grid on the high side
         // This is for the lower corner of the cell, so if we saturate high,
         // we have to return the value that is the next-most-interior
-        else if iloc as usize > self.dims[dim] - 1 {
+        else if iloc > (self.dims[dim] as isize - 2) {
             loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
             saturation = 2;
         }
@@ -254,6 +257,7 @@ mod test {
     use super::{interpn, RegularGridInterpolator};
     use crate::testing::*;
     use crate::utils::*;
+    use itertools::Itertools;
 
     #[test]
     fn test_interp_one_2d() {
@@ -271,7 +275,7 @@ mod test {
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
         let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&z[..], &dims[..], &starts[..], &steps[..]);
+            RegularGridInterpolator::new(&z, &dims, &starts, &steps);
 
         // Check values at every incident vertex
         xy.iter().zip(z.iter()).for_each(|(xyi, zi)| {
@@ -301,9 +305,9 @@ mod test {
         let steps = [x[1] - x[0], y[1] - y[0]];
 
         let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&z[..], &dims[..], &starts[..], &steps[..]);
+            RegularGridInterpolator::new(&z, &dims, &starts, &steps);
 
-        interpolator.interp(&xy[..], &mut out);
+        interpolator.interp(&xy, &mut out);
 
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
     }
@@ -329,15 +333,66 @@ mod test {
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
 
-        interpn(
-            &xy[..],
-            &mut out,
-            &z[..],
-            &dims[..],
-            &starts[..],
-            &steps[..],
-        );
+        interpn(&xy, &mut out, &z, &dims, &starts, &steps);
+        (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14));
+    }
 
-        (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
+    #[test]
+    fn test_extrap_2d() {
+        let m: usize = (100 as f64).sqrt() as usize;
+        let nx = m / 2;
+        let ny = m * 2;
+        // let n = nx * ny;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+        let mut out = vec![0.0; nx.max(ny)];
+
+        let grid = meshgrid(Vec::from([&x, &y]));
+        // let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
+
+        // Make a function that is linear in both dimensions
+        // and should behave reasonably well under extrapolation
+        let z: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
+
+        // Make some grids to extrapolate
+        let xe1 = vec![-1.0; ny];
+        let xe2 = vec![11.0; ny];
+        let ye1 = linspace(-5.0, 5.0, ny);
+        // let xye1: Vec<f64> = xe1.iter().zip(ye1.iter()).map(|(xi, yi)| [*xi, *yi]).flatten().collect();
+        let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
+        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
+        let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
+        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
+
+        let ye2 = vec![-6.0; nx];
+        let ye3 = vec![6.0; nx];
+        let xe3 = linspace(0.0, 10.0, nx);
+        let xye3: Vec<f64> = xe3.iter().interleave(ye2.iter()).map(|xi| *xi).collect();
+        let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
+        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
+        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
+
+        let dims = [nx, ny];
+        let starts = [x[0], y[0]];
+        let steps = [x[1] - x[0], y[1] - y[0]];
+
+        println!("{nx} {ny} {} {} {}", out.len(), xye3.len(), xye4.len());
+
+        // Check extrapolating low x
+        interpn(&xye1, &mut out[..ny], &z, &dims, &starts, &steps);
+        (0..ze1.len()).for_each(|i| assert!((out[i] - ze1[i]).abs() < 1e-12));
+
+        // Check extrapolating high x
+        interpn(&xye2, &mut out[..ny], &z, &dims, &starts, &steps);
+        (0..ze2.len()).for_each(|i| assert!((out[i] - ze2[i]).abs() < 1e-12));
+
+        // Check extrapolating low y
+        interpn(&xye3, &mut out[..nx], &z, &dims, &starts, &steps);
+        (0..ze3.len()).for_each(|i| assert!((out[i] - ze3[i]).abs() < 1e-12));
+
+        // Check extrapolating high y
+        interpn(&xye4, &mut out[..nx], &z, &dims, &starts, &steps);
+        (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
     }
 }

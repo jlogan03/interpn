@@ -150,7 +150,7 @@ where
             // of the inner points on the dimensions that are saturated, in order
             // to naturally transition to extrapolation.
             // If there are any saturated points, check if the current vertex
-            // is on a saturated dimension. If it is, return 
+            // is on a saturated dimension. If it is, return
             if maybe_neg {
                 let neg =
                     (0..ndims).any(|j| (((!ioffs[j]) && sat[j] == 2) || (ioffs[j] && sat[j] == 1)));
@@ -255,8 +255,8 @@ pub fn interpn<'a>(x: &'a [f64], out: &'a mut [f64], vals: &'a [f64], grids: &'a
 #[cfg(test)]
 mod test {
     use super::{interpn, RectilinearGridInterpolator};
-    use crate::utils::*;
     use crate::testing::*;
+    use crate::utils::*;
 
     #[test]
     fn test_interp_one_2d() {
