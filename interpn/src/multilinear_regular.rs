@@ -360,22 +360,22 @@ mod test {
         let xe2 = vec![11.0; ny];
         let ye1 = linspace(-5.0, 5.0, ny);
         let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
+        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] + ye1[i]).collect();
         let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
+        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] + ye1[i]).collect();
         //   High/low y
         let ye2 = vec![-6.0; nx];
         let ye3 = vec![6.0; nx];
         let xe3 = linspace(0.0, 10.0, nx);
         let xye3: Vec<f64> = xe3.iter().interleave(ye2.iter()).map(|xi| *xi).collect();
         let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
-        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
-        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
+        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] + ye2[i]).collect();
+        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] + ye3[i]).collect();
         //   High/low corners and all over the place
-        let xw = linspace(0.0, 10.0, nx * 2);
-        let yw = linspace(-5.0, 5.0, ny * 2);
+        let xw = linspace(-1.0, 11.0, 2);
+        let yw = linspace(-6.0, 6.0, 2);
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw]).iter().flatten().map(|xx| *xx).collect();
-        let zw: Vec<f64> = (0..xyw.len() / 2).map(|i| xyw[2 * i] * xyw[2 * i + 1]).collect();
+        let zw: Vec<f64> = (0..xyw.len() / 2).map(|i| xyw[2 * i] + xyw[2 * i + 1]).collect();
 
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
