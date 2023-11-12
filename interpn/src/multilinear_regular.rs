@@ -103,12 +103,9 @@ where
         // ergonomically unpleasant.
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let origin: &mut [usize] = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
-
-        // let opinds: &mut [usize] = &mut [0_usize; MAXDIMS][..ndims]; // Indices of opposite vertex
-        // let opextsat = &mut [0_u8; MAXDIMS][..ndims]; // Opposite vertex sat flags
 
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
         let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
