@@ -167,7 +167,6 @@ where
 
             // Accumulate the volume of the prism formed by the
             // observation location and the opposing vertex
-
             for j in 0..ndims {
                 let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let loc = self.starts[j] + self.steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
@@ -193,7 +192,6 @@ where
                 let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
 
                 // If the opposite vertex is on exactly one saturated bound, negate its contribution
-                // let neg = (0..ndims).any(|j| (((!ioffs[j]) && sat[j] == 2) || (ioffs[j] && sat[j] == 1)));
                 let neg = opsatcount == 1;
                 if neg {
                     sign = sign.neg();
@@ -219,14 +217,7 @@ where
                     for j in 0..ndims {
                         let is_saturated = sat[j] != 0;
                         if is_saturated && !opsat[j] {
-                            println!("{i} clipping axis {j} due to opposite vertex");
-                            let dxb4 = dxs[j];
                             dxs[j] = dxs[j].min(self.steps[j]);
-                            println!(
-                                "{i} dx before: {:?} after: {:?}",
-                                <f64 as NumCast>::from(dxb4).unwrap(),
-                                <f64 as NumCast>::from(dxs[j]).unwrap()
-                            );
                         }
                     }
                 }
@@ -251,41 +242,15 @@ where
                     // Evaluate the extrapolated corner volume
                     extrapvol = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
                 }
-
             }
-
-            println!(
-                "{i} dxs {:?}",
-                dxs.iter()
-                    .map(|xi| <f64 as NumCast>::from(*xi).unwrap())
-                    .collect::<Vec<f64>>()
-            );
-            println!(
-                "{i} steps {:?}",
-                self.steps[..ndims]
-                    .iter()
-                    .map(|xi| <f64 as NumCast>::from(*xi).unwrap())
-                    .collect::<Vec<f64>>()
-            );
 
             let vol = (dxs.iter().fold(T::one(), |acc, x| acc * *x).abs() - extrapvol) * sign;
 
             // Add contribution from this vertex, leaving the division
             // by the total cell volume for later to save a few flops
             interped = interped + v * vol;
-
-            println!(
-                "{i} {ioffs:?} {sat:?} {} {} {} {}",
-                <f64 as NumCast>::from(v).unwrap(),
-                <f64 as NumCast>::from(vol).unwrap(),
-                <f64 as NumCast>::from(sign).unwrap(),
-                <f64 as NumCast>::from(interped / self.vol).unwrap(),
-            );
         }
-        println!(
-            "Final {}",
-            <f64 as NumCast>::from(interped / self.vol).unwrap()
-        );
+
         interped / self.vol
     }
 
@@ -449,7 +414,6 @@ mod test {
         let m: usize = (100 as f64).sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
-        // let n = nx * ny;
 
         let x = linspace(0.0, 10.0, nx);
         let y = linspace(-5.0, 5.0, ny);
@@ -460,7 +424,6 @@ mod test {
         // and should behave reasonably well under extrapolation in one
         // dimension at a time, but not necessarily when extrapolating in both at once.
         let zgrid: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
-        // let z1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
 
         // Make some grids to extrapolate
         //   High/low x
@@ -479,25 +442,23 @@ mod test {
         let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
         let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
         let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
+
         //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
         let xw = linspace(-10.0, 11.0, 100);
         let yw = linspace(-7.0, 6.0, 100);
-        // let yw = vec![-6.0; 1];
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
             .iter()
             .flatten()
             .map(|xx| *xx)
             .collect();
-        // let zw: Vec<f64> = (0..xyw.len() / 2)
-        //     .map(|i| xyw[2 * i] * xyw[2 * i + 1])
-        //     .collect();
+
         let zw: Vec<f64> = (0..xyw.len() / 2)
             .map(|i| xyw[2 * i] + xyw[2 * i + 1])
             .collect();
         let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
-        // let zw: Vec<f64> = (0..xyw.len() / 2)
-        //     .map(|i|  xyw[2 * i])
-        //     .collect();
 
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
@@ -522,8 +483,6 @@ mod test {
         (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
 
         // Check interpolating off grid on the interior
-        println!("\nCorners");
-        println!("xyw {xyw:?}");
         interpn(&xyw, &mut out[..zw.len()], &zgrid1, &dims, &starts, &steps);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
