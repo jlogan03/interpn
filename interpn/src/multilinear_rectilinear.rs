@@ -91,6 +91,18 @@ where
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
 
+        let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
+        let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
+        let steps = &mut [T::zero(); MAXDIMS][..ndims]; // Step size on each dimension
+
+        // Whether the opposite vertex is on the saturated bound
+        // on each dimension
+        let opsat = &mut [false; MAXDIMS][..ndims];
+
+        // Whether the current vertex is on the saturated bound
+        // on each dimension
+        let thissat = &mut [false; MAXDIMS][..ndims];
+
         // Populate lower corner
         for i in 0..ndims {
             (inds[i], sat[i]) = self.get_loc(x[i], i)
@@ -98,10 +110,10 @@ where
 
         // Check if any dimension is saturated.
         // This gives a ~15% overall speedup for points on the interior.
-        let maybe_neg = (0..ndims).any(|j| sat[j] != 0);
+        let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
 
         // Calculate the total volume of this cell
-        let cell_vol = self.get_vol(inds);
+        let cell_vol = self.get_cell(inds, steps);
 
         // Traverse vertices, summing contributions to the interpolated value.
         //
@@ -111,6 +123,8 @@ where
         let nverts = 2_usize.pow(ndims as u32);
         for i in 0..nverts {
             let mut k: usize = 0; // index of the value for this vertex in self.vals
+            let mut sign = T::one(); // sign of the contribution from this vertex
+            let mut extrapvol = T::zero();
 
             // Every 2^nth vertex, flip which side of the cube we are examining
             // in the nth dimension.
@@ -137,32 +151,92 @@ where
 
             // Accumulate the volume of the prism formed by the
             // observation location and the opposing vertex
-            let mut vol = T::one();
             for j in 0..ndims {
                 let iloc = inds[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let loc = self.grids[j][iloc]; // Loc. of opposite vertex
-                let dx = x[j] - loc; // Delta position from opposite vertex to obs. loc
-                vol = vol * dx;
+                dxs[j] = loc;
             }
 
-            // Determine the sign of the contribution.
-            // For observation points outside the grid, negate the contribution
-            // of the inner points on the dimensions that are saturated, in order
-            // to naturally transition to extrapolation.
-            // If there are any saturated points, check if the current vertex
-            // is on a saturated dimension. If it is, return
-            if maybe_neg {
-                let neg =
-                    (0..ndims).any(|j| (((!ioffs[j]) && sat[j] == 2) || (ioffs[j] && sat[j] == 1)));
+            for j in 0..ndims {
+                dxs[j] = x[j] - dxs[j]; // Make the actual delta-locs
+            }
+
+            for j in 0..ndims {
+                dxs[j] = dxs[j].abs();
+            }
+
+            // Clip maximum dx for some cases to handle multidimensional extrapolation
+            if any_dims_saturated {
+                // For which dimensions is the opposite vertex on a saturated bound?
+                (0..ndims).for_each(|j| {
+                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1)
+                });
+
+                // For how many total dimensions is the opposite vertex on a saturated bound?
+                let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
+
+                // If the opposite vertex is on exactly one saturated bound, negate its contribution
+                let neg = opsatcount == 1;
                 if neg {
-                    interped = interped + v.neg() * vol.abs();
-                    continue;
+                    sign = sign.neg();
+                }
+
+                // If the opposite vertex is on _more_ than one saturated bound,
+                // it should be clipped on multiple axes which, if the clipping
+                // were implemented in a general constructive geometry way, would
+                // result in a zero volume. Since we only deal in the difference
+                // in position between vertices and the observation point, our
+                // clipping method would not properly set this volume to zero,
+                // and we need to implement that behavior with explicit logic.
+                let zeroed = opsatcount > 1;
+                if zeroed {
+                    sign = T::zero();
+                }
+
+                // If the opposite vertex is on exactly one saturated bound,
+                // allow the dx on that dimension to be as large as needed,
+                // but clip the dx on other saturated dimensions so that we
+                // don't produce an overlapping partition in outside-corner regions.
+                if neg {
+                    for j in 0..ndims {
+                        let is_saturated = sat[j] != 0;
+                        if is_saturated && !opsat[j] {
+                            dxs[j] = dxs[j].min(steps[j]);
+                        }
+                    }
+                }
+
+                // For which dimensions is the current vertex on a saturated bound?
+                (0..ndims).for_each(|j| {
+                    thissat[j] = (ioffs[j] && sat[j] == 2) || (!ioffs[j] && sat[j] == 1)
+                });
+
+                // For how many total dimensions is the current vertex on a saturated bound?
+                let thissatcount = thissat.iter().fold(0, |acc, x| acc + *x as usize);
+
+                // Subtract the extrapolated volume from the contribution for this vertex
+                // if it is on multiple saturated bounds.
+                // Put differently - find the part of the volume that is scaling non-linearly
+                // in the coordinates, and bookkeep it to be removed entirely later.
+                if thissatcount > 1 {
+                    // Copy forward the original dxs, extrapolated or not
+                    (0..ndims).for_each(|j| extrapdxs[j] = dxs[j]);
+                    // For extrapolated dimensions, take just the extrapolated distance
+                    (0..ndims).for_each(|j| {
+                        if thissat[j] {
+                            extrapdxs[j] = dxs[j] - steps[j]
+                        }
+                    });
+                    // Evaluate the extrapolated corner volume
+                    extrapvol = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
                 }
             }
 
+            let vol = (dxs.iter().fold(T::one(), |acc, x| acc * *x).abs() - extrapvol) * sign;
+
             // Add contribution from this vertex, leaving the division
             // by the total cell volume for later to save a few flops
-            interped = interped + v * vol.abs();
+            interped = interped + v * vol;
         }
 
         interped / cell_vol
@@ -222,20 +296,26 @@ where
     }
 
     /// Get the volume of the grid prism with `inds` as its lower corner
+    /// and output the step sizes for this cell as well.
     #[inline(always)]
-    fn get_vol(&self, inds: &[usize]) -> T {
-        let mut vol = T::one();
-        for i in 0..self.grids.len() {
-            let j = (inds[i] + 1).min(self.dims[i] - 1).max(0); // Index of upper corner (saturating to bounds)
+    fn get_cell(&self, inds: &[usize], steps: &mut [T]) -> T {
+        let ndims = self.grids.len();
+        for i in 0..ndims {
+            // Index of upper face (saturating to bounds)
+            let j = (inds[i] + 1).min(self.dims[i].saturating_sub(1));
             let mut dx = self.grids[i][j] - self.grids[i][inds[i]];
+
+            // Clip degenrate dimensions to one to prevent crashing when a dimension has size one
             if dx == T::zero() {
                 dx = T::one();
             }
 
-            vol = vol * dx;
+            steps[i] = dx;
         }
 
-        return vol;
+        let vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
+
+        return vol
     }
 }
 
@@ -257,6 +337,7 @@ mod test {
     use super::{interpn, RectilinearGridInterpolator};
     use crate::testing::*;
     use crate::utils::*;
+    use itertools::Itertools;
 
     #[test]
     fn test_interp_one_2d() {
@@ -325,8 +406,83 @@ mod test {
 
         let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
 
-        interpn(&xy[..], &mut out, &z[..], &[&x, &y]);
+        interpn(&xy, &mut out, &z, &[&x, &y]);
 
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
+    }
+
+    #[test]
+    fn test_extrap_2d() {
+        let m: usize = (100 as f64).sqrt() as usize;
+        let nx = m / 2;
+        let ny = m * 2;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+
+        let grid = meshgrid(Vec::from([&x, &y]));
+        let grids = &[&x[..], &y[..]];
+
+        // Make a function that is linear in both dimensions
+        // and should behave reasonably well under extrapolation in one
+        // dimension at a time, but not necessarily when extrapolating in both at once.
+        let zgrid: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
+
+        // Make some grids to extrapolate
+        //   High/low x
+        let xe1 = vec![-1.0; ny];
+        let xe2 = vec![11.0; ny];
+        let ye1 = linspace(-5.0, 5.0, ny);
+        let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
+        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
+        let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
+        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
+        //   High/low y
+        let ye2 = vec![-6.0; nx];
+        let ye3 = vec![6.0; nx];
+        let xe3 = linspace(0.0, 10.0, nx);
+        let xye3: Vec<f64> = xe3.iter().interleave(ye2.iter()).map(|xi| *xi).collect();
+        let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
+        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
+        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
+
+        //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
+        let xw = linspace(-10.0, 11.0, 100);
+        let yw = linspace(-7.0, 6.0, 100);
+        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
+            .iter()
+            .flatten()
+            .map(|xx| *xx)
+            .collect();
+
+        let zw: Vec<f64> = (0..xyw.len() / 2)
+            .map(|i| xyw[2 * i] + xyw[2 * i + 1])
+            .collect();
+        let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
+
+        let mut out = vec![0.0; nx.max(ny).max(zw.len())];
+
+        // Check extrapolating low x
+        interpn(&xye1, &mut out[..ny], &zgrid, grids);
+        (0..ze1.len()).for_each(|i| assert!((out[i] - ze1[i]).abs() < 1e-12));
+
+        // Check extrapolating high x
+        interpn(&xye2, &mut out[..ny], &zgrid, grids);
+        (0..ze2.len()).for_each(|i| assert!((out[i] - ze2[i]).abs() < 1e-12));
+
+        // Check extrapolating low y
+        interpn(&xye3, &mut out[..nx], &zgrid, grids);
+        (0..ze3.len()).for_each(|i| assert!((out[i] - ze3[i]).abs() < 1e-12));
+
+        // Check extrapolating high y
+        interpn(&xye4, &mut out[..nx], &zgrid, grids);
+        (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
+
+        // Check interpolating off grid on the interior
+        interpn(&xyw, &mut out[..zw.len()], &zgrid1, grids);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }
