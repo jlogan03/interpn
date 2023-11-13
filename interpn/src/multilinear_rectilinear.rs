@@ -267,7 +267,7 @@ where
     fn get_loc(&self, v: T, dim: usize, guess: usize) -> (usize, u8) {
         let grid = self.grids[dim];
         let saturation: u8; // Saturated low/high/not at all
-        let iloc: isize;  // Signed integer index location of this point
+        let iloc: isize; // Signed integer index location of this point
 
         // Bisection search to find location on the grid.
         //
@@ -282,19 +282,36 @@ where
         // performance between this method and the regular-grid method.
         //
         // First, try hard to avoid doing the bisection search at all
-        // by checking for extrapolation first, and keeping a rolling
-        // initial guess that drastically improves perf for batch runs.
-        if v < grid[0] {
+        // by checking for extrapolation and by keeping a rolling
+        // initial guess that drastically improves perf for batch runs,
+        // and by checking the next and previous index after the guess as well,
+        // since usages that traverse from low to high or high to low indices
+        // will often move from one index to its immediate neighbor.
+        let guess_minus_one = guess.saturating_sub(1);
+        let guess_plus_one = (guess + 1).min(grid.len() - 1);
+        let guess_plus_two = (guess + 2).min(grid.len() - 1);
+        // Check guess
+        if grid[guess] < v && grid[guess_plus_one] >= v {
+            iloc = guess as isize;
+        }
+        // Check next cell
+        else if grid[guess_plus_one] < v && grid[guess_plus_two] >= v {
+            iloc = guess_plus_one as isize;
+        }
+        // Check previous cell
+        else if grid[guess_minus_one] < v && grid[guess] >= v {
+            iloc = guess_minus_one as isize;
+        }
+        // Check for extrapolation below
+        else if v < grid[0] {
             iloc = -1;
         }
+        // Check for extrapolation above
         else if v > *grid.last().unwrap() {
             iloc = grid.len() as isize - 1
         }
-        else if grid[guess] < v && grid[(guess + 1).min(grid.len() - 1)] >= v {
-            iloc = guess as isize;
-        }
+        // If all else fails, do the actual binary search
         else {
-            // If all else fails, do the actual binary search
             iloc = grid.partition_point(|x| *x < v) as isize - 1;
         }
 
@@ -429,7 +446,7 @@ mod test {
         let grids = [&x[..], &y[..]];
 
         let interpolator: &mut RectilinearGridInterpolator<'_, _, 2> =
-        &mut RectilinearGridInterpolator::new(&grids, &z[..]);
+            &mut RectilinearGridInterpolator::new(&grids, &z[..]);
 
         interpolator.interp(&xy[..], &mut out);
 
