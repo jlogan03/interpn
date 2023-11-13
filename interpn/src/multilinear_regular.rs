@@ -305,18 +305,14 @@ where
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
 #[inline(always)]
-pub fn interpn(
-    dims: &[usize],
-    starts: &[f64],
-    steps: &[f64],
-    vals: &[f64],
-    obs: &[f64],
-    out: &mut [f64],
-) {
+pub fn interpn<T>(dims: &[usize], starts: &[T], steps: &[T], vals: &[T], obs: &[T], out: &mut [T])
+where
+    T: Float,
+{
     // Initialization is fairly cheap in most cases (O(ndim) int muls) so unless we're
     // repetitively using this to interpolate single points, we probably won't notice
     // the little bit of extra overhead.
-    RegularGridInterpolator::<'_, _, 10>::new(dims, starts, steps, vals).interp(obs, out);
+    RegularGridInterpolator::<'_, T, 10>::new(dims, starts, steps, vals).interp(obs, out);
 }
 
 #[cfg(test)]

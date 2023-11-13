@@ -321,10 +321,11 @@ where
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
 #[inline(always)]
-pub fn interpn<'a>(grids: &'a [&'a [f64]], vals: &'a [f64], obs: &'a [f64], out: &'a mut [f64]) {
-    let interpolator: RectilinearGridInterpolator<'_, _, 10> =
-        RectilinearGridInterpolator::new(grids, vals);
-    interpolator.interp(obs, out);
+pub fn interpn<'a, T>(grids: &'a [&'a [T]], vals: &'a [T], obs: &'a [T], out: &'a mut [T])
+where
+    T: Float,
+{
+    RectilinearGridInterpolator::<'_, T, 10>::new(grids, vals).interp(obs, out);
 }
 
 #[cfg(test)]
