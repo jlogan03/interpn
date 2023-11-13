@@ -278,16 +278,18 @@ where
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
         let iloc: isize = <isize as NumCast>::from(floc).unwrap(); // signed integer loc
 
+        let dimmax = self.dims[dim].saturating_sub(2);  // maximum index for lower corner
+
+        loc = (iloc.max(0) as usize).min(dimmax);  // unsigned integer loc clipped to interior
+
         // Handle points outside the grid on the low side
         if iloc < 0 {
-            loc = 0;
             saturation = 1;
         }
         // Handle points outside the grid on the high side
         // This is for the lower corner of the cell, so if we saturate high,
         // we have to return the value that is the next-most-interior
-        else if iloc > (self.dims[dim] as isize - 2) {
-            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
+        else if iloc > dimmax as isize {
             saturation = 2;
         }
         // Handle points on the interior.
@@ -296,7 +298,6 @@ where
         // but clipping to the most-inside point may, in turn, saturate
         // at the lower bound if the
         else {
-            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
             saturation = 0;
         }
 
