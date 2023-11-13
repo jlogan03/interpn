@@ -170,13 +170,9 @@ where
                 dxs[j] = loc; // Use dxs[j] as storage for float locs
             }
 
-            for j in 0..ndims {
-                dxs[j] = x[j] - dxs[j]; // Make the actual delta-locs
-            }
-
-            for j in 0..ndims {
-                dxs[j] = dxs[j].abs();
-            }
+            // Make the actual delta-locs
+            (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
+            (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
 
             // Clip maximum dx for some cases to handle multidimensional extrapolation
             if any_dims_saturated {
