@@ -99,8 +99,19 @@ fn bench_interp(c: &mut Criterion) {
                 let ny = m * 2;
                 let n = nx * ny;
 
-                let x = linspace(0.0, 100.0, nx);
-                let y = linspace(0.0, 100.0, ny);
+                let mut x = linspace(0.0, 100.0, nx);
+                let mut y = linspace(0.0, 100.0, ny);
+
+                // Add noise to the grid
+                let dx = randn::<f64>(&mut rng, nx);
+                let dy = randn::<f64>(&mut rng, ny);
+                (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e3);
+                (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e3);
+
+                // Make sure the grid is still monotonic
+                (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
+
                 let z = randn::<f64>(&mut rng, n);
                 let mut out = vec![0.0; n];
 
@@ -117,28 +128,109 @@ fn bench_interp(c: &mut Criterion) {
                 });
             },
         );
+    }
+    group.finish();
+}
 
-        // group.bench_with_input(BenchmarkId::new("spliny_linear", size), size, |b, &size| {
-        //     let mut rng = rng_fixed_seed();
-        //     let x = randn::<f64>(&mut rng, size);
-        //     let y = randn::<f64>(&mut rng, size);
+fn bench_extrap(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bench_extrap");
+    for size in [100, 10_000, 250_000, 500_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
 
-        //     b.iter(|| {
-        //         black_box(
-        //             1,
-        //             // x.iter()
-        //             //     .zip(x.iter())
-        //             //     .map(|(xx, yy)| xx * yy)
-        //             //     .collect::<Vec<_>>(),
-        //         )
-        //     });
-        // });
+        group.bench_with_input(
+            BenchmarkId::new("hypercube regular interpn 2d max 10d", size),
+            size,
+            |b, &size| {
+                let mut rng = rng_fixed_seed();
+                let m: usize = (size as f64).sqrt() as usize;
+                let nx = m / 2;
+                let ny = m * 2;
+                let n = nx * ny;
+
+                let x = linspace(0.0, 100.0, nx);
+                let y = linspace(0.0, 100.0, ny);
+
+                // Grid to extrapolate onto,
+                // entirely in corner-region for worst-case perf
+                let xw = linspace(101.0, 200.0, nx);
+                let yw = linspace(-100.0, -1.0, ny);
+                let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
+                    .iter()
+                    .flatten()
+                    .map(|xx| *xx)
+                    .collect();
+
+                let z = randn::<f64>(&mut rng, n);
+                let mut out = vec![0.0; n];
+
+                b.iter(|| {
+                    black_box({
+                        let dims = [nx, ny];
+                        let starts = [x[0], y[0]];
+                        let steps = [x[1] - x[0], y[1] - y[0]];
+                        multilinear_regular::interpn(
+                            &xyw[..],
+                            &mut out,
+                            &z[..],
+                            &dims[..],
+                            &starts[..],
+                            &steps[..],
+                        )
+                    })
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("hypercube rectilinear interpn 2d max 10d", size),
+            size,
+            |b, &size| {
+                let mut rng = rng_fixed_seed();
+                let m: usize = (size as f64).sqrt() as usize;
+                let nx = m / 2;
+                let ny = m * 2;
+                let n = nx * ny;
+
+                let mut x = linspace(0.0, 100.0, nx);
+                let mut y = linspace(0.0, 100.0, ny);
+
+                // Add noise to the grid
+                let dx = randn::<f64>(&mut rng, nx);
+                let dy = randn::<f64>(&mut rng, ny);
+                (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e3);
+                (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e3);
+
+                // Make sure the grid is still monotonic
+                (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
+
+                // Grid to extrapolate onto,
+                // entirely in corner-region for worst-case perf
+                let xw = linspace(101.0, 200.0, nx);
+                let yw = linspace(-100.0, -1.0, ny);
+                let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
+                    .iter()
+                    .flatten()
+                    .map(|xx| *xx)
+                    .collect();
+
+                let z = randn::<f64>(&mut rng, n);
+                let mut out = vec![0.0; n];
+
+                b.iter(|| {
+                    black_box({
+                        multilinear_rectilinear::interpn(&xyw[..], &mut out, &z[..], &[&x, &y])
+                    })
+                });
+            },
+        );
     }
     group.finish();
 }
 
 criterion_group!(benches_interp, bench_interp);
-criterion_main!(benches_interp,);
+criterion_group!(benches_extrap, bench_extrap);
+criterion_main!(benches_interp, benches_extrap, );
 
 mod randn {
     use rand::distributions::{Distribution, Standard};
