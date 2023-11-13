@@ -143,7 +143,8 @@ where
             // Accumulate the index into the value array,
             // saturating to the bound if the resulting index would be outside.
             for j in 0..ndims {
-                k += self.dimprod[j] * (inds[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
+                k += self.dimprod[j]
+                    * (inds[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
             }
 
             // Get the value at this vertex

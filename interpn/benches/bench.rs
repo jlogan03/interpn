@@ -230,7 +230,7 @@ fn bench_extrap(c: &mut Criterion) {
 
 criterion_group!(benches_interp, bench_interp);
 criterion_group!(benches_extrap, bench_extrap);
-criterion_main!(benches_interp, benches_extrap, );
+criterion_main!(benches_interp, benches_extrap,);
 
 mod randn {
     use rand::distributions::{Distribution, Standard};
