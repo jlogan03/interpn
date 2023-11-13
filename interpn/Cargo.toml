@@ -24,12 +24,6 @@ ndarray = "0.15.6"
 default = ["std"]
 std = ["itertools"]
 
-[profile.release]
-debug = false
-lto = true
-opt-level = 3
-codegen-units = 1
-
 [[bench]]
 name = "bench"
 harness = false
