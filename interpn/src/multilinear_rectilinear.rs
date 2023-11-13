@@ -23,7 +23,7 @@ where
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     #[inline(always)]
-    pub fn new(vals: &'a [T], grids: &'a [&'a [T]]) -> Self {
+    pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
@@ -321,10 +321,10 @@ where
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
 #[inline(always)]
-pub fn interpn<'a>(x: &'a [f64], out: &'a mut [f64], vals: &'a [f64], grids: &'a [&'a [f64]]) {
+pub fn interpn<'a>(grids: &'a [&'a [f64]], vals: &'a [f64], obs: &'a [f64], out: &'a mut [f64]) {
     let interpolator: RectilinearGridInterpolator<'_, _, 10> =
-        RectilinearGridInterpolator::new(vals, grids);
-    interpolator.interp(x, out);
+        RectilinearGridInterpolator::new(grids, vals);
+    interpolator.interp(obs, out);
 }
 
 #[cfg(test)]
@@ -361,7 +361,7 @@ mod test {
         let grids = [&x[..], &y[..]];
 
         let interpolator: RectilinearGridInterpolator<'_, _, 2> =
-            RectilinearGridInterpolator::new(&z[..], &grids);
+            RectilinearGridInterpolator::new(&grids, &z[..]);
 
         // Check values at every incident vertex
         xy.iter().zip(z.iter()).for_each(|(xyi, zi)| {
@@ -400,7 +400,7 @@ mod test {
         let grids = [&x[..], &y[..]];
 
         let interpolator: RectilinearGridInterpolator<'_, _, 2> =
-            RectilinearGridInterpolator::new(&z[..], &grids);
+            RectilinearGridInterpolator::new(&grids, &z[..]);
 
         interpolator.interp(&xy[..], &mut out);
 
@@ -435,7 +435,9 @@ mod test {
 
         let xy: Vec<f64> = grid.iter().flatten().copied().collect();
 
-        interpn(&xy, &mut out, &z, &[&x, &y]);
+        let grids = &[&x[..], &y[..]];
+
+        interpn(grids, &z, &xy, &mut out);
 
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
     }
@@ -480,7 +482,7 @@ mod test {
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
         // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&xyw, &mut out[..zw.len()], &zgrid1, grids);
+        interpn(grids, &zgrid1, &xyw, &mut out[..zw.len()]);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }

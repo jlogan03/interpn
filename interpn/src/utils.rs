@@ -1,3 +1,6 @@
+//! Convenience methods for constructing grids in a way that echoes,
+//! but does not exactly match, methods common among scripting languages.
+
 use itertools::Itertools;
 use num_traits::Float;
 

@@ -125,7 +125,7 @@ fn bench_interp(c: &mut Criterion) {
 
                 b.iter(|| {
                     black_box({
-                        multilinear_rectilinear::interpn(&xy[..], &mut out, &z[..], &[&x, &y])
+                        multilinear_rectilinear::interpn(&[&x, &y], &z[..], &xy[..], &mut out)
                     })
                 });
             },
@@ -221,7 +221,7 @@ fn bench_extrap(c: &mut Criterion) {
 
                 b.iter(|| {
                     black_box({
-                        multilinear_rectilinear::interpn(&xyw[..], &mut out, &z[..], &[&x, &y])
+                        multilinear_rectilinear::interpn(&[&x, &y], &z[..],&xyw[..], &mut out)
                     })
                 });
             },
