@@ -12,6 +12,10 @@ pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Cumulative products of higher dimensions, used for indexing
     dimprod: [usize; MAXDIMS],
 
+    /// Indices of lower corner of hypercube,
+    /// stored with the struct in order to be used as a rolling
+    /// initial guess for the index of the observation point,
+    /// and mutated on every evaluation of the interpolator.
     inds: [usize; MAXDIMS],
 
     /// Values at each point, size prod(dims)
@@ -92,7 +96,6 @@ where
         // This storage _could_ be initialized with the interpolator struct, but
         // this would then require that every usage of struct be `mut`, which is
         // ergonomically unpleasant.
-        // let inds = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
 
