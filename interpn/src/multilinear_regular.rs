@@ -422,10 +422,7 @@ mod test {
         //   so that it will be extrapolated correctly in the corner regions
         let xw = linspace(-10.0, 11.0, 200);
         let yw = linspace(-7.0, 6.0, 200);
-        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
-            .iter()
-            .flatten().copied()
-            .collect();
+        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw]).iter().flatten().copied().collect();
 
         let zw: Vec<f64> = (0..xyw.len() / 2)
             .map(|i| xyw[2 * i] + xyw[2 * i + 1])
