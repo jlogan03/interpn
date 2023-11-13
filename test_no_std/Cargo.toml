@@ -14,15 +14,9 @@ panic = "abort"
 opt-level = "s"
 lto = true       # Use full link-time optimization to reduce file size and eliminate panic branches
 codegen-units = 1
-debug = false
-debug-assertions = false
-overflow-checks = false
 
 [profile.release]
 panic = "abort"
 opt-level = "s"  # Compiler optimization for minimum file size
 lto = true       # Use full link-time optimization to reduce file size and eliminate panic branches
 codegen-units = 1
-debug = false
-debug-assertions = false
-overflow-checks = false

@@ -17,12 +17,13 @@ fn panic(_info: &PanicInfo) -> ! {
 pub fn _start() -> ! {
     let x = [1.0_f64, 2.0];
     let y = [1.0_f64, 2.0];
+    let grids = &[&x[..], &y[..]];
 
-    let mut z = [2.0; 4];
+    let z = [2.0; 4];
 
     let mut out = [0.0; 4];
 
-    let dims = [nx, ny];
+    let dims = [x.len(), y.len()];
     let starts = [x[0], y[0]];
     let steps = [1.0, 1.0];
 
@@ -35,6 +36,13 @@ pub fn _start() -> ! {
         &dims[..],
         &starts[..],
         &steps[..],
+    );
+
+    multilinear_rectilinear::interpn(
+        &xy[..],
+        &mut out[..],
+        &z[..],
+        grids,
     );
 
     loop {} // We don't actually run this, just compile it
