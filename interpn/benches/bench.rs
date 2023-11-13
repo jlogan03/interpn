@@ -1,3 +1,5 @@
+#![allow(clippy::all)]  // Clippy will attempt to remove black_box() internals
+
 use criterion::*;
 use interpn::multilinear_rectilinear;
 use interpn::multilinear_regular;
