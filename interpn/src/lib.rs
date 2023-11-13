@@ -1,6 +1,6 @@
 //! N-dimensional interpolation methods
 #![cfg_attr(not(feature = "std"), no_std)]
-// These "needless" range loops are a >10% speedup
+// These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]
 
 pub mod multilinear_rectilinear;

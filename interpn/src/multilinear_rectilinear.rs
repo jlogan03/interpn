@@ -253,17 +253,23 @@ where
     /// * 1 => low
     /// * 2 => high
     ///
-    /// Unfortunately, using a repr(u8) enum for the saturation flag is a >10% perf hit.
+    /// Unfortunately, using a repr(u8) enum for the saturation flag
+    /// causes a significant perf hit.
     #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
         let saturation: u8; // Saturated low/high/not at all
 
-        // Bisection search to find location on the grid
+        // Bisection search to find location on the grid.
+        //
         // The search will return `0` if the point is outside-low,
         // and will return `self.dims[dim]` if outside-high.
+        //
         // We still need to convert to a signed integer here, because
         // if the grid has less than 2 points in this dimension,
         // we may need to (briefly) represent a negative index.
+        //
+        // This process accounts for essentially the entire difference in
+        // performance between this method and the regular-grid method.
         let iloc = self.grids[dim].partition_point(|x| *x < v) as isize - 1;
 
         let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner

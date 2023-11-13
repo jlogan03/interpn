@@ -265,7 +265,8 @@ where
     /// * 1 => low
     /// * 2 => high
     ///
-    /// Unfortunately, using a repr(u8) enum for the saturation flag is a >10% perf hit.
+    /// Unfortunately, using a repr(u8) enum for the saturation flag
+    /// causes a significant perf hit.
     #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
         let saturation: u8; // Saturated low/high/not at all
