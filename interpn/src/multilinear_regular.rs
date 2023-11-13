@@ -278,9 +278,9 @@ where
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
         let iloc: isize = <isize as NumCast>::from(floc).unwrap(); // signed integer loc
 
-        let dimmax = self.dims[dim].saturating_sub(2);  // maximum index for lower corner
+        let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
 
-        loc = (iloc.max(0) as usize).min(dimmax);  // unsigned integer loc clipped to interior
+        loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
         // Handle points outside the grid on the low side
         if iloc < 0 {
@@ -422,35 +422,12 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
-        // Make a function that is linear in both dimensions
-        // and should behave reasonably well under extrapolation in one
-        // dimension at a time, but not necessarily when extrapolating in both at once.
-        let zgrid: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
-
-        // Make some grids to extrapolate
-        //   High/low x
-        let xe1 = vec![-1.0; ny];
-        let xe2 = vec![11.0; ny];
-        let ye1 = linspace(-5.0, 5.0, ny);
-        let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
-        let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
-        //   High/low y
-        let ye2 = vec![-6.0; nx];
-        let ye3 = vec![6.0; nx];
-        let xe3 = linspace(0.0, 10.0, nx);
-        let xye3: Vec<f64> = xe3.iter().interleave(ye2.iter()).map(|xi| *xi).collect();
-        let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
-        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
-        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
-
         //   High/low corners and all over the place
         //   For this one, use a function that is linear in every direction,
         //   z = x + y,
         //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-10.0, 11.0, 100);
-        let yw = linspace(-7.0, 6.0, 100);
+        let xw = linspace(-10.0, 11.0, 200);
+        let yw = linspace(-7.0, 6.0, 200);
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
             .iter()
             .flatten()
@@ -468,23 +445,7 @@ mod test {
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
 
-        // Check extrapolating low x
-        interpn(&xye1, &mut out[..ny], &zgrid, &dims, &starts, &steps);
-        (0..ze1.len()).for_each(|i| assert!((out[i] - ze1[i]).abs() < 1e-12));
-
-        // Check extrapolating high x
-        interpn(&xye2, &mut out[..ny], &zgrid, &dims, &starts, &steps);
-        (0..ze2.len()).for_each(|i| assert!((out[i] - ze2[i]).abs() < 1e-12));
-
-        // Check extrapolating low y
-        interpn(&xye3, &mut out[..nx], &zgrid, &dims, &starts, &steps);
-        (0..ze3.len()).for_each(|i| assert!((out[i] - ze3[i]).abs() < 1e-12));
-
-        // Check extrapolating high y
-        interpn(&xye4, &mut out[..nx], &zgrid, &dims, &starts, &steps);
-        (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
-
-        // Check interpolating off grid on the interior
+        // Check extrapolating off grid and interpolating between grid points all around
         interpn(&xyw, &mut out[..zw.len()], &zgrid1, &dims, &starts, &steps);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }

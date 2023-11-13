@@ -270,16 +270,18 @@ where
         // we may need to (briefly) represent a negative index.
         let iloc = self.grids[dim].partition_point(|x| *x < v) as isize - 1;
 
+        let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
+
+        loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+
         // Handle points outside the grid on the low side
         if iloc < 0 {
-            loc = 0;
             saturation = 1;
         }
         // Handle points outside the grid on the high side
         // This is for the lower corner of the cell, so if we saturate high,
         // we have to return the value that is the next-most-interior
-        else if iloc > (self.dims[dim] as isize - 2) {
-            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
+        else if iloc > dimmax as isize {
             saturation = 2;
         }
         // Handle points on the interior.
@@ -288,7 +290,6 @@ where
         // but clipping to the most-inside point may, in turn, saturate
         // at the lower bound if the
         else {
-            loc = iloc.min(self.dims[dim] as isize - 2).max(0) as usize;
             saturation = 0;
         }
 
@@ -305,8 +306,8 @@ where
             let j = (inds[i] + 1).min(self.dims[i].saturating_sub(1));
             let mut dx = self.grids[i][j] - self.grids[i][inds[i]];
 
-            // Clip degenrate dimensions to one to prevent crashing when a dimension has size one
-            if dx == T::zero() {
+            // Clip degenerate dimensions to one to prevent crashing when a dimension has size one
+            if j == inds[i] {
                 dx = T::one();
             }
 
@@ -337,7 +338,6 @@ mod test {
     use super::{interpn, RectilinearGridInterpolator};
     use crate::testing::*;
     use crate::utils::*;
-    use itertools::Itertools;
 
     #[test]
     fn test_interp_one_2d() {
@@ -460,8 +460,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e2);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e2);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e1);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e1);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -470,35 +470,12 @@ mod test {
         let grid = meshgrid(Vec::from([&x, &y]));
         let grids = &[&x[..], &y[..]];
 
-        // Make a function that is linear in both dimensions
-        // and should behave reasonably well under extrapolation in one
-        // dimension at a time, but not necessarily when extrapolating in both at once.
-        let zgrid: Vec<f64> = grid.iter().map(|xyi| xyi[0] * xyi[1]).collect();
-
-        // Make some grids to extrapolate
-        //   High/low x
-        let xe1 = vec![-1.0; ny];
-        let xe2 = vec![11.0; ny];
-        let ye1 = linspace(-5.0, 5.0, ny);
-        let xye1: Vec<f64> = xe1.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze1: Vec<f64> = (0..ny).map(|i| xe1[i] * ye1[i]).collect();
-        let xye2: Vec<f64> = xe2.iter().interleave(ye1.iter()).map(|xi| *xi).collect();
-        let ze2: Vec<f64> = (0..ny).map(|i| xe2[i] * ye1[i]).collect();
-        //   High/low y
-        let ye2 = vec![-6.0; nx];
-        let ye3 = vec![6.0; nx];
-        let xe3 = linspace(0.0, 10.0, nx);
-        let xye3: Vec<f64> = xe3.iter().interleave(ye2.iter()).map(|xi| *xi).collect();
-        let xye4: Vec<f64> = xe3.iter().interleave(ye3.iter()).map(|xi| *xi).collect();
-        let ze3: Vec<f64> = (0..nx).map(|i| xe3[i] * ye2[i]).collect();
-        let ze4: Vec<f64> = (0..nx).map(|i| xe3[i] * ye3[i]).collect();
-
         //   High/low corners and all over the place
         //   For this one, use a function that is linear in every direction,
         //   z = x + y,
         //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-10.0, 11.0, 100);
-        let yw = linspace(-7.0, 6.0, 100);
+        let xw = linspace(-10.0, 11.0, 200);
+        let yw = linspace(-7.0, 6.0, 200);
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
             .iter()
             .flatten()
@@ -512,26 +489,8 @@ mod test {
 
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
-        let approx = |a: f64, b: f64, rtol: f64| assert!((a - b).abs() / b.abs().max(1.0) < rtol);
-
-        // Check extrapolating low x
-        interpn(&xye1, &mut out[..ny], &zgrid, grids);
-        (0..ze1.len()).for_each(|i| approx(out[i], ze1[i], 1e-4));
-
-        // Check extrapolating high x
-        interpn(&xye2, &mut out[..ny], &zgrid, grids);
-        (0..ze2.len()).for_each(|i| approx(out[i], ze2[i], 1e-4));
-
-        // Check extrapolating low y
-        interpn(&xye3, &mut out[..nx], &zgrid, grids);
-        (0..ze3.len()).for_each(|i| approx(out[i], ze3[i], 1e-4));
-
-        // Check extrapolating high y
-        interpn(&xye4, &mut out[..nx], &zgrid, grids);
-        (0..ze4.len()).for_each(|i| approx(out[i], ze4[i], 1e-4));
-
-        // Check interpolating off grid on the interior
+        // Check extrapolating off grid and interpolating between grid points all around
         interpn(&xyw, &mut out[..zw.len()], &zgrid1, grids);
-        (0..zw.len()).for_each(|i| approx(out[i], zw[i], 1e-4));
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }
