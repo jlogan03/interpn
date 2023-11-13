@@ -315,7 +315,7 @@ where
 
         let vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
 
-        return vol
+        return vol;
     }
 }
 

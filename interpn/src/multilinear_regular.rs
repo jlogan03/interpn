@@ -235,7 +235,11 @@ where
                     // Copy forward the original dxs, extrapolated or not
                     (0..ndims).for_each(|j| extrapdxs[j] = dxs[j]);
                     // For extrapolated dimensions, take just the extrapolated distance
-                    (0..ndims).for_each(|j| if thissat[j] { extrapdxs[j] = dxs[j] - self.steps[j] });
+                    (0..ndims).for_each(|j| {
+                        if thissat[j] {
+                            extrapdxs[j] = dxs[j] - self.steps[j]
+                        }
+                    });
                     // Evaluate the extrapolated corner volume
                     extrapvol = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
                 }
