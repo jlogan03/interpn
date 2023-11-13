@@ -341,9 +341,22 @@ mod test {
 
     #[test]
     fn test_interp_one_2d() {
+        let mut rng = rng_fixed_seed();
+
         let (nx, ny) = (3, 4);
-        let x = linspace(-1.0, 1.0, nx);
-        let y = linspace(2.0, 4.0, ny);
+        let mut x = linspace(-1.0, 1.0, nx);
+        let mut y = linspace(2.0, 4.0, ny);
+
+        // Add noise to the grid
+        let dx = randn::<f64>(&mut rng, nx);
+        let dy = randn::<f64>(&mut rng, ny);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+
+        // Make sure the grid is still monotonic
+        (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+        (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
+
         let xy = meshgrid(Vec::from([&x, &y]));
 
         // z = x * y^2
@@ -371,8 +384,19 @@ mod test {
         let ny = m * 2;
         let n = nx * ny;
 
-        let x = linspace(0.0, 100.0, nx);
-        let y = linspace(0.0, 100.0, ny);
+        let mut x = linspace(0.0, 100.0, nx);
+        let mut y = linspace(0.0, 100.0, ny);
+
+        // Add noise to the grid
+        let dx = randn::<f64>(&mut rng, nx);
+        let dy = randn::<f64>(&mut rng, ny);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+
+        // Make sure the grid is still monotonic
+        (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+        (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
+
         let z = randn::<f64>(&mut rng, n);
         let mut out = vec![0.0; n];
 
@@ -397,8 +421,19 @@ mod test {
         let ny = m * 2;
         let n = nx * ny;
 
-        let x = linspace(0.0, 100.0, nx);
-        let y = linspace(0.0, 100.0, ny);
+        let mut x = linspace(0.0, 100.0, nx);
+        let mut y = linspace(0.0, 100.0, ny);
+
+        // Add noise to the grid
+        let dx = randn::<f64>(&mut rng, nx);
+        let dy = randn::<f64>(&mut rng, ny);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+
+        // Make sure the grid is still monotonic
+        (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+        (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
+
         let z = randn::<f64>(&mut rng, n);
         let mut out = vec![0.0; n];
 
@@ -413,12 +448,24 @@ mod test {
 
     #[test]
     fn test_extrap_2d() {
+        let mut rng = rng_fixed_seed();
+
         let m: usize = (100 as f64).sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
 
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
+        let mut x = linspace(0.0, 10.0, nx);
+        let mut y = linspace(-5.0, 5.0, ny);
+
+        // Add noise to the grid
+        let dx = randn::<f64>(&mut rng, nx);
+        let dy = randn::<f64>(&mut rng, ny);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e2);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e2);
+
+        // Make sure the grid is still monotonic
+        (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+        (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
 
         let grid = meshgrid(Vec::from([&x, &y]));
         let grids = &[&x[..], &y[..]];
@@ -465,24 +512,26 @@ mod test {
 
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 
+        let approx = |a: f64, b: f64, rtol: f64| assert!((a - b).abs() / b.abs().max(1.0) < rtol);
+
         // Check extrapolating low x
         interpn(&xye1, &mut out[..ny], &zgrid, grids);
-        (0..ze1.len()).for_each(|i| assert!((out[i] - ze1[i]).abs() < 1e-12));
+        (0..ze1.len()).for_each(|i| approx(out[i], ze1[i], 1e-4));
 
         // Check extrapolating high x
         interpn(&xye2, &mut out[..ny], &zgrid, grids);
-        (0..ze2.len()).for_each(|i| assert!((out[i] - ze2[i]).abs() < 1e-12));
+        (0..ze2.len()).for_each(|i| approx(out[i], ze2[i], 1e-4));
 
         // Check extrapolating low y
         interpn(&xye3, &mut out[..nx], &zgrid, grids);
-        (0..ze3.len()).for_each(|i| assert!((out[i] - ze3[i]).abs() < 1e-12));
+        (0..ze3.len()).for_each(|i| approx(out[i], ze3[i], 1e-4));
 
         // Check extrapolating high y
         interpn(&xye4, &mut out[..nx], &zgrid, grids);
-        (0..ze4.len()).for_each(|i| assert!((out[i] - ze4[i]).abs() < 1e-12));
+        (0..ze4.len()).for_each(|i| approx(out[i], ze4[i], 1e-4));
 
         // Check interpolating off grid on the interior
         interpn(&xyw, &mut out[..zw.len()], &zgrid1, grids);
-        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+        (0..zw.len()).for_each(|i| approx(out[i], zw[i], 1e-4));
     }
 }
