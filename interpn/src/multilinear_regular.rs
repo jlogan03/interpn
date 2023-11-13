@@ -282,21 +282,15 @@ where
 
         loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
-        // Handle points outside the grid on the low side
+        // Observation point is outside the grid on the low side
         if iloc < 0 {
             saturation = 1;
         }
-        // Handle points outside the grid on the high side
-        // This is for the lower corner of the cell, so if we saturate high,
-        // we have to return the value that is the next-most-interior
+        // Observation point is outside the grid on the high side
         else if iloc > dimmax as isize {
             saturation = 2;
         }
-        // Handle points on the interior.
-        // These points may still saturate the index, which needs to be
-        // farther inside than the last grid point for the lower corner,
-        // but clipping to the most-inside point may, in turn, saturate
-        // at the lower bound if the
+        // Observation point is on the interior
         else {
             saturation = 0;
         }
@@ -331,7 +325,6 @@ mod test {
     use super::{interpn, RegularGridInterpolator};
     use crate::testing::*;
     use crate::utils::*;
-    use itertools::Itertools;
 
     #[test]
     fn test_interp_one_2d() {
@@ -422,7 +415,7 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
-        let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
+        let z: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
 
         //   High/low corners and all over the place
         //   For this one, use a function that is linear in every direction,
@@ -447,7 +440,7 @@ mod test {
         let steps = [x[1] - x[0], y[1] - y[0]];
 
         // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&xyw, &mut out[..zw.len()], &zgrid1, &dims, &starts, &steps);
+        interpn(&xyw, &mut out[..zw.len()], &z, &dims, &starts, &steps);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }

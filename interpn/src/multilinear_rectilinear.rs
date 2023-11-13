@@ -143,7 +143,7 @@ where
             // Accumulate the index into the value array,
             // saturating to the bound if the resulting index would be outside.
             for j in 0..ndims {
-                k += self.dimprod[j] * (inds[j] + ioffs[j] as usize).min(self.dims[j] - 1);
+                k += self.dimprod[j] * (inds[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
             }
 
             // Get the value at this vertex
@@ -274,21 +274,15 @@ where
 
         loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
-        // Handle points outside the grid on the low side
+        // Observation point is outside the grid on the low side
         if iloc < 0 {
             saturation = 1;
         }
-        // Handle points outside the grid on the high side
-        // This is for the lower corner of the cell, so if we saturate high,
-        // we have to return the value that is the next-most-interior
+        // Observation point is outside the grid on the high side
         else if iloc > dimmax as isize {
             saturation = 2;
         }
-        // Handle points on the interior.
-        // These points may still saturate the index, which needs to be
-        // farther inside than the last grid point for the lower corner,
-        // but clipping to the most-inside point may, in turn, saturate
-        // at the lower bound if the
+        // Observation point is on the interior
         else {
             saturation = 0;
         }
