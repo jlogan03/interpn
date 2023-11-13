@@ -422,6 +422,8 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
+        let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
+
         //   High/low corners and all over the place
         //   For this one, use a function that is linear in every direction,
         //   z = x + y,
@@ -437,7 +439,6 @@ mod test {
         let zw: Vec<f64> = (0..xyw.len() / 2)
             .map(|i| xyw[2 * i] + xyw[2 * i + 1])
             .collect();
-        let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
 
         let mut out = vec![0.0; nx.max(ny).max(zw.len())];
 

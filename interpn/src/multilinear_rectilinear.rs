@@ -350,8 +350,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -390,8 +390,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -427,8 +427,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 100.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 100.0);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -460,8 +460,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e1);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 1e1);
+        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
