@@ -32,7 +32,7 @@ where
     pub fn new(vals: &'a [T], dims: &'a [usize], starts: &'a [T], steps: &'a [T]) -> Self {
         // Check dimensions
         let ndims = dims.len();
-        let nvals = dims.iter().fold(1, |acc, x| acc * x);
+        let nvals = dims.iter().product::<usize>();
         assert!(
             starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0,
             "Dimension mismatch"
@@ -272,7 +272,6 @@ where
     /// Unfortunately, using a repr(u8) enum for the saturation flag is a >10% perf hit.
     #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
-        let loc: usize; // Lower corner index
         let saturation: u8; // Saturated low/high/not at all
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
@@ -280,7 +279,7 @@ where
 
         let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
 
-        loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+        let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side
         if iloc < 0 {
@@ -354,7 +353,7 @@ mod test {
     #[test]
     fn test_interp_interleaved_2d() {
         let mut rng = rng_fixed_seed();
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
         let n = nx * ny;
@@ -365,7 +364,7 @@ mod test {
         let mut out = vec![0.0; n];
 
         let grid = meshgrid(Vec::from([&x, &y]));
-        let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
+        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
 
         let dims = [nx, ny];
         let starts = [x[0], y[0]];
@@ -382,7 +381,7 @@ mod test {
     #[test]
     fn test_interpn_2d() {
         let mut rng = rng_fixed_seed();
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
         let n = nx * ny;
@@ -394,7 +393,7 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
-        let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
+        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
 
         let dims = [nx, ny];
         let starts = [x[0], y[0]];
@@ -406,7 +405,7 @@ mod test {
 
     #[test]
     fn test_extrap_2d() {
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
 
@@ -425,8 +424,7 @@ mod test {
         let yw = linspace(-7.0, 6.0, 200);
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
             .iter()
-            .flatten()
-            .map(|xx| *xx)
+            .flatten().copied()
             .collect();
 
         let zw: Vec<f64> = (0..xyw.len() / 2)

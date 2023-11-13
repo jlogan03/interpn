@@ -28,7 +28,7 @@ where
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
-        let nvals = dims[..ndims].iter().fold(1, |acc, x| acc * x);
+        let nvals = dims[..ndims].iter().product::<usize>();
         assert!(vals.len() == nvals && ndims > 0, "Dimension mismatch");
 
         // Populate cumulative product of higher dimensions for indexing.
@@ -260,7 +260,6 @@ where
     /// Unfortunately, using a repr(u8) enum for the saturation flag is a >10% perf hit.
     #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
-        let loc: usize; // Lower corner index
         let saturation: u8; // Saturated low/high/not at all
 
         // Bisection search to find location on the grid
@@ -273,7 +272,7 @@ where
 
         let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
 
-        loc = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+        let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side
         if iloc < 0 {
@@ -311,7 +310,7 @@ where
 
         let vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
 
-        return vol;
+        vol
     }
 }
 
@@ -345,8 +344,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
+        (0..nx).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] += (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -374,7 +373,7 @@ mod test {
     #[test]
     fn test_interp_interleaved_2d() {
         let mut rng = rng_fixed_seed();
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
         let n = nx * ny;
@@ -385,8 +384,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
+        (0..nx).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] += (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -396,7 +395,7 @@ mod test {
         let mut out = vec![0.0; n];
 
         let grid = meshgrid(Vec::from([&x, &y]));
-        let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
+        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
 
         let grids = [&x[..], &y[..]];
 
@@ -411,7 +410,7 @@ mod test {
     #[test]
     fn test_interpn_2d() {
         let mut rng = rng_fixed_seed();
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
         let n = nx * ny;
@@ -422,8 +421,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
+        (0..nx).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] += (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -434,7 +433,7 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
-        let xy: Vec<f64> = grid.iter().flatten().map(|xx| *xx).collect();
+        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
 
         interpn(&xy, &mut out, &z, &[&x, &y]);
 
@@ -445,7 +444,7 @@ mod test {
     fn test_extrap_2d() {
         let mut rng = rng_fixed_seed();
 
-        let m: usize = (100 as f64).sqrt() as usize;
+        let m: usize = 100_f64.sqrt() as usize;
         let nx = m / 2;
         let ny = m * 2;
 
@@ -455,8 +454,8 @@ mod test {
         // Add noise to the grid
         let dx = randn::<f64>(&mut rng, nx);
         let dy = randn::<f64>(&mut rng, ny);
-        (0..nx).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 10.0);
-        (0..ny).for_each(|i| y[i] = y[i] + (dy[i] - 0.5) / 10.0);
+        (0..nx).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+        (0..ny).for_each(|i| y[i] += (dy[i] - 0.5) / 10.0);
 
         // Make sure the grid is still monotonic
         (0..nx - 1).for_each(|i| assert!(x[i + 1] > x[i]));
@@ -473,8 +472,7 @@ mod test {
         let yw = linspace(-7.0, 6.0, 200);
         let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
             .iter()
-            .flatten()
-            .map(|xx| *xx)
+            .flatten().copied()
             .collect();
 
         let zw: Vec<f64> = (0..xyw.len() / 2)
