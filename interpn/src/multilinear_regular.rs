@@ -29,7 +29,7 @@ where
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     #[inline(always)]
-    pub fn new(vals: &'a [T], dims: &'a [usize], starts: &'a [T], steps: &'a [T]) -> Self {
+    pub fn new(dims: &'a [usize], starts: &'a [T], steps: &'a [T], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = dims.len();
         let nvals = dims.iter().product::<usize>();
@@ -306,17 +306,17 @@ where
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
 #[inline(always)]
 pub fn interpn(
-    x: &[f64],
-    out: &mut [f64],
-    vals: &[f64],
     dims: &[usize],
     starts: &[f64],
     steps: &[f64],
+    vals: &[f64],
+    obs: &[f64],
+    out: &mut [f64],
 ) {
     // Initialization is fairly cheap in most cases (O(ndim) int muls) so unless we're
     // repetitively using this to interpolate single points, we probably won't notice
     // the little bit of extra overhead.
-    RegularGridInterpolator::<'_, _, 10>::new(vals, dims, starts, steps).interp(x, out);
+    RegularGridInterpolator::<'_, _, 10>::new(dims, starts, steps, vals).interp(obs, out);
 }
 
 #[cfg(test)]
@@ -341,7 +341,7 @@ mod test {
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
         let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&z, &dims, &starts, &steps);
+            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
 
         // Check values at every incident vertex
         xy.iter().zip(z.iter()).for_each(|(xyi, zi)| {
@@ -371,7 +371,7 @@ mod test {
         let steps = [x[1] - x[0], y[1] - y[0]];
 
         let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&z, &dims, &starts, &steps);
+            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
 
         interpolator.interp(&xy, &mut out);
 
@@ -399,7 +399,7 @@ mod test {
         let starts = [x[0], y[0]];
         let steps = [x[1] - x[0], y[1] - y[0]];
 
-        interpn(&xy, &mut out, &z, &dims, &starts, &steps);
+        interpn(&dims, &starts, &steps, &z, &xy, &mut out);
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14));
     }
 
@@ -435,7 +435,7 @@ mod test {
         let steps = [x[1] - x[0], y[1] - y[0]];
 
         // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&xyw, &mut out[..zw.len()], &z, &dims, &starts, &steps);
+        interpn(&dims, &starts, &steps, &z, &xyw, &mut out[..zw.len()]);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }

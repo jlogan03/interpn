@@ -41,10 +41,10 @@ fn bench_interp(c: &mut Criterion) {
                         let steps = [x[1] - x[0], y[1] - y[0]];
                         let interpolator: multilinear_regular::RegularGridInterpolator<'_, _, 2> =
                             multilinear_regular::RegularGridInterpolator::new(
-                                &z[..],
                                 &dims[..],
                                 &starts[..],
                                 &steps[..],
+                                &z[..],
                             );
                         interpolator.interp(&xy[..], &mut out)
                     })
@@ -79,12 +79,12 @@ fn bench_interp(c: &mut Criterion) {
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
                         multilinear_regular::interpn(
-                            &xy[..],
-                            &mut out,
-                            &z[..],
                             &dims[..],
                             &starts[..],
                             &steps[..],
+                            &z[..],
+                            &xy[..],
+                            &mut out,
                         )
                     })
                 });
@@ -124,9 +124,12 @@ fn bench_interp(c: &mut Criterion) {
                     .collect();
 
                 b.iter(|| {
-                    black_box({
-                        multilinear_rectilinear::interpn(&[&x, &y], &z[..], &xy[..], &mut out)
-                    })
+                    black_box(multilinear_rectilinear::interpn(
+                        &[&x, &y],
+                        &z,
+                        &xy,
+                        &mut out,
+                    ))
                 });
             },
         );
@@ -170,14 +173,7 @@ fn bench_extrap(c: &mut Criterion) {
                         let dims = [nx, ny];
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
-                        multilinear_regular::interpn(
-                            &xyw[..],
-                            &mut out,
-                            &z[..],
-                            &dims[..],
-                            &starts[..],
-                            &steps[..],
-                        )
+                        multilinear_regular::interpn(&dims, &starts, &steps, &z, &xyw, &mut out)
                     })
                 });
             },
@@ -220,9 +216,12 @@ fn bench_extrap(c: &mut Criterion) {
                 let mut out = vec![0.0; n];
 
                 b.iter(|| {
-                    black_box({
-                        multilinear_rectilinear::interpn(&[&x, &y], &z[..],&xyw[..], &mut out)
-                    })
+                    black_box(multilinear_rectilinear::interpn(
+                        &[&x, &y],
+                        &z,
+                        &xyw,
+                        &mut out,
+                    ))
                 });
             },
         );
