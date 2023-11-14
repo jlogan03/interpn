@@ -16,7 +16,7 @@ pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// stored with the struct in order to be used as a rolling
     /// initial guess for the index of the observation point,
     /// and mutated on every evaluation of the interpolator.
-    inds: [usize; MAXDIMS],
+    origin: [usize; MAXDIMS],
 
     /// Values at each point, size prod(dims)
     vals: &'a [T],
@@ -49,13 +49,13 @@ where
             acc *= dims[ndims - i - 1];
         });
 
-        let inds = [0; MAXDIMS];
+        let origin = [0; MAXDIMS];
 
         Self {
             grids,
             dims,
             dimprod,
-            inds,
+            origin,
             vals,
         }
     }
@@ -113,7 +113,7 @@ where
 
         // Populate lower corner
         for i in 0..ndims {
-            (self.inds[i], sat[i]) = self.get_loc(x[i], i, self.inds[i])
+            (self.origin[i], sat[i]) = self.get_loc(x[i], i, self.origin[i])
         }
 
         // Check if any dimension is saturated.
@@ -121,7 +121,7 @@ where
         let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
 
         // Calculate the total volume of this cell
-        let cell_vol = self.get_cell(&self.inds, steps);
+        let cell_vol = self.get_cell(&self.origin, steps);
 
         // Traverse vertices, summing contributions to the interpolated value.
         //
@@ -152,7 +152,7 @@ where
             // saturating to the bound if the resulting index would be outside.
             for j in 0..ndims {
                 k += self.dimprod[j]
-                    * (self.inds[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
+                    * (self.origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
             }
 
             // Get the value at this vertex
@@ -161,7 +161,7 @@ where
             // Accumulate the volume of the prism formed by the
             // observation location and the opposing vertex
             for j in 0..ndims {
-                let iloc = self.inds[j] + !ioffs[j] as usize; // Index of location of opposite vertex
+                let iloc = self.origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let loc = self.grids[j][iloc]; // Loc. of opposite vertex
                 dxs[j] = loc;
             }
@@ -335,18 +335,18 @@ where
         (loc, saturation)
     }
 
-    /// Get the volume of the grid prism with `inds` as its lower corner
+    /// Get the volume of the grid prism with `origin` as its lower corner
     /// and output the step sizes for this cell as well.
     #[inline(always)]
-    fn get_cell(&self, inds: &[usize], steps: &mut [T]) -> T {
+    fn get_cell(&self, origin: &[usize], steps: &mut [T]) -> T {
         let ndims = self.grids.len();
         for i in 0..ndims {
             // Index of upper face (saturating to bounds)
-            let j = (inds[i] + 1).min(self.dims[i].saturating_sub(1));
-            let mut dx = self.grids[i][j] - self.grids[i][inds[i]];
+            let j = (origin[i] + 1).min(self.dims[i].saturating_sub(1));
+            let mut dx = self.grids[i][j] - self.grids[i][origin[i]];
 
             // Clip degenerate dimensions to one to prevent crashing when a dimension has size one
-            if j == inds[i] {
+            if j == origin[i] {
                 dx = T::one();
             }
 
