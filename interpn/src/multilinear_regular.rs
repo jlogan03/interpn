@@ -319,7 +319,7 @@ mod test {
     use crate::utils::*;
 
     #[test]
-    fn test_interp_extrap_one_1d() {
+    fn test_interp_extrap_1d() {
         let nx = 3;
         let x = linspace(-1.0_f64, 1.0, nx);
         let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
@@ -336,6 +336,40 @@ mod test {
         // Check both interpolated and extrapolated values
         xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
             let zii = interpolator.interp_one(&[*xi]);
+            assert!((*zi - zii).abs() < 1e-12)
+        });
+    }
+
+    #[test]
+    fn test_interp_extrap_2d_degenerate() {
+        // Test with one dimension that is size one
+        let (nx, ny) = (3, 1);
+        let x = linspace(-1.0, 1.0, nx);
+        let y = Vec::from([0.5]);
+        let xy = meshgrid(Vec::from([&x, &y]));
+
+        // z = x + y
+        let z: Vec<f64> = (0..nx * ny)
+            .map(|i| &xy[i][0] + &xy[i][1])
+            .collect();
+
+        // Observation points all over in 2D space
+        let xobs = linspace(-10.0_f64, 10.0, 37);
+        let yobs = linspace(-10.0_f64, 10.0, 37);
+        let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
+        let zobs: Vec<f64> = (0..37 * 37)
+            .map(|i| &xyobs[i][0] + 0.5)
+            .collect(); // Every `z` should match the degenerate `y` value
+
+        let dims = [nx, ny];
+        let starts = [x[0], y[0]];
+        let steps = [x[1] - x[0], 1.0]; // Use placeholder for degenerate dim
+        let interpolator: RegularGridInterpolator<'_, _, 2> =
+            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
+
+        // Check values at every incident vertex
+        xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
+            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
             assert!((*zi - zii).abs() < 1e-12)
         });
     }
