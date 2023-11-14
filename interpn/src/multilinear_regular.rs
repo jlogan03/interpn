@@ -319,6 +319,28 @@ mod test {
     use crate::utils::*;
 
     #[test]
+    fn test_interp_extrap_one_1d() {
+        let nx = 3;
+        let x = linspace(-1.0_f64, 1.0, nx);
+        let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
+
+        let xobs = linspace(-10.0_f64, 10.0, 37);
+        let zobs: Vec<f64> = xobs.iter().map(|&xi| 3.0 * xi).collect();
+
+        let dims = [nx];
+        let starts = [x[0]];
+        let steps = [x[1] - x[0]];
+        let interpolator: RegularGridInterpolator<'_, _, 1> =
+            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
+
+        // Check both interpolated and extrapolated values
+        xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
+            let zii = interpolator.interp_one(&[*xi]);
+            assert!((*zi - zii).abs() < 1e-12)
+        });
+    }
+
+    #[test]
     fn test_interp_one_2d() {
         let (nx, ny) = (3, 4);
         let x = linspace(-1.0, 1.0, nx);
@@ -339,7 +361,7 @@ mod test {
         // Check values at every incident vertex
         xy.iter().zip(z.iter()).for_each(|(xyi, zi)| {
             let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
-            assert!((*zi - zii).abs() < 1e-12) // Allow small error at edges
+            assert!((*zi - zii).abs() < 1e-12)
         });
     }
 
