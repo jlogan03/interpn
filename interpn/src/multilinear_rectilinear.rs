@@ -161,7 +161,8 @@ where
             // Accumulate the volume of the prism formed by the
             // observation location and the opposing vertex
             for j in 0..ndims {
-                let iloc = self.origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
+                let iloc =
+                    (self.origin[j] + !ioffs[j] as usize).min(self.dims[j].saturating_sub(1)); // Index of location of opposite vertex
                 let loc = self.grids[j][iloc]; // Loc. of opposite vertex
                 dxs[j] = loc;
             }
@@ -346,7 +347,7 @@ where
             let mut dx = self.grids[i][j] - self.grids[i][origin[i]];
 
             // Clip degenerate dimensions to one to prevent crashing when a dimension has size one
-            if j == origin[i] {
+            if j == 0 {
                 dx = T::one();
             }
 
@@ -378,6 +379,54 @@ mod test {
     use super::{interpn, RectilinearGridInterpolator};
     use crate::testing::*;
     use crate::utils::*;
+
+    #[test]
+    fn test_interp_extrap_1d() {
+        let nx = 3;
+        let x = linspace(-1.0_f64, 1.0, nx);
+        let grids = [&x[..]];
+        let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
+
+        let xobs = linspace(-10.0_f64, 10.0, 37);
+        let zobs: Vec<f64> = xobs.iter().map(|&xi| 3.0 * xi).collect();
+
+        let interpolator: &mut RectilinearGridInterpolator<'_, _, 1> =
+            &mut RectilinearGridInterpolator::new(&grids, &z[..]);
+
+        // Check both interpolated and extrapolated values
+        xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
+            let zii = interpolator.interp_one(&[*xi]);
+            assert!((*zi - zii).abs() < 1e-12)
+        });
+    }
+
+    #[test]
+    fn test_interp_extrap_2d_degenerate() {
+        // Test with one dimension that is size one
+        let (nx, ny) = (3, 1);
+        let x = linspace(-1.0, 1.0, nx);
+        let y = Vec::from([0.5]);
+        let grids = [&x[..], &y[..]];
+        let xy = meshgrid(Vec::from([&x, &y]));
+
+        // z = x + y
+        let z: Vec<f64> = (0..nx * ny).map(|i| &xy[i][0] + &xy[i][1]).collect();
+
+        // Observation points all over in 2D space
+        let xobs = linspace(-10.0_f64, 10.0, 37);
+        let yobs = linspace(-10.0_f64, 10.0, 37);
+        let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
+        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + 0.5).collect(); // Every `z` should match the degenerate `y` value
+
+        let interpolator: &mut RectilinearGridInterpolator<'_, _, 2> =
+            &mut RectilinearGridInterpolator::new(&grids, &z[..]);
+
+        // Check values at every incident vertex
+        xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
+            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
+            assert!((*zi - zii).abs() < 1e-12)
+        });
+    }
 
     #[test]
     fn test_interp_one_2d() {
