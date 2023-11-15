@@ -47,6 +47,9 @@ where
             starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0,
             "Dimension mismatch"
         );
+        // Make sure all dimensions have at least one entry
+        let degenerate = (0..ndims).any(|i| dims[i] < 1);
+        assert!(!degenerate, "All grids must have at least one entry");
         // Check if any dimensions have zero step size
         let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
         assert!(steps_are_nonzero, "All grid steps must have nonzero magnitude");
