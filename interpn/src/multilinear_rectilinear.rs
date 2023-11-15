@@ -1,7 +1,14 @@
 use num_traits::Float;
 
 /// An arbitrary-dimensional multilinear interpolator on a rectilinear grid.
+///
+/// Unlike `RegularGridInterpolator`, this method does not handle
+/// degenerate dimensions with only a single grid entry; all grids
+/// must have at least 2 entries.
+///
 /// Assumes C-style ordering of vals (x0, y0, z0,   x0, y0, z1,   ...,   x0, yn, zn).
+/// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
+/// left to the user.
 pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// x, y, ... coordinate grids, size(dims.len()), each entry of size dims[i]
     grids: &'a [&'a [T]],
@@ -27,15 +34,28 @@ where
     T: Float,
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
+    ///
+    /// Unlike `RegularGridInterpolator`, this method does not handle
+    /// degenerate dimensions with only a single grid entry; all grids
+    /// must have at least 2 entries.
+    ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
+    /// left to the user.
     #[inline(always)]
     pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
-        let nvals = dims[..ndims].iter().product::<usize>();
+        let nvals = dims[..ndims].iter().product();
         assert!(vals.len() == nvals && ndims > 0, "Dimension mismatch");
+        // Check if any grids are degenerate
+        let degenerate = (0..ndims).any(|i| dims[i] < 2);
+        assert!(!degenerate, "All grids must have at least 2 entries");
+        // Check that at least the first two entries in each grid are monotonic
+        let monotonic_maybe = (0..ndims).all(|i| grids[i][1] > grids[i][0]);
+        assert!(monotonic_maybe, "All grids must be monotonically increasing");
 
         // Populate cumulative product of higher dimensions for indexing.
         //
@@ -361,7 +381,10 @@ where
 }
 
 /// Initialize and evaluate multilinear interpolation on a rectilinear grid in up to 10 dimensions.
+///
 /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+/// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
+/// left to the user.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
@@ -401,11 +424,11 @@ mod test {
     }
 
     #[test]
-    fn test_interp_extrap_2d_degenerate() {
-        // Test with one dimension that is size one
-        let (nx, ny) = (3, 1);
+    fn test_interp_extrap_2d_small() {
+        // Test with one dimension that is minimum size
+        let (nx, ny) = (3, 2);
         let x = linspace(-1.0, 1.0, nx);
-        let y = Vec::from([0.5]);
+        let y = Vec::from([0.5, 0.6]);
         let grids = [&x[..], &y[..]];
         let xy = meshgrid(Vec::from([&x, &y]));
 
@@ -416,7 +439,7 @@ mod test {
         let xobs = linspace(-10.0_f64, 10.0, 37);
         let yobs = linspace(-10.0_f64, 10.0, 37);
         let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
-        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + 0.5).collect(); // Every `z` should match the degenerate `y` value
+        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + &xyobs[i][1]).collect(); // Every `z` should match the degenerate `y` value
 
         let interpolator: &mut RectilinearGridInterpolator<'_, _, 2> =
             &mut RectilinearGridInterpolator::new(&grids, &z[..]);
