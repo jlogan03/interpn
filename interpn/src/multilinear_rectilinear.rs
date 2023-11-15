@@ -48,13 +48,19 @@ where
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
         let nvals = dims[..ndims].iter().product();
-        assert!(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS, "Dimension mismatch");
+        assert!(
+            vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS,
+            "Dimension mismatch"
+        );
         // Check if any grids are degenerate
         let degenerate = (0..ndims).any(|i| dims[i] < 2);
         assert!(!degenerate, "All grids must have at least 2 entries");
         // Check that at least the first two entries in each grid are monotonic
         let monotonic_maybe = (0..ndims).all(|i| grids[i][1] > grids[i][0]);
-        assert!(monotonic_maybe, "All grids must be monotonically increasing");
+        assert!(
+            monotonic_maybe,
+            "All grids must be monotonically increasing"
+        );
 
         // Populate cumulative product of higher dimensions for indexing.
         //
@@ -599,15 +605,93 @@ mod test {
         let yobs: Vec<f64> = xywgrid.iter().map(|xyi| xyi[1]).collect();
         let obs = &[&xobs[..], &yobs[..]];
 
-        let zw: Vec<f64> = (0..xobs.len())
-            .map(|i| xobs[i] + yobs[i])
-            .collect();
+        let zw: Vec<f64> = (0..xobs.len()).map(|i| xobs[i] + yobs[i]).collect();
         let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
 
         let mut out = vec![0.0; nx.max(ny).max(xobs.len())];
 
         // Check extrapolating off grid and interpolating between grid points all around
         interpn(grids, &zgrid1, obs, &mut out[..xobs.len()]);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+    }
+
+    #[test]
+    fn test_interp_3d() {
+        let nx = 3;
+        let ny = 4;
+        let nz = 5;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+        let z = linspace(-20.0, -10.0, nz);
+
+        let grid = meshgrid(Vec::from([&x, &y, &z]));
+        let grids = &[&x[..], &y[..], &z[..]];
+
+        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
+
+        //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
+        let xw = linspace(0.0, 10.0, nx + 1);
+        let yw = linspace(-5.0, 5.0, ny + 1);
+        let zw = linspace(-20.0, -10.0, nz + 1);
+        let gridw = meshgrid(vec![&xw, &yw, &zw]);
+
+        let xobs: Vec<f64> = gridw.iter().map(|xyi| xyi[0]).collect();
+        let yobs: Vec<f64> = gridw.iter().map(|xyi| xyi[1]).collect();
+        let zobs: Vec<f64> = gridw.iter().map(|xyi| xyi[2]).collect();
+        let obs = &[&xobs[..], &yobs[..], &zobs[..]];
+
+        let zw: Vec<f64> = (0..xobs.len())
+            .map(|i| xobs[i] + yobs[i] + zobs[i])
+            .collect();
+
+        let mut out = vec![0.0; zw.len()];
+
+        // Check extrapolating off grid and interpolating between grid points all around
+        interpn(grids, &u, obs, &mut out[..xobs.len()]);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+    }
+
+    #[test]
+    fn test_interp_extrap_3d() {
+        let nx = 3;
+        let ny = 4;
+        let nz = 5;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+        let z = linspace(-20.0, -10.0, nz);
+
+        let grid = meshgrid(Vec::from([&x, &y, &z]));
+        let grids = &[&x[..], &y[..], &z[..]];
+
+        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
+
+        //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
+        let xw = linspace(-1.0, 11.0, 10);
+        let yw = linspace(-7.0, 6.0, 10);
+        let zw = linspace(-25.0, -5.0, 10);
+        let gridw = meshgrid(vec![&xw, &yw, &zw]);
+
+        let xobs: Vec<f64> = gridw.iter().map(|xyi| xyi[0]).collect();
+        let yobs: Vec<f64> = gridw.iter().map(|xyi| xyi[1]).collect();
+        let zobs: Vec<f64> = gridw.iter().map(|xyi| xyi[2]).collect();
+        let obs = &[&xobs[..], &yobs[..], &zobs[..]];
+
+        let zw: Vec<f64> = (0..xobs.len())
+            .map(|i| xobs[i] + yobs[i] + zobs[i])
+            .collect();
+
+        let mut out = vec![0.0; zw.len()];
+
+        // Check extrapolating off grid and interpolating between grid points all around
+        interpn(grids, &u, obs, &mut out[..xobs.len()]);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }

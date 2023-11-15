@@ -32,7 +32,7 @@ where
     T: Float,
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
-    /// 
+    ///
     /// Unlike `RectilinearGridInterpolator`, this method can accommodate
     /// degenerate grids with a single entry, as well as grids with a
     /// negative step size.
@@ -51,7 +51,10 @@ where
         assert!(!degenerate, "All grids must have at least one entry");
         // Check if any dimensions have zero step size
         let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
-        assert!(steps_are_nonzero, "All grid steps must have nonzero magnitude");
+        assert!(
+            steps_are_nonzero,
+            "All grid steps must have nonzero magnitude"
+        );
 
         // Compute volume of reference cell
         let vol = steps.iter().fold(T::one(), |acc, x| acc * *x).abs();
@@ -99,7 +102,7 @@ where
 
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(ndims) and no allocation.
-    /// 
+    ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     ///
     /// # Panics
@@ -543,7 +546,11 @@ mod test {
         let xw = linspace(0.0, 10.0, nx + 1);
         let yw = linspace(-5.0, 5.0, ny + 1);
         let zw = linspace(-20.0, -10.0, nz + 1);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw]).iter().flatten().copied().collect();
+        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw])
+            .iter()
+            .flatten()
+            .copied()
+            .collect();
 
         let zw: Vec<f64> = (0..gridw.len() / 3)
             .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
@@ -581,10 +588,11 @@ mod test {
         let xw = linspace(-1.0, 11.0, 10);
         let yw = linspace(-7.0, 6.0, 10);
         let zw = linspace(-25.0, -5.0, 10);
-        // let xw = linspace(0.0, 10.0, nx);
-        // let yw = linspace(-5.0, 5.0, ny);
-        // let zw = linspace(-20.0, -10.0, nz);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw]).iter().flatten().copied().collect();
+        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw])
+            .iter()
+            .flatten()
+            .copied()
+            .collect();
 
         let zw: Vec<f64> = (0..gridw.len() / 3)
             .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
