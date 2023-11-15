@@ -49,7 +49,7 @@ where
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
         let nvals = dims[..ndims].iter().product();
-        assert!(vals.len() == nvals && ndims > 0, "Dimension mismatch");
+        assert!(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS, "Dimension mismatch");
         // Check if any grids are degenerate
         let degenerate = (0..ndims).any(|i| dims[i] < 2);
         assert!(!degenerate, "All grids must have at least 2 entries");
@@ -83,17 +83,19 @@ where
     /// Interpolate on interleaved list of points.
     /// Assumes C-style ordering of points ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     #[inline(always)]
-    pub fn interp(&mut self, x: &[T], out: &mut [T]) {
+    pub fn interp(&mut self, x: &[&'a [T]], out: &mut [T]) {
         let n = out.len();
         let ndims = self.grids.len();
-        assert!(x.len() % ndims == 0, "Dimension mismatch");
+        // Make sure there are enough coordinate inputs for each dimension
+        assert!(x.len() == ndims, "Dimension mismatch");
+        // Make sure the size of inputs and output match
+        let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
+        assert!(size_matches, "Dimension mismatch");
 
-        let mut start = 0;
-        let mut end = 0;
+        let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         (0..n).for_each(|i| {
-            end = start + ndims;
-            out[i] = self.interp_one(&x[start..end]);
-            start = end;
+            (0..ndims).for_each(|j| tmp[j] = x[j][i]);
+            out[i] = self.interp_one(&tmp);
         });
     }
 
@@ -104,13 +106,11 @@ where
     /// # Panics
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of either one exceeds the fixed maximum
-    ///   * If the index along any dimension exceeds the maximum representable
-    ///     integer value within the value type `T`
     #[inline(always)]
     pub fn interp_one(&mut self, x: &[T]) -> T {
         // Check sizes
         let ndims = self.grids.len();
-        assert!(x.len() == ndims && ndims <= MAXDIMS, "Dimension mismatch");
+        assert!(x.len() == ndims, "Dimension mismatch");
 
         // Initialize fixed-size intermediate storage.
         // This storage _could_ be initialized with the interpolator struct, but
@@ -390,7 +390,7 @@ where
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 10 dimensions.
 #[inline(always)]
-pub fn interpn<'a, T>(grids: &'a [&'a [T]], vals: &'a [T], obs: &'a [T], out: &'a mut [T])
+pub fn interpn<'a, T>(grids: &'a [&'a [T]], vals: &'a [T], obs: &'a [&'a [T]], out: &'a mut [T])
 where
     T: Float,
 {
@@ -513,14 +513,17 @@ mod test {
         let mut out = vec![0.0; n];
 
         let grid = meshgrid(Vec::from([&x, &y]));
-        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
+        // let xy: Vec<f64> = grid.iter().flatten().copied().collect();
+        let xobs: Vec<f64> = grid.iter().map(|xyi| xyi[0]).collect();
+        let yobs: Vec<f64> = grid.iter().map(|xyi| xyi[1]).collect();
+        let obs = &[&xobs[..], &yobs[..]];
 
         let grids = [&x[..], &y[..]];
 
         let interpolator: &mut RectilinearGridInterpolator<'_, _, 2> =
             &mut RectilinearGridInterpolator::new(&grids, &z[..]);
 
-        interpolator.interp(&xy[..], &mut out);
+        interpolator.interp(obs, &mut out);
 
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
     }
@@ -551,11 +554,13 @@ mod test {
 
         let grid = meshgrid(Vec::from([&x, &y]));
 
-        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
+        let xobs: Vec<f64> = grid.iter().map(|xyi| xyi[0]).collect();
+        let yobs: Vec<f64> = grid.iter().map(|xyi| xyi[1]).collect();
+        let obs = &[&xobs[..], &yobs[..]];
 
         let grids = &[&x[..], &y[..]];
 
-        interpn(grids, &z, &xy, &mut out);
+        interpn(grids, &z, obs, &mut out);
 
         (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
     }
@@ -590,17 +595,21 @@ mod test {
         //   so that it will be extrapolated correctly in the corner regions
         let xw = linspace(-10.0, 11.0, 200);
         let yw = linspace(-7.0, 6.0, 200);
-        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw]).iter().flatten().copied().collect();
+        let xywgrid = meshgrid(vec![&xw, &yw]);
 
-        let zw: Vec<f64> = (0..xyw.len() / 2)
-            .map(|i| xyw[2 * i] + xyw[2 * i + 1])
+        let xobs: Vec<f64> = xywgrid.iter().map(|xyi| xyi[0]).collect();
+        let yobs: Vec<f64> = xywgrid.iter().map(|xyi| xyi[1]).collect();
+        let obs = &[&xobs[..], &yobs[..]];
+
+        let zw: Vec<f64> = (0..xobs.len())
+            .map(|i| xobs[i] + yobs[i])
             .collect();
         let zgrid1: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
 
-        let mut out = vec![0.0; nx.max(ny).max(zw.len())];
+        let mut out = vec![0.0; nx.max(ny).max(xobs.len())];
 
         // Check extrapolating off grid and interpolating between grid points all around
-        interpn(grids, &zgrid1, &xyw, &mut out[..zw.len()]);
+        interpn(grids, &zgrid1, obs, &mut out[..xobs.len()]);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
 }

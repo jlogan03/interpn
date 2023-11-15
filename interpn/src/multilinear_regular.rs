@@ -100,6 +100,7 @@ where
 
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(ndims) and no allocation.
+    /// 
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     ///
     /// # Panics

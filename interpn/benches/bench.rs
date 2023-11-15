@@ -117,17 +117,16 @@ fn bench_interp(c: &mut Criterion) {
                 let z = randn::<f64>(&mut rng, n);
                 let mut out = vec![0.0; n];
 
-                let xy: Vec<f64> = meshgrid(Vec::from([&x, &y]))
-                    .iter()
-                    .flatten()
-                    .map(|xx| *xx)
-                    .collect();
+                let obsgrid = meshgrid(Vec::from([&x, &y]));
+                let xobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[0]).collect();
+                let yobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[1]).collect();
+                let obs = &[&xobs[..], &yobs[..]];
 
                 b.iter(|| {
                     black_box(multilinear_rectilinear::interpn(
                         &[&x, &y],
                         &z,
-                        &xy,
+                        obs,
                         &mut out,
                     ))
                 });
@@ -206,11 +205,11 @@ fn bench_extrap(c: &mut Criterion) {
                 // entirely in corner-region for worst-case perf
                 let xw = linspace(101.0, 200.0, nx);
                 let yw = linspace(-100.0, -1.0, ny);
-                let xyw: Vec<f64> = meshgrid(vec![&xw, &yw])
-                    .iter()
-                    .flatten()
-                    .map(|xx| *xx)
-                    .collect();
+
+                let obsgrid = meshgrid(Vec::from([&xw, &yw]));
+                let xobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[0]).collect();
+                let yobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[1]).collect();
+                let obs = &[&xobs[..], &yobs[..]];
 
                 let z = randn::<f64>(&mut rng, n);
                 let mut out = vec![0.0; n];
@@ -219,7 +218,7 @@ fn bench_extrap(c: &mut Criterion) {
                     black_box(multilinear_rectilinear::interpn(
                         &[&x, &y],
                         &z,
-                        &xyw,
+                        obs,
                         &mut out,
                     ))
                 });
