@@ -1,6 +1,11 @@
 use num_traits::{Float, NumCast};
 
 /// An arbitrary-dimensional multilinear interpolator on a regular grid.
+///
+/// Unlike `RectilinearGridInterpolator`, this method can accommodate
+/// degenerate grids with a single entry, as well as grids with a
+/// negative step size.
+///
 /// Assumes C-style ordering of vals (x0, y0, z0,   x0, y0, z1,   ...,   x0, yn, zn).
 pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Size of each dimension
@@ -27,16 +32,24 @@ where
     T: Float,
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
+    /// 
+    /// Unlike `RectilinearGridInterpolator`, this method can accommodate
+    /// degenerate grids with a single entry, as well as grids with a
+    /// negative step size.
+    ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     #[inline(always)]
     pub fn new(dims: &'a [usize], starts: &'a [T], steps: &'a [T], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = dims.len();
-        let nvals = dims.iter().product::<usize>();
+        let nvals = dims.iter().product();
         assert!(
             starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0,
             "Dimension mismatch"
         );
+        // Check if any dimensions have zero step size
+        let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
+        assert!(steps_are_nonzero, "All grid steps must have nonzero magnitude");
 
         // Compute volume of reference cell
         let vol = steps.iter().fold(T::one(), |acc, x| acc * *x).abs();
@@ -341,6 +354,28 @@ mod test {
     }
 
     #[test]
+    fn test_interp_extrap_1d_negative_step() {
+        let nx = 3;
+        let x = linspace(1.0_f64, -1.0, nx);
+        let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
+
+        let xobs = linspace(-10.0_f64, 10.0, 37);
+        let zobs: Vec<f64> = xobs.iter().map(|&xi| 3.0 * xi).collect();
+
+        let dims = [nx];
+        let starts = [x[0]];
+        let steps = [x[1] - x[0]];
+        let interpolator: RegularGridInterpolator<'_, _, 1> =
+            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
+
+        // Check both interpolated and extrapolated values
+        xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
+            let zii = interpolator.interp_one(&[*xi]);
+            assert!((*zi - zii).abs() < 1e-12)
+        });
+    }
+
+    #[test]
     fn test_interp_extrap_2d_degenerate() {
         // Test with one dimension that is size one
         let (nx, ny) = (3, 1);
@@ -349,17 +384,13 @@ mod test {
         let xy = meshgrid(Vec::from([&x, &y]));
 
         // z = x + y
-        let z: Vec<f64> = (0..nx * ny)
-            .map(|i| &xy[i][0] + &xy[i][1])
-            .collect();
+        let z: Vec<f64> = (0..nx * ny).map(|i| &xy[i][0] + &xy[i][1]).collect();
 
         // Observation points all over in 2D space
         let xobs = linspace(-10.0_f64, 10.0, 37);
         let yobs = linspace(-10.0_f64, 10.0, 37);
         let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
-        let zobs: Vec<f64> = (0..37 * 37)
-            .map(|i| &xyobs[i][0] + 0.5)
-            .collect(); // Every `z` should match the degenerate `y` value
+        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + 0.5).collect(); // Every `z` should match the degenerate `y` value
 
         let dims = [nx, ny];
         let starts = [x[0], y[0]];
