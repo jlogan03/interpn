@@ -521,4 +521,83 @@ mod test {
         interpn(&dims, &starts, &steps, &z, &xyw, &mut out[..zw.len()]);
         (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
     }
+
+    #[test]
+    fn test_interp_3d() {
+        let nx = 3;
+        let ny = 4;
+        let nz = 5;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+        let z = linspace(-20.0, -10.0, nz);
+
+        let grid = meshgrid(Vec::from([&x, &y, &z]));
+
+        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
+
+        //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
+        let xw = linspace(0.0, 10.0, nx + 1);
+        let yw = linspace(-5.0, 5.0, ny + 1);
+        let zw = linspace(-20.0, -10.0, nz + 1);
+        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw]).iter().flatten().copied().collect();
+
+        let zw: Vec<f64> = (0..gridw.len() / 3)
+            .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
+            .collect();
+
+        let mut out = vec![0.0; zw.len()];
+
+        let dims = [nx, ny, nz];
+        let starts = [x[0], y[0], z[0]];
+        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0]];
+
+        // Check extrapolating off grid and interpolating between grid points all around
+        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+    }
+
+    #[test]
+    fn test_interp_extrap_3d() {
+        let nx = 3;
+        let ny = 4;
+        let nz = 5;
+
+        let x = linspace(0.0, 10.0, nx);
+        let y = linspace(-5.0, 5.0, ny);
+        let z = linspace(-20.0, -10.0, nz);
+
+        let grid = meshgrid(Vec::from([&x, &y, &z]));
+
+        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
+
+        //   High/low corners and all over the place
+        //   For this one, use a function that is linear in every direction,
+        //   z = x + y,
+        //   so that it will be extrapolated correctly in the corner regions
+        let xw = linspace(-1.0, 11.0, 10);
+        let yw = linspace(-7.0, 6.0, 10);
+        let zw = linspace(-25.0, -5.0, 10);
+        // let xw = linspace(0.0, 10.0, nx);
+        // let yw = linspace(-5.0, 5.0, ny);
+        // let zw = linspace(-20.0, -10.0, nz);
+        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw]).iter().flatten().copied().collect();
+
+        let zw: Vec<f64> = (0..gridw.len() / 3)
+            .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
+            .collect();
+
+        let mut out = vec![0.0; zw.len()];
+
+        let dims = [nx, ny, nz];
+        let starts = [x[0], y[0], z[0]];
+        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0]];
+
+        // Check extrapolating off grid and interpolating between grid points all around
+        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+    }
 }
