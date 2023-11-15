@@ -38,7 +38,6 @@ where
     /// negative step size.
     ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
-    #[inline(always)]
     pub fn new(dims: &'a [usize], starts: &'a [T], steps: &'a [T], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = dims.len();

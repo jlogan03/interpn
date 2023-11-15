@@ -42,7 +42,6 @@ where
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
     /// left to the user.
-    #[inline(always)]
     pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = grids.len();
@@ -80,8 +79,7 @@ where
         }
     }
 
-    /// Interpolate on interleaved list of points.
-    /// Assumes C-style ordering of points ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// Interpolate on contiguous lists of points.
     #[inline(always)]
     pub fn interp(&mut self, x: &[&'a [T]], out: &mut [T]) {
         let n = out.len();
