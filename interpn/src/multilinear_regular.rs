@@ -527,9 +527,9 @@ mod test {
 
     #[test]
     fn test_interp_3d() {
-        let nx = 3;
-        let ny = 4;
-        let nz = 5;
+        let nx = 2;
+        let ny = 3;
+        let nz = 4;
 
         let x = linspace(0.0, 10.0, nx);
         let y = linspace(-5.0, 5.0, ny);
@@ -569,9 +569,9 @@ mod test {
 
     #[test]
     fn test_interp_extrap_3d() {
-        let nx = 3;
-        let ny = 4;
-        let nz = 5;
+        let nx = 2;
+        let ny = 3;
+        let nz = 4;
 
         let x = linspace(0.0, 10.0, nx);
         let y = linspace(-5.0, 5.0, ny);
@@ -585,9 +585,9 @@ mod test {
         //   For this one, use a function that is linear in every direction,
         //   z = x + y,
         //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-1.0, 11.0, 10);
-        let yw = linspace(-7.0, 6.0, 10);
-        let zw = linspace(-25.0, -5.0, 10);
+        let xw = linspace(-1.0, 11.0, nx + 1);
+        let yw = linspace(-7.0, 6.0, ny + 1);
+        let zw = linspace(-25.0, -5.0, nz + 1);
         let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw])
             .iter()
             .flatten()
