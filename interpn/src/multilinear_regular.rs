@@ -242,10 +242,29 @@ where
                 // For how many total dimensions is the current vertex on a saturated bound?
                 let thissatcount = thissat.iter().fold(0, |acc, x| acc + *x as usize);
 
-                // Subtract the extrapolated volume from the contribution for this vertex
-                // if it is on multiple saturated bounds.
+                // If this vertex is on multiple saturated bounds, then the prism formed by the
+                // opposite vertex and the observation point will be extrapolated in more than
+                // one dimension, which will produce some regions with volume that scales
+                // nonlinearly with the position of the observation point.
+                // We need to restore linearity without resorting to using the recursive algorithm
+                // which would drive us to actualize (2^(n-1) * ndims) float values simultaneously.
+                //
+                // To do this, we can subtract the nonlinear regions' volume from the total
+                // volume of the opposite-to-observation prism for this vertex.
+                //
                 // Put differently - find the part of the volume that is scaling non-linearly
                 // in the coordinates, and bookkeep it to be removed entirely later.
+                //
+                // For one dimension, there are no such regions. For two dimensions, only the
+                // corner region contributes. For higher dimensions, there are increasing
+                // numbers of types of regions that appear, so we need a relatively general
+                // way of handling this without knowing all of those types of region.
+                //
+                // One way of circumventing the need to enumerate types of nonlinear region
+                // is to capitalize on the observation that the _linear_ regions are all of the
+                // same form, so we can traverse those instead, subtracting each one from the
+                // full extrapolated volume for this vertex until what's left is only the part
+                // that we want to remove.
                 if thissatcount > 1 {
                     // Copy forward the original dxs, extrapolated or not
                     (0..ndims).for_each(|j| extrapdxs[j] = dxs[j]);
