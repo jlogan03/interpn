@@ -236,7 +236,7 @@ where
                 // don't produce an overlapping partition in outside-corner regions.
                 if neg {
                     for j in 0..ndims {
-                        if sat[j] > 0 && !opsat[j] {
+                        if thissat[j] {
                             dxs[j] = dxs[j].min(self.steps[j].abs());
                         }
                     }
