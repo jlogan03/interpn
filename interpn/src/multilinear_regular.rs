@@ -121,7 +121,7 @@ where
         // ergonomically unpleasant.
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let steps = &self.steps[..ndims];  // Step size for each dimension
+        let steps = &self.steps[..ndims]; // Step size for each dimension
         let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
@@ -180,20 +180,23 @@ where
             // Get the value at this vertex
             let v = self.vals[k];
 
-            // Accumulate the volume of the prism formed by the
-            // observation location and the opposing vertex
+            // Find the vector from the opposite vertex to the observation point
             for j in 0..ndims {
                 let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let loc = self.starts[j] + steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
                 dxs[j] = loc; // Use dxs[j] as storage for float locs
             }
-
-            // Make the actual delta-locs
             (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
             (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
 
-            // Clip maximum dx for some cases to handle multidimensional extrapolation
-            if any_dims_saturated {
+            // Accumulate contribution from this vertex
+            if !any_dims_saturated {
+                // Interpolating
+                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                interped = interped + v * vol;
+            } else {
+                // Extrapolating requires some special attention.
+
                 // For which dimensions is the opposite vertex on a saturated bound?
                 (0..ndims).for_each(|j| {
                     opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1)
@@ -296,10 +299,6 @@ where
                 let vol = (vexterior + vinterior) * sign;
 
                 interped = interped + v * vol;
-
-            } else {
-                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
-                interped = interped + v * vol;
             }
         }
 
@@ -358,8 +357,14 @@ where
 /// and the underlying method can be extended to more than this function's limit of 8 dimensions.
 /// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
 #[inline(always)]
-pub fn interpn<T>(dims: &[usize], starts: &[T], steps: &[T], vals: &[T], obs: &[& [T]], out: &mut [T])
-where
+pub fn interpn<T>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+) where
     T: Float,
 {
     // Initialization is fairly cheap in most cases (O(ndim) int muls) so unless we're
@@ -453,23 +458,28 @@ mod test {
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
     fn test_interp_extrap_1d_to_8d() {
-        
         for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];
-            let xs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i])).collect();
+            let xs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect();  // sum is linear in every direction, good for testing
+            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
             let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
             let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
             // Observation points
-            let xobs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3)).collect();
+            let xobs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
+                .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-            let gridobs_t: Vec<Vec<f64>> = (0..ndims).map(|i| gridobs.iter().map(|x| x[i]).collect()).collect(); // transpose
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| gridobs.iter().map(|x| x[i]).collect())
+                .collect(); // transpose
             let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect();  // expected output at observation points
+            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate

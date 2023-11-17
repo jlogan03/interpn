@@ -156,7 +156,6 @@ where
         for i in 0..nverts {
             let mut k: usize = 0; // index of the value for this vertex in self.vals
             let mut sign = T::one(); // sign of the contribution from this vertex
-            let mut extrapvol = T::zero();
 
             // Every 2^nth vertex, flip which side of the cube we are examining
             // in the nth dimension.
@@ -182,21 +181,24 @@ where
             // Get the value at this vertex
             let v = self.vals[k];
 
-            // Accumulate the volume of the prism formed by the
-            // observation location and the opposing vertex
+            // Find the vector from the opposite vertex to the observation point
             for j in 0..ndims {
                 let iloc =
                     (self.origin[j] + !ioffs[j] as usize).min(self.dims[j].saturating_sub(1)); // Index of location of opposite vertex
                 let loc = self.grids[j][iloc]; // Loc. of opposite vertex
                 dxs[j] = loc;
             }
-
-            // Make the actual delta-locs
             (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
             (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
 
-            // Clip maximum dx for some cases to handle multidimensional extrapolation
-            if any_dims_saturated {
+            // Accumulate contribution from this vertex
+            if !any_dims_saturated {
+                // Interpolating
+                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                interped = interped + v * vol;
+            } else {
+                // Extrapolating requires some special attention.
+
                 // For which dimensions is the opposite vertex on a saturated bound?
                 (0..ndims).for_each(|j| {
                     opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1)
@@ -298,10 +300,6 @@ where
 
                 let vol = (vexterior + vinterior) * sign;
 
-                interped = interped + v * vol;
-
-            } else {
-                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
                 interped = interped + v * vol;
             }
         }
@@ -475,22 +473,27 @@ mod test {
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
     fn test_interp_extrap_1d_to_8d() {
-        
         for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];
-            let xs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i])).collect();
+            let xs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .collect();
             let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect();  // sum is linear in every direction, good for testing
+            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
 
             // Observation points
-            let xobs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3)).collect();
+            let xobs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
+                .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-            let gridobs_t: Vec<Vec<f64>> = (0..ndims).map(|i| gridobs.iter().map(|x| x[i]).collect()).collect(); // transpose
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| gridobs.iter().map(|x| x[i]).collect())
+                .collect(); // transpose
             let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect();  // expected output at observation points
+            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
@@ -502,5 +505,4 @@ mod test {
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
         }
     }
-
 }
