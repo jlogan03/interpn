@@ -234,8 +234,6 @@ where
                 // allow the dx on that dimension to be as large as needed,
                 // but clip the dx on other saturated dimensions so that we
                 // don't produce an overlapping partition in outside-corner regions.
-
-                // TODO why doesn't the later clipping loop accomplish this??
                 if neg {
                     for j in 0..ndims {
                         if sat[j] > 0 && !opsat[j] {
@@ -293,7 +291,7 @@ where
                 // which are otherwise clipped to the interior region.
                 let mut vexterior = T::zero();
                 for j in 0..ndims {
-                    println!("dim:{j} thissat:{} preclipped:{}", thissat[j], sat[j] > 0 && !opsat[j]);
+                    // println!("dim:{j} thissat:{} preclipped:{}", thissat[j], sat[j] > 0 && !opsat[j]);
                     if thissat[j] {
                         let dx_was = extrapdxs[j];
                         extrapdxs[j] = dxs[j];
@@ -306,18 +304,18 @@ where
 
                 interped = interped + v * vol;
 
-                println!(
-                    "{i} {thissatcount} {opsatcount} {:?} {:?} {:?} {:?}, t*v:{:?} v:{:?} t:{:?} i:{:?} e:{:?}",
-                    thissat,
-                    opsat,
-                    sat,
-                    <f64 as NumCast>::from(sign).unwrap(),
-                    <f64 as NumCast>::from(v * vol / self.vol).unwrap(),
-                    <f64 as NumCast>::from(v).unwrap(),
-                    <f64 as NumCast>::from(vol / self.vol).unwrap(),
-                    <f64 as NumCast>::from(vinterior / self.vol).unwrap(),
-                    <f64 as NumCast>::from(vexterior / self.vol).unwrap(),
-                );
+                // println!(
+                //     "{i} {thissatcount} {opsatcount} {:?} {:?} {:?} {:?}, t*v:{:?} v:{:?} t:{:?} i:{:?} e:{:?}",
+                //     thissat,
+                //     opsat,
+                //     sat,
+                //     <f64 as NumCast>::from(sign).unwrap(),
+                //     <f64 as NumCast>::from(v * vol / self.vol).unwrap(),
+                //     <f64 as NumCast>::from(v).unwrap(),
+                //     <f64 as NumCast>::from(vol / self.vol).unwrap(),
+                //     <f64 as NumCast>::from(vinterior / self.vol).unwrap(),
+                //     <f64 as NumCast>::from(vexterior / self.vol).unwrap(),
+                // );
                 
             }
             else {
