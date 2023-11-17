@@ -81,22 +81,21 @@ where
         }
     }
 
-    /// Interpolate on interleaved list of points.
-    /// Assumes C-style ordering of points ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// Interpolate on contiguous lists of points.
     #[inline(always)]
-    pub fn interp(&self, x: &[T], out: &mut [T]) {
+    pub fn interp(&self, x: &[&'a [T]], out: &mut [T]) {
+        let n = out.len();
         let ndims = self.dims.len();
-        assert!(
-            x.len() % ndims == 0 && x.len() / ndims == out.len(),
-            "Dimension mismatch"
-        );
+        // Make sure there are enough coordinate inputs for each dimension
+        assert!(x.len() == ndims, "Dimension mismatch");
+        // Make sure the size of inputs and output match
+        let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
+        assert!(size_matches, "Dimension mismatch");
 
-        let mut start = 0;
-        let mut end = 0;
-        (0..out.len()).for_each(|i| {
-            end = start + ndims;
-            out[i] = self.interp_one(&x[start..end]);
-            start = end;
+        let tmp = &mut [T::zero(); MAXDIMS][..ndims];
+        (0..n).for_each(|i| {
+            (0..ndims).for_each(|j| tmp[j] = x[j][i]);
+            out[i] = self.interp_one(&tmp);
         });
     }
 
@@ -122,11 +121,13 @@ where
         // ergonomically unpleasant.
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
+        let steps = &self.steps[..ndims];  // Step size for each dimension
         let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
 
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
+
         let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
 
         // Whether the opposite vertex is on the saturated bound
@@ -143,7 +144,6 @@ where
         }
 
         // Check if any dimension is saturated.
-        // This gives a ~15% overall speedup for points on the interior.
         let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
 
         // Traverse vertices, summing contributions to the interpolated value.
@@ -184,7 +184,7 @@ where
             // observation location and the opposing vertex
             for j in 0..ndims {
                 let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
-                let loc = self.starts[j] + self.steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
+                let loc = self.starts[j] + steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
                 dxs[j] = loc; // Use dxs[j] as storage for float locs
             }
 
@@ -202,22 +202,6 @@ where
                 // For how many total dimensions is the opposite vertex on a saturated bound?
                 let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
 
-                // For which dimensions is the current vertex on a saturated bound?
-                (0..ndims).for_each(|j| {
-                    thissat[j] = (ioffs[j] && sat[j] == 2) || (!ioffs[j] && sat[j] == 1)
-                });
-
-                // For how many total dimensions is the current vertex on a saturated bound?
-                let thissatcount = thissat.iter().fold(0, |acc, x| acc + *x as usize);
-
-                // If the opposite vertex is on exactly one saturated bound, negate its contribution
-                // in order to move smoothly from weighted-average on the interior to extrapolation
-                // on the exterior.
-                let neg = opsatcount == 1;
-                if neg {
-                    sign = sign.neg();
-                }
-
                 // If the opposite vertex is on _more_ than one saturated bound,
                 // it should be clipped on multiple axes which, if the clipping
                 // were implemented in a general constructive geometry way, would
@@ -227,23 +211,33 @@ where
                 // and we need to implement that behavior with explicit logic.
                 let zeroed = opsatcount > 1;
                 if zeroed {
-                    sign = T::zero();
+                    // No contribution from this vertex
+                    continue;
                 }
 
+                // For which dimensions is the current vertex on a saturated bound?
+                (0..ndims).for_each(|j| thissat[j] = sat[j] > 0 && !opsat[j]);
+
+                // If the opposite vertex is on exactly one saturated bound, negate its contribution
+                // in order to move smoothly from weighted-average on the interior to extrapolation
+                // on the exterior.
+                //
                 // If the opposite vertex is on exactly one saturated bound,
                 // allow the dx on that dimension to be as large as needed,
                 // but clip the dx on other saturated dimensions so that we
                 // don't produce an overlapping partition in outside-corner regions.
+                let neg = opsatcount == 1;
                 if neg {
+                    sign = sign.neg();
                     for j in 0..ndims {
                         if thissat[j] {
-                            dxs[j] = dxs[j].min(self.steps[j].abs());
+                            dxs[j] = dxs[j].min(steps[j].abs());
                         }
                     }
 
                     let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
                     interped = interped + v * vol;
-                    continue
+                    continue;
                 }
 
                 // If this vertex is on multiple saturated bounds, then the prism formed by the
@@ -282,43 +276,28 @@ where
                 // Get the volume that is inside the cell
                 //   Copy forward the original dxs, extrapolated or not,
                 //   and clip to the cell boundary
-                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].abs().min(self.steps[j].abs()));
+                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j].abs()));
                 //   Get the volume of this region which does not extend outside the cell
-                let vinterior = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x).abs();
+                let vinterior = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
 
                 // Find each linear exterior region by, one at a time, taking the volume
                 // with one extrapolated dimension masked into the extrapdxs
                 // which are otherwise clipped to the interior region.
                 let mut vexterior = T::zero();
                 for j in 0..ndims {
-                    // println!("dim:{j} thissat:{} preclipped:{}", thissat[j], sat[j] > 0 && !opsat[j]);
                     if thissat[j] {
                         let dx_was = extrapdxs[j];
-                        extrapdxs[j] = dxs[j];
-                        vexterior = vexterior + extrapdxs.iter().fold(T::one(), |acc, x| acc * *x).abs() - vinterior;
+                        extrapdxs[j] = dxs[j] - steps[j].abs();
+                        vexterior = vexterior + extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
                         extrapdxs[j] = dx_was; // Reset extrapdxs to original state for next calc
                     }
                 }
 
-                let vol = (vexterior.abs() + vinterior.abs()) * sign;
+                let vol = (vexterior + vinterior) * sign;
 
                 interped = interped + v * vol;
 
-                // println!(
-                //     "{i} {thissatcount} {opsatcount} {:?} {:?} {:?} {:?}, t*v:{:?} v:{:?} t:{:?} i:{:?} e:{:?}",
-                //     thissat,
-                //     opsat,
-                //     sat,
-                //     <f64 as NumCast>::from(sign).unwrap(),
-                //     <f64 as NumCast>::from(v * vol / self.vol).unwrap(),
-                //     <f64 as NumCast>::from(v).unwrap(),
-                //     <f64 as NumCast>::from(vol / self.vol).unwrap(),
-                //     <f64 as NumCast>::from(vinterior / self.vol).unwrap(),
-                //     <f64 as NumCast>::from(vexterior / self.vol).unwrap(),
-                // );
-                
-            }
-            else {
+            } else {
                 let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
                 interped = interped + v * vol;
             }
@@ -376,22 +355,22 @@ where
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 10 dimensions.
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
 #[inline(always)]
-pub fn interpn<T>(dims: &[usize], starts: &[T], steps: &[T], vals: &[T], obs: &[T], out: &mut [T])
+pub fn interpn<T>(dims: &[usize], starts: &[T], steps: &[T], vals: &[T], obs: &[& [T]], out: &mut [T])
 where
     T: Float,
 {
     // Initialization is fairly cheap in most cases (O(ndim) int muls) so unless we're
     // repetitively using this to interpolate single points, we probably won't notice
     // the little bit of extra overhead.
-    RegularGridInterpolator::<'_, T, 10>::new(dims, starts, steps, vals).interp(obs, out);
+    RegularGridInterpolator::<'_, T, 8>::new(dims, starts, steps, vals).interp(obs, out);
 }
 
 #[cfg(test)]
 mod test {
     use super::{interpn, RegularGridInterpolator};
-    use crate::testing::*;
     use crate::utils::*;
 
     #[test]
@@ -468,302 +447,38 @@ mod test {
         });
     }
 
+    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
+    /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
+    /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
+    /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
-    fn test_interp_one_2d() {
-        let (nx, ny) = (3, 4);
-        let x = linspace(-1.0, 1.0, nx);
-        let y = linspace(2.0, 4.0, ny);
-        let xy = meshgrid(Vec::from([&x, &y]));
+    fn test_interp_extrap_1d_to_8d() {
+        
+        for ndims in 1..=8 {
+            println!("Testing in {ndims} dims");
+            // Interp grid
+            let dims: Vec<usize> = vec![2; ndims];
+            let xs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i])).collect();
+            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect();  // sum is linear in every direction, good for testing
+            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
-        // z = x * y^2
-        let z: Vec<f64> = (0..nx * ny)
-            .map(|i| &xy[i][0] * &xy[i][1] * &xy[i][1])
-            .collect();
+            // Observation points
+            let xobs: Vec<Vec<f64>> = (0..ndims).map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3)).collect();
+            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims).map(|i| gridobs.iter().map(|x| x[i]).collect()).collect(); // transpose
+            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect();  // expected output at observation points
+            let mut out = vec![0.0; uobs.len()];
 
-        let dims = [nx, ny];
-        let starts = [x[0], y[0]];
-        let steps = [x[1] - x[0], y[1] - y[0]];
-        let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
+            // Evaluate
+            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]);
 
-        // Check values at every incident vertex
-        xy.iter().zip(z.iter()).for_each(|(xyi, zi)| {
-            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
-            assert!((*zi - zii).abs() < 1e-12)
-        });
-    }
-
-    #[test]
-    fn test_interp_interleaved_2d() {
-        let mut rng = rng_fixed_seed();
-        let m: usize = 100_f64.sqrt() as usize;
-        let nx = m / 2;
-        let ny = m * 2;
-        let n = nx * ny;
-
-        let x = linspace(0.0, 100.0, nx);
-        let y = linspace(0.0, 100.0, ny);
-        let z = randn::<f64>(&mut rng, n);
-        let mut out = vec![0.0; n];
-
-        let grid = meshgrid(Vec::from([&x, &y]));
-        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
-
-        let dims = [nx, ny];
-        let starts = [x[0], y[0]];
-        let steps = [x[1] - x[0], y[1] - y[0]];
-
-        let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
-
-        interpolator.interp(&xy, &mut out);
-
-        (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14)); // Allow small error at edges
-    }
-
-    #[test]
-    fn test_interpn_2d() {
-        let mut rng = rng_fixed_seed();
-        let m: usize = 100_f64.sqrt() as usize;
-        let nx = m / 2;
-        let ny = m * 2;
-        let n = nx * ny;
-
-        let x = linspace(0.0, 100.0, nx);
-        let y = linspace(0.0, 100.0, ny);
-        let z = randn::<f64>(&mut rng, n);
-        let mut out = vec![0.0; n];
-
-        let grid = meshgrid(Vec::from([&x, &y]));
-
-        let xy: Vec<f64> = grid.iter().flatten().copied().collect();
-
-        let dims = [nx, ny];
-        let starts = [x[0], y[0]];
-        let steps = [x[1] - x[0], y[1] - y[0]];
-
-        interpn(&dims, &starts, &steps, &z, &xy, &mut out);
-        (0..n).for_each(|i| assert!((out[i] - z[i]).abs() < 1e-14));
-    }
-
-    #[test]
-    fn test_extrap_2d() {
-        let m: usize = 100_f64.sqrt() as usize;
-        let nx = m / 2;
-        let ny = m * 2;
-
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
-
-        let grid = meshgrid(Vec::from([&x, &y]));
-
-        let z: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1]).collect();
-
-        //   High/low corners and all over the place
-        //   For this one, use a function that is linear in every direction,
-        //   z = x + y,
-        //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-10.0, 11.0, 200);
-        let yw = linspace(-7.0, 6.0, 200);
-        let xyw: Vec<f64> = meshgrid(vec![&xw, &yw]).iter().flatten().copied().collect();
-
-        let zw: Vec<f64> = (0..xyw.len() / 2)
-            .map(|i| xyw[2 * i] + xyw[2 * i + 1])
-            .collect();
-
-        let mut out = vec![0.0; nx.max(ny).max(zw.len())];
-
-        let dims = [nx, ny];
-        let starts = [x[0], y[0]];
-        let steps = [x[1] - x[0], y[1] - y[0]];
-
-        // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&dims, &starts, &steps, &z, &xyw, &mut out[..zw.len()]);
-        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
-    }
-
-    #[test]
-    fn test_interp_3d() {
-        let nx = 2;
-        let ny = 3;
-        let nz = 4;
-
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
-        let z = linspace(-20.0, -10.0, nz);
-
-        let grid = meshgrid(Vec::from([&x, &y, &z]));
-
-        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
-
-        //   High/low corners and all over the place
-        //   For this one, use a function that is linear in every direction,
-        //   z = x + y,
-        //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(0.0, 10.0, nx + 1);
-        let yw = linspace(-5.0, 5.0, ny + 1);
-        let zw = linspace(-20.0, -10.0, nz + 1);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw])
-            .iter()
-            .flatten()
-            .copied()
-            .collect();
-
-        let zw: Vec<f64> = (0..gridw.len() / 3)
-            .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
-            .collect();
-
-        let mut out = vec![0.0; zw.len()];
-
-        let dims = [nx, ny, nz];
-        let starts = [x[0], y[0], z[0]];
-        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0]];
-
-        // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
-        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
-    }
-
-    #[test]
-    fn test_interp_extrap_3d() {
-        let nx = 2;
-        let ny = 3;
-        let nz = 4;
-
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
-        let z = linspace(-20.0, -10.0, nz);
-
-        let grid = meshgrid(Vec::from([&x, &y, &z]));
-
-        let u: Vec<f64> = grid.iter().map(|xyi| xyi[0] + xyi[1] + xyi[2]).collect();
-
-        //   High/low corners and all over the place
-        //   For this one, use a function that is linear in every direction,
-        //   z = x + y,
-        //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-1.0, 11.0, nx + 1);
-        let yw = linspace(-7.0, 6.0, ny + 1);
-        let zw = linspace(-25.0, -5.0, nz + 1);
-        let gridw = meshgrid(vec![&xw, &yw, &zw]);
-
-        let zw: Vec<f64> = (0..gridw.len())
-            .map(|i| gridw[i][0] + gridw[i][1] + gridw[i][2])
-            .collect();
-
-        let mut out = vec![0.0; zw.len()];
-
-        let dims = [nx, ny, nz];
-        let starts = [x[0], y[0], z[0]];
-        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0]];
-
-        // Check extrapolating off grid and interpolating between grid points all around
-        println!("asdf");
-        let interpolator: RegularGridInterpolator<'_, _, 3> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &u);
-        // interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
-        (0..zw.len()).for_each(|i| {
-            let obs = &[gridw[i][0], gridw[i][1], gridw[i][2]];
-            out[i] = interpolator.interp_one(obs);
-            println!("{i} {:?} {:?} {:?} {:?}", obs, out[i], zw[i], out[i] - zw[i]);
-        });
-
-        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12))
-    }
-
-    #[test]
-    fn test_interp_4d() {
-        let nx = 2;
-        let ny = 3;
-        let nz = 4;
-        let nv = 5;
-
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
-        let z = linspace(-20.0, -10.0, nz);
-        let v = linspace(20.0, 25.0, nv);
-
-        let grid = meshgrid(Vec::from([&x, &y, &z, &v]));
-
-        let u: Vec<f64> = grid
-            .iter()
-            .map(|xyi| xyi[0] + xyi[1] + xyi[2] + xyi[3])
-            .collect();
-
-        //   High/low corners and all over the place
-        //   For this one, use a function that is linear in every direction,
-        //   z = x + y,
-        //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(0.0, 10.0, nx + 1);
-        let yw = linspace(-5.0, 5.0, ny + 1);
-        let zw = linspace(-20.0, -10.0, nz - 1);
-        let vw = linspace(20.0, 25.0, nv - 1);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw, &vw])
-            .iter()
-            .flatten()
-            .copied()
-            .collect();
-
-        let uw: Vec<f64> = (0..gridw.len() / 4)
-            .map(|i| gridw[4 * i] + gridw[4 * i + 1] + gridw[4 * i + 2] + gridw[4 * i + 3])
-            .collect();
-
-        let mut out = vec![0.0; uw.len()];
-
-        let dims = [nx, ny, nz, nv];
-        let starts = [x[0], y[0], z[0], v[0]];
-        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0], v[1] - v[0]];
-
-        // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..uw.len()]);
-        (0..uw.len()).for_each(|i| assert!((out[i] - uw[i]).abs() < 1e-12));
-    }
-
-    #[test]
-    fn test_interp_extrap_4d() {
-        let nx = 2;
-        let ny = 3;
-        let nz = 4;
-        let nv = 5;
-
-        let x = linspace(0.0, 10.0, nx);
-        let y = linspace(-5.0, 5.0, ny);
-        let z = linspace(-20.0, -10.0, nz);
-        let v = linspace(20.0, 25.0, nv);
-
-        let grid = meshgrid(Vec::from([&x, &y, &z, &v]));
-
-        let u: Vec<f64> = grid
-            .iter()
-            .map(|xyi| xyi[0] + xyi[1] + xyi[2] + xyi[3])
-            .collect();
-
-        //   High/low corners and all over the place
-        //   For this one, use a function that is linear in every direction,
-        //   z = x + y,
-        //   so that it will be extrapolated correctly in the corner regions
-        let xw = linspace(-1.0, 11.0, nx + 1);
-        let yw = linspace(-7.0, 6.0, ny + 1);
-        let zw = linspace(-25.0, -5.0, nz - 1);
-        let vw = linspace(15.0, 30.0, nv - 1);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw, &vw])
-            .iter()
-            .flatten()
-            .copied()
-            .collect();
-
-        let uw: Vec<f64> = (0..gridw.len() / 4)
-            .map(|i| gridw[4 * i] + gridw[4 * i + 1] + gridw[4 * i + 2] + gridw[4 * i + 3])
-            .collect();
-
-        let mut out = vec![0.0; uw.len()];
-
-        let dims = [nx, ny, nz, nv];
-        let starts = [x[0], y[0], z[0], v[0]];
-        let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0], v[1] - v[0]];
-
-        // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..uw.len()]);
-        (0..uw.len()).for_each(|i| assert!((out[i] - uw[i]).abs() < 1e-12));
+            // Check that interpolated values match expectation,
+            // using an absolute difference because some points are very close to or exactly at zero,
+            // and do not do well under a check on relative difference.
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+        }
     }
 }
