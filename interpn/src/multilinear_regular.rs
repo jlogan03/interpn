@@ -155,7 +155,6 @@ where
         for i in 0..nverts {
             let mut k: usize = 0; // index of the value for this vertex in self.vals
             let mut sign = T::one(); // sign of the contribution from this vertex
-            let mut extrapvol = T::zero();
 
             // Every 2^nth vertex, flip which side of the cube we are examining
             // in the nth dimension.
@@ -203,7 +202,17 @@ where
                 // For how many total dimensions is the opposite vertex on a saturated bound?
                 let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
 
+                // For which dimensions is the current vertex on a saturated bound?
+                (0..ndims).for_each(|j| {
+                    thissat[j] = (ioffs[j] && sat[j] == 2) || (!ioffs[j] && sat[j] == 1)
+                });
+
+                // For how many total dimensions is the current vertex on a saturated bound?
+                let thissatcount = thissat.iter().fold(0, |acc, x| acc + *x as usize);
+
                 // If the opposite vertex is on exactly one saturated bound, negate its contribution
+                // in order to move smoothly from weighted-average on the interior to extrapolation
+                // on the exterior.
                 let neg = opsatcount == 1;
                 if neg {
                     sign = sign.neg();
@@ -225,22 +234,19 @@ where
                 // allow the dx on that dimension to be as large as needed,
                 // but clip the dx on other saturated dimensions so that we
                 // don't produce an overlapping partition in outside-corner regions.
+
+                // TODO why doesn't the later clipping loop accomplish this??
                 if neg {
                     for j in 0..ndims {
-                        let is_saturated = sat[j] != 0;
-                        if is_saturated && !opsat[j] {
-                            dxs[j] = dxs[j].min(self.steps[j]);
+                        if sat[j] > 0 && !opsat[j] {
+                            dxs[j] = dxs[j].min(self.steps[j].abs());
                         }
                     }
+
+                    let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                    interped = interped + v * vol;
+                    continue
                 }
-
-                // For which dimensions is the current vertex on a saturated bound?
-                (0..ndims).for_each(|j| {
-                    thissat[j] = (ioffs[j] && sat[j] == 2) || (!ioffs[j] && sat[j] == 1)
-                });
-
-                // For how many total dimensions is the current vertex on a saturated bound?
-                let thissatcount = thissat.iter().fold(0, |acc, x| acc + *x as usize);
 
                 // If this vertex is on multiple saturated bounds, then the prism formed by the
                 // opposite vertex and the observation point will be extrapolated in more than
@@ -262,28 +268,62 @@ where
                 //
                 // One way of circumventing the need to enumerate types of nonlinear region
                 // is to capitalize on the observation that the _linear_ regions are all of the
-                // same form, so we can traverse those instead, subtracting each one from the
-                // full extrapolated volume for this vertex until what's left is only the part
-                // that we want to remove.
-                if thissatcount > 1 {
-                    // Copy forward the original dxs, extrapolated or not
-                    (0..ndims).for_each(|j| extrapdxs[j] = dxs[j]);
-                    // For extrapolated dimensions, take just the extrapolated distance
-                    (0..ndims).for_each(|j| {
-                        if thissat[j] {
-                            extrapdxs[j] = dxs[j] - self.steps[j]
-                        }
-                    });
-                    // Evaluate the extrapolated corner volume
-                    extrapvol = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
+                // same form, even in higher dimensions. We can traverse those instead,
+                // subtracting each one from the full extrapolated volume for this vertex
+                // until what's left is only the part that we want to remove. Then, we can
+                // remove that part and keep the rest.
+                //
+                // Continuing from that thought, we can skip evaluating the nonlinear portions
+                // entirely, by evaluating the interior portion and each linear exterior portion
+                // (which we needed to evaluate to remove them from the enclosing volume anyway)
+                // then summing the linear portions together directly. This avoids the loss of
+                // float precision that can come from addressing the nonlinear regions directly,
+                // as this can cause us to add some very large and very small numbers together
+                // in an order that is not necessarily favorable.
+
+                // Get the volume that is inside the cell
+                //   Copy forward the original dxs, extrapolated or not,
+                //   and clip to the cell boundary
+                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].abs().min(self.steps[j].abs()));
+                //   Get the volume of this region which does not extend outside the cell
+                let vinterior = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x).abs();
+
+                // Find each linear exterior region by, one at a time, taking the volume
+                // with one extrapolated dimension masked into the extrapdxs
+                // which are otherwise clipped to the interior region.
+                let mut vexterior = T::zero();
+                for j in 0..ndims {
+                    println!("dim:{j} thissat:{} preclipped:{}", thissat[j], sat[j] > 0 && !opsat[j]);
+                    if thissat[j] {
+                        let dx_was = extrapdxs[j];
+                        extrapdxs[j] = dxs[j];
+                        vexterior = vexterior + extrapdxs.iter().fold(T::one(), |acc, x| acc * *x).abs() - vinterior;
+                        extrapdxs[j] = dx_was; // Reset extrapdxs to original state for next calc
+                    }
                 }
+
+                let vol = (vexterior.abs() + vinterior.abs()) * sign;
+
+                interped = interped + v * vol;
+
+                println!(
+                    "{i} {thissatcount} {opsatcount} {:?} {:?} {:?} {:?}, t*v:{:?} v:{:?} t:{:?} i:{:?} e:{:?}",
+                    thissat,
+                    opsat,
+                    sat,
+                    <f64 as NumCast>::from(sign).unwrap(),
+                    <f64 as NumCast>::from(v * vol / self.vol).unwrap(),
+                    <f64 as NumCast>::from(v).unwrap(),
+                    <f64 as NumCast>::from(vol / self.vol).unwrap(),
+                    <f64 as NumCast>::from(vinterior / self.vol).unwrap(),
+                    <f64 as NumCast>::from(vexterior / self.vol).unwrap(),
+                );
+                
             }
-
-            let vol = (dxs.iter().fold(T::one(), |acc, x| acc * *x).abs() - extrapvol) * sign;
-
-            // Add contribution from this vertex, leaving the division
-            // by the total cell volume for later to save a few flops
-            interped = interped + v * vol;
+            else {
+                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                interped = interped + v * vol;
+            }
         }
 
         interped / self.vol
@@ -607,14 +647,10 @@ mod test {
         let xw = linspace(-1.0, 11.0, nx + 1);
         let yw = linspace(-7.0, 6.0, ny + 1);
         let zw = linspace(-25.0, -5.0, nz + 1);
-        let gridw: Vec<f64> = meshgrid(vec![&xw, &yw, &zw])
-            .iter()
-            .flatten()
-            .copied()
-            .collect();
+        let gridw = meshgrid(vec![&xw, &yw, &zw]);
 
-        let zw: Vec<f64> = (0..gridw.len() / 3)
-            .map(|i| gridw[3 * i] + gridw[3 * i + 1] + gridw[3 * i + 2])
+        let zw: Vec<f64> = (0..gridw.len())
+            .map(|i| gridw[i][0] + gridw[i][1] + gridw[i][2])
             .collect();
 
         let mut out = vec![0.0; zw.len()];
@@ -624,8 +660,17 @@ mod test {
         let steps = [x[1] - x[0], y[1] - y[0], z[1] - z[0]];
 
         // Check extrapolating off grid and interpolating between grid points all around
-        interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
-        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12));
+        println!("asdf");
+        let interpolator: RegularGridInterpolator<'_, _, 3> =
+            RegularGridInterpolator::new(&dims, &starts, &steps, &u);
+        // interpn(&dims, &starts, &steps, &u, &gridw, &mut out[..zw.len()]);
+        (0..zw.len()).for_each(|i| {
+            let obs = &[gridw[i][0], gridw[i][1], gridw[i][2]];
+            out[i] = interpolator.interp_one(obs);
+            println!("{i} {:?} {:?} {:?} {:?}", obs, out[i], zw[i], out[i] - zw[i]);
+        });
+
+        (0..zw.len()).for_each(|i| assert!((out[i] - zw[i]).abs() < 1e-12))
     }
 
     #[test]
