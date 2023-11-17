@@ -27,23 +27,10 @@ pub fn _start() -> ! {
     let starts = [x[0], y[0]];
     let steps = [1.0, 1.0];
 
-    let xy = [0.0, 0.0];
+    let obs = [&[0.0_f64][..], &[0.0_f64][..]]; // Slightly weird syntax to get slice of slice without vec
 
-    multilinear_regular::interpn(
-        &xy[..],
-        &mut out[..],
-        &z[..],
-        &dims[..],
-        &starts[..],
-        &steps[..],
-    );
-
-    multilinear_rectilinear::interpn(
-        &xy[..],
-        &mut out[..],
-        &z[..],
-        grids,
-    );
+    multilinear_regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+    multilinear_rectilinear::interpn(grids, &z, &obs, &mut out);
 
     loop {} // We don't actually run this, just compile it
 }
