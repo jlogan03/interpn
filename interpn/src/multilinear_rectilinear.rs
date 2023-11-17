@@ -99,7 +99,7 @@ where
         let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         (0..n).for_each(|i| {
             (0..ndims).for_each(|j| tmp[j] = x[j][i]);
-            out[i] = self.interp_one(&tmp);
+            out[i] = self.interp_one(tmp);
         });
     }
 
