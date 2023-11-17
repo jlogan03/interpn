@@ -437,6 +437,7 @@ where
 #[cfg(test)]
 mod test {
     use super::{interpn, RectilinearGridInterpolator};
+    use crate::testing::*;
     use crate::utils::*;
 
     #[test]
@@ -473,13 +474,23 @@ mod test {
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
     fn test_interp_extrap_1d_to_8d() {
+        let mut rng = rng_fixed_seed();
+
         for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];
             let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .map(|i| {
+                    // Make a linear grid and add noise
+                    let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
+                    let dx = randn::<f64>(&mut rng, x.len());
+                    (0..x.len()).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) / 1e3);
+                    (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                    x
+                })
                 .collect();
+
             let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
             let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
