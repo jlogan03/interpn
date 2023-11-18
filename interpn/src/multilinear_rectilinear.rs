@@ -41,6 +41,13 @@ where
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
     /// left to the user.
+    ///
+    /// # Panics
+    /// * If any input dimensions do not match
+    /// * If any dimensions have size < 2
+    /// * If any grid's first two entries are not monotonically increasing
+    ///   * This is a courtesy to catch _some_, but not all, cases where a non-monotonic
+    ///     or reversed-order grid is provided.
     pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = grids.len();

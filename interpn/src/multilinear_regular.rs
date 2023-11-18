@@ -37,6 +37,11 @@ where
     /// grid entry; all grids must have at least 2 entries.
     ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// 
+    /// # Panics
+    /// * If any input dimensions do not match
+    /// * If any dimensions have size < 2
+    /// * If any step sizes have zero magnitude
     pub fn new(dims: &'a [usize], starts: &'a [T], steps: &'a [T], vals: &'a [T]) -> Self {
         // Check dimensions
         let ndims = dims.len();
