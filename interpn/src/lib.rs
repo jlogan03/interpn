@@ -3,8 +3,8 @@
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]
 
-pub mod multilinear_rectilinear;
-pub mod multilinear_regular;
+pub mod multilinear;
+pub use multilinear::{RectilinearGridInterpolator, RegularGridInterpolator};
 
 #[cfg(feature = "std")]
 pub mod utils;

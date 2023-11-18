@@ -1,9 +1,8 @@
 #![allow(clippy::all)] // Clippy will attempt to remove black_box() internals
 
 use criterion::*;
-use interpn::multilinear_rectilinear;
-use interpn::multilinear_regular;
 use interpn::utils::*;
+use interpn::{multilinear, RegularGridInterpolator};
 use randn::*;
 
 fn bench_interp(c: &mut Criterion) {
@@ -38,10 +37,8 @@ fn bench_interp(c: &mut Criterion) {
                         let dims = [nx, ny];
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
-                        let interpolator: multilinear_regular::RegularGridInterpolator<'_, _, 2> =
-                            multilinear_regular::RegularGridInterpolator::new(
-                                &dims, &starts, &steps, &z,
-                            );
+                        let interpolator: RegularGridInterpolator<'_, _, 2> =
+                            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
                         interpolator.interp(obs, &mut out)
                     })
                 });
@@ -73,7 +70,7 @@ fn bench_interp(c: &mut Criterion) {
                         let dims = [nx, ny];
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
-                        multilinear_regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
+                        multilinear::regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
                     })
                 });
             },
@@ -111,7 +108,7 @@ fn bench_interp(c: &mut Criterion) {
                 let obs = &[&xobs[..], &yobs[..]];
 
                 b.iter(|| {
-                    black_box(multilinear_rectilinear::interpn(
+                    black_box(multilinear::rectilinear::interpn(
                         &[&x, &y],
                         &z,
                         obs,
@@ -159,7 +156,7 @@ fn bench_extrap(c: &mut Criterion) {
                         let dims = [nx, ny];
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
-                        multilinear_regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
+                        multilinear::regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
                     })
                 });
             },
@@ -202,7 +199,7 @@ fn bench_extrap(c: &mut Criterion) {
                 let mut out = vec![0.0; n];
 
                 b.iter(|| {
-                    black_box(multilinear_rectilinear::interpn(
+                    black_box(multilinear::rectilinear::interpn(
                         &[&x, &y],
                         &z,
                         obs,
