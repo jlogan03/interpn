@@ -35,9 +35,8 @@ where
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
-    /// Unlike `RegularGridInterpolator`, this method does not handle
-    /// degenerate dimensions with only a single grid entry; all grids
-    /// must have at least 2 entries.
+    /// This method does not handle degenerate dimensions with only a single
+    /// grid entry; all grids must have at least 2 entries.
     ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is

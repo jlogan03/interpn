@@ -33,9 +33,8 @@ where
 {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
-    /// Unlike `RectilinearGridInterpolator`, this method can accommodate
-    /// degenerate grids with a single entry, as well as grids with a
-    /// negative step size.
+    /// This method does not handle degenerate dimensions with only a single
+    /// grid entry; all grids must have at least 2 entries.
     ///
     /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
     pub fn new(dims: &'a [usize], starts: &'a [T], steps: &'a [T], vals: &'a [T]) -> Self {
@@ -46,9 +45,9 @@ where
             starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0,
             "Dimension mismatch"
         );
-        // Make sure all dimensions have at least one entry
-        let degenerate = (0..ndims).any(|i| dims[i] < 1);
-        assert!(!degenerate, "All grids must have at least one entry");
+        // Make sure all dimensions have at least two entries
+        let degenerate = (0..ndims).any(|i| dims[i] < 2);
+        assert!(!degenerate, "All grids must have at least two entries");
         // Check if any dimensions have zero step size
         let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
         assert!(
@@ -375,82 +374,8 @@ pub fn interpn<T>(
 
 #[cfg(test)]
 mod test {
-    use super::{interpn, RegularGridInterpolator};
+    use super::interpn;
     use crate::utils::*;
-
-    #[test]
-    fn test_interp_extrap_1d() {
-        let nx = 3;
-        let x = linspace(-1.0_f64, 1.0, nx);
-        let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
-
-        let xobs = linspace(-10.0_f64, 10.0, 37);
-        let zobs: Vec<f64> = xobs.iter().map(|&xi| 3.0 * xi).collect();
-
-        let dims = [nx];
-        let starts = [x[0]];
-        let steps = [x[1] - x[0]];
-        let interpolator: RegularGridInterpolator<'_, _, 1> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
-
-        // Check both interpolated and extrapolated values
-        xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
-            let zii = interpolator.interp_one(&[*xi]);
-            assert!((*zi - zii).abs() < 1e-12)
-        });
-    }
-
-    #[test]
-    fn test_interp_extrap_1d_negative_step() {
-        let nx = 3;
-        let x = linspace(1.0_f64, -1.0, nx);
-        let z: Vec<f64> = x.iter().map(|&xi| 3.0 * xi).collect();
-
-        let xobs = linspace(-10.0_f64, 10.0, 37);
-        let zobs: Vec<f64> = xobs.iter().map(|&xi| 3.0 * xi).collect();
-
-        let dims = [nx];
-        let starts = [x[0]];
-        let steps = [x[1] - x[0]];
-        let interpolator: RegularGridInterpolator<'_, _, 1> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
-
-        // Check both interpolated and extrapolated values
-        xobs.iter().zip(zobs.iter()).for_each(|(xi, zi)| {
-            let zii = interpolator.interp_one(&[*xi]);
-            assert!((*zi - zii).abs() < 1e-12)
-        });
-    }
-
-    #[test]
-    fn test_interp_extrap_2d_degenerate() {
-        // Test with one dimension that is size one
-        let (nx, ny) = (3, 1);
-        let x = linspace(-1.0, 1.0, nx);
-        let y = Vec::from([0.5]);
-        let xy = meshgrid(Vec::from([&x, &y]));
-
-        // z = x + y
-        let z: Vec<f64> = (0..nx * ny).map(|i| &xy[i][0] + &xy[i][1]).collect();
-
-        // Observation points all over in 2D space
-        let xobs = linspace(-10.0_f64, 10.0, 37);
-        let yobs = linspace(-10.0_f64, 10.0, 37);
-        let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
-        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + 0.5).collect(); // Every `z` should match the degenerate `y` value
-
-        let dims = [nx, ny];
-        let starts = [x[0], y[0]];
-        let steps = [x[1] - x[0], 1.0]; // Use placeholder for degenerate dim
-        let interpolator: RegularGridInterpolator<'_, _, 2> =
-            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
-
-        // Check values at every incident vertex
-        xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
-            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
-            assert!((*zi - zii).abs() < 1e-12)
-        });
-    }
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -469,6 +394,57 @@ mod test {
             let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
             let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
             let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+
+            // Observation points
+            let xobs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
+                .collect();
+            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| gridobs.iter().map(|x| x[i]).collect())
+                .collect(); // transpose
+            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
+            let mut out = vec![0.0; uobs.len()];
+
+            // Evaluate
+            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]);
+
+            // Check that interpolated values match expectation,
+            // using an absolute difference because some points are very close to or exactly at zero,
+            // and do not do well under a check on relative difference.
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+        }
+    }
+
+    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
+    /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
+    /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
+    /// rapidly becomes prohibitively slow after about ndims=9.
+    #[test]
+    fn test_negative_step_1d_to_8d() {
+        for ndims in 1..=8 {
+            println!("Testing in {ndims} dims");
+            // Interp grid
+            let dims: Vec<usize> = vec![2; ndims];
+            //  Make every other dimension have a negative step size to make sure
+            //  that mixing negative and positive steps works as intended.
+            let xs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| {
+                    linspace(
+                        -5.0 * (i as f64) * (-1.0_f64).powi((i + 1) as i32),
+                        5.0 * ((i + 1) as f64) * (-1.0_f64).powi((i + 1) as i32),
+                        dims[i],
+                    )
+                })
+                .collect();
+            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
+            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+            let steps: Vec<f64> = xs
+                .iter()
+                .map(|x| if x.len() > 1 { x[1] - x[0] } else { 1.0 })
+                .collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)

@@ -8,7 +8,7 @@ use randn::*;
 
 fn bench_interp(c: &mut Criterion) {
     let mut group = c.benchmark_group("bench_interp");
-    for size in [100, 10_000, 250_000, 500_000, 1_000_000].iter() {
+    for size in [100, 10_000, 1_000_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(
@@ -40,10 +40,7 @@ fn bench_interp(c: &mut Criterion) {
                         let steps = [x[1] - x[0], y[1] - y[0]];
                         let interpolator: multilinear_regular::RegularGridInterpolator<'_, _, 2> =
                             multilinear_regular::RegularGridInterpolator::new(
-                                &dims[..],
-                                &starts[..],
-                                &steps[..],
-                                &z[..],
+                                &dims, &starts, &steps, &z,
                             );
                         interpolator.interp(obs, &mut out)
                     })
@@ -76,14 +73,7 @@ fn bench_interp(c: &mut Criterion) {
                         let dims = [nx, ny];
                         let starts = [x[0], y[0]];
                         let steps = [x[1] - x[0], y[1] - y[0]];
-                        multilinear_regular::interpn(
-                            &dims[..],
-                            &starts[..],
-                            &steps[..],
-                            &z[..],
-                            obs,
-                            &mut out,
-                        )
+                        multilinear_regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
                     })
                 });
             },
@@ -136,7 +126,7 @@ fn bench_interp(c: &mut Criterion) {
 
 fn bench_extrap(c: &mut Criterion) {
     let mut group = c.benchmark_group("bench_extrap");
-    for size in [100, 10_000, 250_000, 500_000, 1_000_000].iter() {
+    for size in [100, 10_000, 1_000_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(
