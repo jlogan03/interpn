@@ -6,7 +6,7 @@ use num_traits::Float;
 /// degenerate dimensions with only a single grid entry; all grids
 /// must have at least 2 entries.
 ///
-/// Assumes C-style ordering of vals (x0, y0, z0,   x0, y0, z1,   ...,   x0, yn, zn).
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
 /// left to the user.
 pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
@@ -38,7 +38,7 @@ where
     /// This method does not handle degenerate dimensions with only a single
     /// grid entry; all grids must have at least 2 entries.
     ///
-    /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
     /// left to the user.
     ///
@@ -111,7 +111,7 @@ where
 
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(ndims) and no allocation.
-    /// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+    /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
     /// # Panics
     ///   * If the dimensionality of the point does not match the data
@@ -426,7 +426,7 @@ where
 }
 
 /// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
-/// Assumes C-style ordering of vals ([x0, y0], [x0, y1], ..., [x0, yn], [x1, y0], ...).
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
