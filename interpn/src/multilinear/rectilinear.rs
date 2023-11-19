@@ -40,12 +40,6 @@ pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Cumulative products of higher dimensions, used for indexing
     dimprod: [usize; MAXDIMS],
 
-    /// Indices of lower corner of hypercube,
-    /// stored with the struct in order to be used as a rolling
-    /// initial guess for the index of the observation point,
-    /// and mutated on every evaluation of the interpolator.
-    origin: [usize; MAXDIMS],
-
     /// Values at each point, size prod(dims)
     vals: &'a [T],
 }
@@ -101,20 +95,17 @@ where
             acc *= dims[ndims - i - 1];
         });
 
-        let origin = [0; MAXDIMS];
-
         Self {
             grids,
             dims,
             dimprod,
-            origin,
             vals,
         }
     }
 
     /// Interpolate on contiguous lists of points.
     #[inline(always)]
-    pub fn interp(&mut self, x: &[&'a [T]], out: &mut [T]) {
+    pub fn interp(&self, x: &[&'a [T]], out: &mut [T]) {
         let n = out.len();
         let ndims = self.grids.len();
         // Make sure there are enough coordinate inputs for each dimension
@@ -123,22 +114,34 @@ where
         let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
         assert!(size_matches, "Dimension mismatch");
 
+        // Indices of lower corner of grid cell,
+        // used as a rolling initial guess for the grid index of 
+        // the observation point, and mutated on every evaluation
+        // of the interpolator.
+        let origin = &mut [0; MAXDIMS][..ndims];
+
         let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         (0..n).for_each(|i| {
             (0..ndims).for_each(|j| tmp[j] = x[j][i]);
-            out[i] = self.interp_one(tmp);
+            out[i] = self.interp_one(tmp, origin);
         });
     }
 
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(ndims) and no allocation.
+    /// 
+    /// `origin` is a required mutable index store of minimum size `ndims`,
+    /// which allows bypassing expensive bisection searches in some cases.
+    /// It should be initialized to zero.
+    /// 
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
     /// # Panics
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of either one exceeds the fixed maximum
+    ///   * If values in `origin` are initialized to an index outside the grid
     #[inline(always)]
-    pub fn interp_one(&mut self, x: &[T]) -> T {
+    fn interp_one(&self, x: &[T], origin: &mut [usize]) -> T {
         // Check sizes
         let ndims = self.grids.len();
         assert!(x.len() == ndims, "Dimension mismatch");
@@ -158,7 +161,7 @@ where
 
         // Populate lower corner
         for i in 0..ndims {
-            (self.origin[i], sat[i]) = self.get_loc(x[i], i, self.origin[i])
+            (origin[i], sat[i]) = self.get_loc(x[i], i, origin[i])
         }
 
         // Check if any dimension is saturated.
@@ -166,7 +169,7 @@ where
         let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
 
         // Calculate the total volume of this cell
-        let cell_vol = self.get_cell(&self.origin, steps);
+        let cell_vol = self.get_cell(&origin, steps);
 
         // Traverse vertices, summing contributions to the interpolated value.
         //
@@ -196,7 +199,7 @@ where
             // saturating to the bound if the resulting index would be outside.
             for j in 0..ndims {
                 k += self.dimprod[j]
-                    * (self.origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
+                    * (origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
             }
 
             // Get the value at this vertex
@@ -205,7 +208,7 @@ where
             // Find the vector from the opposite vertex to the observation point
             for j in 0..ndims {
                 let iloc =
-                    (self.origin[j] + !ioffs[j] as usize).min(self.dims[j].saturating_sub(1)); // Index of location of opposite vertex
+                    (origin[j] + !ioffs[j] as usize).min(self.dims[j].saturating_sub(1)); // Index of location of opposite vertex
                 let loc = self.grids[j][iloc]; // Loc. of opposite vertex
                 dxs[j] = loc;
             }
@@ -474,9 +477,9 @@ mod test {
     use crate::testing::*;
     use crate::utils::*;
 
+    /// Test with one dimension that is minimum size and one that is not
     #[test]
     fn test_interp_extrap_2d_small() {
-        // Test with one dimension that is minimum size
         let (nx, ny) = (3, 2);
         let x = linspace(-1.0, 1.0, nx);
         let y = Vec::from([0.5, 0.6]);
@@ -492,12 +495,14 @@ mod test {
         let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
         let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + &xyobs[i][1]).collect(); // Every `z` should match the degenerate `y` value
 
-        let interpolator: &mut RectilinearGridInterpolator<'_, _, 2> =
-            &mut RectilinearGridInterpolator::new(&grids, &z[..]);
+        let interpolator: RectilinearGridInterpolator<'_, _, 2> =
+            RectilinearGridInterpolator::new(&grids, &z[..]);
+
+        let origin = &mut [0_usize; 2][..];
 
         // Check values at every incident vertex
         xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
-            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]);
+            let zii = interpolator.interp_one(&[xyi[0], xyi[1]], origin);
             assert!((*zi - zii).abs() < 1e-12)
         });
     }

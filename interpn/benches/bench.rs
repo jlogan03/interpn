@@ -46,7 +46,7 @@ fn bench_interp(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube regular interpn 2d max 10d", size),
+            BenchmarkId::new("hypercube regular interpn 2d max 8d", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
@@ -77,7 +77,7 @@ fn bench_interp(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube rectilinear interpn 2d max 10d", size),
+            BenchmarkId::new("hypercube rectilinear interpn 2d max 8d", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
@@ -127,7 +127,7 @@ fn bench_extrap(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube regular interpn 2d max 10d", size),
+            BenchmarkId::new("hypercube regular interpn 2d max 8d", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
@@ -163,7 +163,7 @@ fn bench_extrap(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube rectilinear interpn 2d max 10d", size),
+            BenchmarkId::new("hypercube rectilinear interpn 2d max 8d", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
