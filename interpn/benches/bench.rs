@@ -6,29 +6,35 @@ use interpn::{multilinear, RegularGridInterpolator};
 use randn::*;
 
 fn bench_interp(c: &mut Criterion) {
-    let mut group = c.benchmark_group("bench_interp");
+    let mut group = c.benchmark_group("bench_interp_scanning");
     for size in [100, 10_000, 1_000_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube regular 2d max 2d", size),
+            BenchmarkId::new("10x10 Regular 2D MAXDIMS=2, Scanning", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
                 let m: usize = (size as f64).sqrt() as usize;
-                let nx = m / 2;
-                let ny = m * 2;
+                let nx = 10;
+                let ny = 10;
                 let n = nx * ny;
 
                 let x = linspace(0.0, 100.0, nx);
                 let y = linspace(0.0, 100.0, ny);
                 let z = randn::<f64>(&mut rng, n);
-                let mut out = vec![0.0; n];
 
-                let obsgrid = meshgrid(Vec::from([&x, &y]));
+                // Choose observation points to be concretely inside the grid
+                // in order to avoid mixing interpolation perf with extrapolation
+                // for the points that are right on the bound.
+                let xgridobs = linspace(x[1], x[nx-2], m);
+                let ygridobs = linspace(y[1], y[ny-2], m);
+                let obsgrid = meshgrid(Vec::from([&xgridobs, &ygridobs]));
                 let xobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[0]).collect();
                 let yobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[1]).collect();
                 let obs = &[&xobs[..], &yobs[..]];
+
+                let mut out = vec![0.0; size];
 
                 b.iter(|| {
                     black_box({
@@ -46,24 +52,30 @@ fn bench_interp(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube regular interpn 2d max 8d", size),
+            BenchmarkId::new("10x10 Regular 2D MAXDIMS=8, Scanning", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
                 let m: usize = (size as f64).sqrt() as usize;
-                let nx = m / 2;
-                let ny = m * 2;
+                let nx = 10;
+                let ny = 10;
                 let n = nx * ny;
 
                 let x = linspace(0.0, 100.0, nx);
                 let y = linspace(0.0, 100.0, ny);
                 let z = randn::<f64>(&mut rng, n);
-                let mut out = vec![0.0; n];
 
-                let obsgrid = meshgrid(Vec::from([&x, &y]));
+                // Choose observation points to be concretely inside the grid
+                // in order to avoid mixing interpolation perf with extrapolation
+                // for the points that are right on the bound.
+                let xgridobs = linspace(x[1], x[nx-2], m);
+                let ygridobs = linspace(y[1], y[ny-2], m);
+                let obsgrid = meshgrid(Vec::from([&xgridobs, &ygridobs]));
                 let xobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[0]).collect();
                 let yobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[1]).collect();
                 let obs = &[&xobs[..], &yobs[..]];
+
+                let mut out = vec![0.0; size];
 
                 b.iter(|| {
                     black_box({
@@ -77,13 +89,13 @@ fn bench_interp(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("hypercube rectilinear interpn 2d max 8d", size),
+            BenchmarkId::new("10x10 Rectilinear 2D MAXDIMS=8, Scanning", size),
             size,
             |b, &size| {
                 let mut rng = rng_fixed_seed();
                 let m: usize = (size as f64).sqrt() as usize;
-                let nx = m / 2;
-                let ny = m * 2;
+                let nx = 10;
+                let ny = 10;
                 let n = nx * ny;
 
                 let mut x = linspace(0.0, 100.0, nx);
@@ -100,12 +112,18 @@ fn bench_interp(c: &mut Criterion) {
                 (0..ny - 1).for_each(|i| assert!(y[i + 1] > y[i]));
 
                 let z = randn::<f64>(&mut rng, n);
-                let mut out = vec![0.0; n];
 
-                let obsgrid = meshgrid(Vec::from([&x, &y]));
+                // Choose observation points to be concretely inside the grid
+                // in order to avoid mixing interpolation perf with extrapolation
+                // for the points that are right on the bound.
+                let xgridobs = linspace(x[1], x[nx-2], m);
+                let ygridobs = linspace(y[1], y[ny-2], m);
+                let obsgrid = meshgrid(Vec::from([&xgridobs, &ygridobs]));
                 let xobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[0]).collect();
                 let yobs: Vec<f64> = obsgrid.iter().map(|xyi| xyi[1]).collect();
                 let obs = &[&xobs[..], &yobs[..]];
+
+                let mut out = vec![0.0; size];
 
                 b.iter(|| {
                     black_box(multilinear::rectilinear::interpn(
