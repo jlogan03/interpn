@@ -31,7 +31,7 @@ use num_traits::Float;
 ///   location (which is itself not timing-deterministic) and the various
 ///   methods used to attempt to avoid that bisection search.
 pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
-    /// x, y, ... coordinate grids, size(dims.len()), each entry of size dims[i]
+    /// x, y, ... coordinate grids, each entry of size dims[i]
     grids: &'a [&'a [T]],
 
     /// Size of each dimension
@@ -450,9 +450,9 @@ where
             steps[i] = dx;
         }
 
-        let vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
+        let cell_vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
 
-        vol
+        cell_vol
     }
 }
 
