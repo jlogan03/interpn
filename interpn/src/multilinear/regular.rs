@@ -1,12 +1,25 @@
 use num_traits::{Float, NumCast};
 
 /// An arbitrary-dimensional multilinear interpolator on a regular grid.
-///
-/// Unlike `RectilinearGridInterpolator`, this method can accommodate
-/// degenerate grids with a single entry, as well as grids with a
+/// 
+/// Unlike `RectilinearGridInterpolator`, this method can accommodate grids with a
 /// negative step size.
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+/// 
+/// Operation Complexity
+/// * Interpolating or extrapolating in face regions goes like O(2^ndims).
+/// * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
+/// 
+/// Memory Complexity
+/// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
+/// 
+/// Timing
+/// * Timing determinism is not guaranteed due to the 
+///   difference in complexity between interpolation and extrapolation.
+/// * An interpolation-only variant of this algorithm could achieve
+///   near-deterministic timing, but would produce incorrect results
+///   when evaluated at off-grid points.
 pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Size of each dimension
     dims: &'a [usize],
@@ -17,14 +30,8 @@ pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Step size for each dimension, size dims.len()
     steps: &'a [T],
 
-    /// Volume of cell (cumulative product of steps)
-    vol: T,
-
     /// Values at each point, size prod(dims)
     vals: &'a [T],
-
-    /// Cumulative products of higher dimensions, used for indexing
-    dimprod: [usize; MAXDIMS],
 }
 
 impl<'a, T, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
@@ -60,28 +67,12 @@ where
             "All grid steps must have nonzero magnitude"
         );
 
-        // Compute volume of reference cell
-        let vol = steps.iter().fold(T::one(), |acc, x| acc * *x).abs();
-
-        // Populate cumulative product of higher dimensions for indexing.
-        //
-        // Each entry is the cumulative product of the size of dimensions
-        // higher than this one, which is the stride between blocks
-        // relating to a given index along each dimension.
-        let mut dimprod = [1_usize; MAXDIMS];
-        let mut acc = 1;
-        (0..ndims).for_each(|i| {
-            dimprod[ndims - i - 1] = acc;
-            acc *= dims[ndims - i - 1];
-        });
-
         Self {
             dims,
             starts,
             steps,
             vals,
-            vol,
-            dimprod,
+            // vol,
         }
     }
 
@@ -120,27 +111,38 @@ where
         assert!(x.len() == ndims && ndims <= MAXDIMS, "Dimension mismatch");
 
         // Initialize fixed-size intermediate storage.
-        // This storage _could_ be initialized with the interpolator struct, but
-        // this would then require that every usage of struct be `mut`, which is
-        // ergonomically unpleasant.
+        // Maybe counterintuitively, initializing this storage here on every usage
+        // instead of once with the top level struct is a significant speedup
+        // and does not increase peak stack usage.
+        //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
         let steps = &self.steps[..ndims]; // Step size for each dimension
         let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
-
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
-
         let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
+        let opsat = &mut [false; MAXDIMS][..ndims];  // Whether the opposite vertex is on the saturated bound
+        let thissat = &mut [false; MAXDIMS][..ndims];  // Whether the current vertex is on the saturated bound
+        let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
-        // Whether the opposite vertex is on the saturated bound
-        // on each dimension
-        let opsat = &mut [false; MAXDIMS][..ndims];
+        // Populate cumulative product of higher dimensions for indexing.
+        //
+        // Each entry is the cumulative product of the size of dimensions
+        // higher than this one, which is the stride between blocks
+        // relating to a given index along each dimension.
+        let mut acc = 1;
+        (0..ndims).for_each(|i| {
+            dimprod[ndims - i - 1] = acc;
+            acc *= self.dims[ndims - i - 1];
+        });
 
-        // Whether the current vertex is on the saturated bound
-        // on each dimension
-        let thissat = &mut [false; MAXDIMS][..ndims];
+        // Compute volume of reference cell.
+        // Maybe counterintuitively, doing this calculation for every call
+        // is as fast or faster than doing it once at struct initialization
+        // then referring to the stored value.
+        let cell_vol = steps.iter().fold(T::one(), |acc, x| acc * *x).abs();
 
         // Populate lower corner and saturation flag for each dimension
         for i in 0..ndims {
@@ -177,7 +179,7 @@ where
             // Accumulate the index into the value array,
             // saturating to the bound if the resulting index would be outside.
             for j in 0..ndims {
-                k += self.dimprod[j]
+                k += dimprod[j]
                     * (origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
             }
 
@@ -319,7 +321,7 @@ where
             }
         }
 
-        interped / self.vol
+        interped / cell_vol
     }
 
     /// Get the next-lower-or-exact index along this dimension where `x` is found,
