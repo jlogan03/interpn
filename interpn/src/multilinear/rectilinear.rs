@@ -146,7 +146,8 @@ where
         // Initialize fixed-size intermediate storage.
         // This storage _could_ be initialized with the interpolator struct, but
         // this would then require that every usage of struct be `mut`, which is
-        // ergonomically unpleasant.
+        // ergonomically unpleasant. Based on testing with the regular grid method,
+        // it would likely also be slower.
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
