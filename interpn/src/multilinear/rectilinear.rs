@@ -149,18 +149,11 @@ where
         // ergonomically unpleasant.
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
-
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
         let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
         let steps = &mut [T::zero(); MAXDIMS][..ndims]; // Step size on each dimension
-
-        // Whether the opposite vertex is on the saturated bound
-        // on each dimension
-        let opsat = &mut [false; MAXDIMS][..ndims];
-
-        // Whether the current vertex is on the saturated bound
-        // on each dimension
-        let thissat = &mut [false; MAXDIMS][..ndims];
+        let opsat = &mut [false; MAXDIMS][..ndims];  // Whether the opposite vertex is on the saturated bound
+        let thissat = &mut [false; MAXDIMS][..ndims];  // Whether the current vertex is on the saturated bound
 
         // Populate lower corner
         for i in 0..ndims {
