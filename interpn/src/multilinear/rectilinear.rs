@@ -1,14 +1,38 @@
 use num_traits::Float;
 
-/// An arbitrary-dimensional multilinear interpolator on a rectilinear grid.
+/// An arbitrary-dimensional multilinear interpolator / extrapolator on a rectilinear grid.
 ///
 /// Unlike `RegularGridInterpolator`, this method does not handle
-/// degenerate dimensions with only a single grid entry; all grids
-/// must have at least 2 entries.
+/// grids with negative step size; all grids must be monotonically increasing.
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
 /// left to the user.
+/// 
+/// While the worst-case interpolation runtime for this method is somewhat worse than
+/// for the regular grid method, in the particular case where the sequence of points
+/// being evaluated are within 1 grid cell of each other, it can be significantly
+/// faster than the regular grid method due to bypassing the expensive process of
+/// finding the location of the relevant grid cell.
+///
+/// Operation Complexity
+/// * Interpolating or extrapolating in face regions goes like
+///   * Best case: O(2^ndims) when evaluating points in neighboring grid cells.
+///   * Worst case: O(2^ndims + log2(gridsize)) when evaluating arbitrary points.
+/// * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
+///
+/// Memory Complexity
+/// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
+///
+/// Timing
+/// * Timing determinism is not guaranteed due to the
+///   difference in complexity between interpolation and extrapolation
+///   as well as due to the use of a bisection search for the grid index
+///   location (which is itself not timing-deterministic) and the various
+///   methods used to attempt to avoid that bisection search.
+/// * An interpolation-only variant of this algorithm could achieve
+///   near-deterministic timing, but would produce incorrect results
+///   when evaluated at off-grid points.
 pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// x, y, ... coordinate grids, size(dims.len()), each entry of size dims[i]
     grids: &'a [&'a [T]],
