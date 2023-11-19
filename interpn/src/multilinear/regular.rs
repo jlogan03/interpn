@@ -1,6 +1,6 @@
 use num_traits::{Float, NumCast};
 
-/// An arbitrary-dimensional multilinear interpolator on a regular grid.
+/// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 /// 
 /// Unlike `RectilinearGridInterpolator`, this method can accommodate grids with a
 /// negative step size.
