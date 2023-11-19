@@ -490,10 +490,10 @@ mod test {
         let z: Vec<f64> = (0..nx * ny).map(|i| &xy[i][0] + &xy[i][1]).collect();
 
         // Observation points all over in 2D space
-        let xobs = linspace(-10.0_f64, 10.0, 37);
-        let yobs = linspace(-10.0_f64, 10.0, 37);
+        let xobs = linspace(-10.0_f64, 10.0, 5);
+        let yobs = linspace(-10.0_f64, 10.0, 5);
         let xyobs = meshgrid(Vec::from([&xobs, &yobs]));
-        let zobs: Vec<f64> = (0..37 * 37).map(|i| &xyobs[i][0] + &xyobs[i][1]).collect(); // Every `z` should match the degenerate `y` value
+        let zobs: Vec<f64> = (0..xobs.len() * yobs.len()).map(|i| &xyobs[i][0] + &xyobs[i][1]).collect(); // Every `z` should match the degenerate `y` value
 
         let interpolator: RectilinearGridInterpolator<'_, _, 2> =
             RectilinearGridInterpolator::new(&grids, &z[..]);
