@@ -194,6 +194,19 @@ where
             (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
 
             // Accumulate contribution from this vertex
+            // * Interpolating: just take the volume-weighted value and continue on
+            // * Extrapolating
+            //   * With opposite vertex on multiple extrapolated dims: return zero
+            //   * With opposite vertex on exactly one extrapolated dim
+            //     * Negate contribution & clip extrapolated region to maintain linearity
+            //   * Otherwise (meaning, corner regions)
+            //     * O(ndim^2) operation to accumulate only the linear portions of
+            //       the extrapolated volumes.
+            //
+            // While this section looks nearly identical between the regular grid
+            // and rectilinear methods, it is different in a few subtle but important
+            // ways, and separating it into shared functions makes it even harder
+            // to read than it already is.
             if !any_dims_saturated {
                 // Interpolating
                 let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
