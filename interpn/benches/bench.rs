@@ -271,3 +271,50 @@ mod randn {
         out
     }
 }
+
+mod gridgen {
+    use super::randn::*;
+    use interpn::utils::*;
+    use rand::seq::SliceRandom;
+
+    // Generate a (potentially irregular) grid to interpolate on,
+    // and some fake data values.
+    fn gen_grid(ndims: usize, size: usize, noise: f64) -> (Vec<Vec<f64>>, Vec<f64>) {
+        let mut rng = rng_fixed_seed();
+        let n = size.pow(ndims as u32);
+        let z = randn::<f64>(&mut rng, n);
+        
+        let grids: Vec<Vec<f64>> = (0..ndims).map(|_| {
+            let mut x = linspace(0.0, 100.0, size);
+            if noise > 0.0 {
+                let dx = randn::<f64>(&mut rng, size);
+                (0..size).for_each(|i| x[i] = x[i] + (dx[i] - 0.5) * noise);
+            }
+            x
+        }).collect();
+        
+        (grids, z)
+    }
+
+    // Generate a set of either sequential (scanning) or shuffled
+    // observation points that are entirely inside the interpolation grid.
+    // `size` is the size per grid, so the total number of points will be size.pow(ndims).
+    fn gen_interp_obs_grid(grids: &Vec<Vec<f64>>, size: usize, shuffled: bool) -> Vec<Vec<f64>> {
+        let mut rng = rng_fixed_seed();
+        let ndims = grids.len();
+
+        let xobs: Vec<Vec<f64>> = (0..ndims)
+        .map(|i| linspace(grids[i][1], grids[i][grids[i].len() - 2], size))
+        .collect();
+        let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+        let mut gridobs_t: Vec<Vec<f64>> = (0..ndims)
+            .map(|i| gridobs.iter().map(|x| x[i]).collect())
+            .collect(); // transpose
+        if shuffled {
+            (0..ndims).for_each(|i| gridobs_t[i].shuffle(&mut rng));
+        }
+        // unpack like:
+        // let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+        gridobs_t
+    }
+}
