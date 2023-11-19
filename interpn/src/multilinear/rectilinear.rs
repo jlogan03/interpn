@@ -26,13 +26,10 @@ use num_traits::Float;
 ///
 /// Timing
 /// * Timing determinism is not guaranteed due to the
-///   difference in complexity between interpolation and extrapolation
+///   difference in complexity between interpolation and extrapolation,
 ///   as well as due to the use of a bisection search for the grid index
 ///   location (which is itself not timing-deterministic) and the various
 ///   methods used to attempt to avoid that bisection search.
-/// * An interpolation-only variant of this algorithm could achieve
-///   near-deterministic timing, but would produce incorrect results
-///   when evaluated at off-grid points.
 pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// x, y, ... coordinate grids, size(dims.len()), each entry of size dims[i]
     grids: &'a [&'a [T]],
