@@ -1,0 +1,3 @@
+[build]
+# We just need a target with no standard library
+target = "thumbv7em-none-eabihf"

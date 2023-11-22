@@ -1,0 +1,29 @@
+[package]
+name = "interpn"
+version = "0.1.0"
+edition = "2021"
+authors = ["James Logan <jlogan03@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jlogan03/interpn/"
+homepage = "https://github.com/jlogan03/interpn/interpn"
+description = "N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatible."
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+num-traits = { version = "0.2.16", default-features = false, features = ["libm"] }
+itertools = { version = "0.12.0", optional = true }
+
+[dev-dependencies]
+rand = "0.8.5"
+criterion = "0.5.1"
+ndarray = "0.15.6"
+
+[features]
+default = ["std"]
+std = ["itertools"]
+
+[[bench]]
+name = "bench"
+harness = false
