@@ -163,7 +163,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     #[inline(always)]
-    #[must_use]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.grids.len();
@@ -208,11 +207,10 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If values in `origin` are initialized to an index outside the grid
     #[inline(always)]
-    #[must_use]
     fn interp_one(&self, x: &[T], origin: &mut [usize]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.grids.len();
-        if !(x.len() == ndims) {
+        if x.len() != ndims {
             return Err("Dimension mismatch");
         }
 
@@ -508,7 +506,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
 #[inline(always)]
-#[must_use]
 pub fn interpn<T: Float>(
     grids: &[&[T]],
     vals: &[T],
@@ -529,7 +526,6 @@ pub fn interpn<T: Float>(
 /// * If the dimensionality of the grid does not match the dimensionality of the observation points
 /// * If the output slice length does not match the dimensionality of the grid
 #[inline(always)]
-#[must_use]
 pub fn check_bounds<T: Float>(
     grids: &[&[T]],
     obs: &[&[T]],
@@ -537,7 +533,7 @@ pub fn check_bounds<T: Float>(
     out: &mut [bool],
 ) -> Result<(), &'static str> {
     let ndims = grids.len();
-    if !(obs.len() == ndims && out.len() == ndims && (0..ndims).all(|i| grids[i].len() > 0)) {
+    if !(obs.len() == ndims && out.len() == ndims && (0..ndims).all(|i| !grids[i].is_empty())) {
         return Err("Dimension mismatch");
     }
     for i in 0..ndims {

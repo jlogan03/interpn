@@ -160,12 +160,11 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     #[inline(always)]
-    #[must_use]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.ndims;
         // Make sure there are enough coordinate inputs for each dimension
-        if !(x.len() == ndims) {
+        if x.len() != ndims {
             return Err("Dimension mismatch");
         }
         // Make sure the size of inputs and output match
@@ -438,7 +437,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     /// Unfortunately, using a repr(u8) enum for the saturation flag
     /// causes a significant perf hit.
     #[inline(always)]
-    #[must_use]
     fn get_loc(&self, v: T, dim: usize) -> Result<(usize, u8), &'static str> {
         let saturation: u8; // Saturated low/high/not at all
 
@@ -482,7 +480,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
 #[inline(always)]
-#[must_use]
 pub fn interpn<T: Float>(
     dims: &[usize],
     starts: &[T],
@@ -505,7 +502,6 @@ pub fn interpn<T: Float>(
 /// * If the dimensionality of the grid does not match the dimensionality of the observation points
 /// * If the output slice length does not match the dimensionality of the grid
 #[inline(always)]
-#[must_use]
 pub fn check_bounds<T: Float>(
     dims: &[usize],
     starts: &[T],

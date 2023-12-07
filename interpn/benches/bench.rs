@@ -89,7 +89,8 @@ macro_rules! bench_interp_specific {
 
                 b.iter(|| {
                     black_box({
-                        multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap()
+                        multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out)
+                            .unwrap()
                     })
                 });
             },
@@ -121,9 +122,9 @@ macro_rules! bench_interp_specific {
                 let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
 
                 b.iter(|| {
-                    black_box(multilinear::rectilinear::interpn(
-                        &gridslice, &z, &obs, &mut out,
-                    ).unwrap())
+                    black_box(
+                        multilinear::rectilinear::interpn(&gridslice, &z, &obs, &mut out).unwrap(),
+                    )
                 });
             },
         );
