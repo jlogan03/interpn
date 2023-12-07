@@ -52,7 +52,7 @@ macro_rules! bench_interp_specific {
                 b.iter(|| {
                     black_box({
                         let interpolator: RegularGridInterpolator<'_, _, $ndims> =
-                            RegularGridInterpolator::new(&dims, &starts, &steps, &z);
+                            RegularGridInterpolator::new(&dims, &starts, &steps, &z).unwrap();
                         interpolator.interp(&obs, &mut out)
                     })
                 });

@@ -108,7 +108,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
     /// left to the user.
     ///
-    /// # Panics
+    /// # Errors
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 2
     /// * If any grid's first two entries are not monotonically increasing
@@ -159,7 +159,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     #[inline(always)]
@@ -203,7 +203,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If values in `origin` are initialized to an index outside the grid
@@ -445,7 +445,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         // Check for extrapolation above
         // Ok to unwrap here because we have already checked that the grid
         // is populated before this point
-        else if v > *grid.last().unwrap() {
+        else if v > grid[grid.len() - 1] {
             iloc = grid.len() as isize - 1
         }
         // If all else fails, do the actual binary search

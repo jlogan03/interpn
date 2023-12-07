@@ -102,28 +102,34 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 2
     /// * If any step sizes have zero magnitude
     #[inline(always)]
-    pub fn new(dims: &[usize], starts: &[T], steps: &[T], vals: &'a [T]) -> Self {
+    pub fn new(
+        dims: &[usize],
+        starts: &[T],
+        steps: &[T],
+        vals: &'a [T],
+    ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
         let nvals = dims.iter().product();
-        assert!(
-            starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0,
-            "Dimension mismatch"
-        );
+        if !(starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0) {
+            return Err("Dimension mismatch");
+        }
+
         // Make sure all dimensions have at least two entries
         let degenerate = (0..ndims).any(|i| dims[i] < 2);
-        assert!(!degenerate, "All grids must have at least two entries");
+        if degenerate {
+            return Err("All grids must have at least two entries");
+        }
         // Check if any dimensions have zero step size
         let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
-        assert!(
-            steps_are_nonzero,
-            "All grid steps must have nonzero magnitude"
-        );
+        if !steps_are_nonzero {
+            return Err("All grid steps must have nonzero magnitude");
+        }
 
         // Copy grid info into struct.
         // Keeping this data local to the struct eliminates an issue where,
@@ -137,37 +143,44 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         starts_local[..ndims].copy_from_slice(&starts[..ndims]);
         dims_local[..ndims].copy_from_slice(&dims[..ndims]);
 
-        Self {
+        Ok(Self {
             ndims,
             dims: dims_local,
             starts: starts_local,
             steps: steps_local,
             vals,
-        }
+        })
     }
 
     /// Interpolate on a contiguous list of observation points.
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     #[inline(always)]
-    pub fn interp(&self, x: &[&[T]], out: &mut [T]) {
+    #[must_use]
+    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.ndims;
         // Make sure there are enough coordinate inputs for each dimension
-        assert!(x.len() == ndims, "Dimension mismatch");
+        if !(x.len() == ndims) {
+            return Err("Dimension mismatch");
+        }
         // Make sure the size of inputs and output match
         let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
-        assert!(size_matches, "Dimension mismatch");
+        if !size_matches {
+            return Err("Dimension mismatch");
+        }
 
         let tmp = &mut [T::zero(); MAXDIMS][..ndims];
-        (0..n).for_each(|i| {
+        for i in 0..n {
             (0..ndims).for_each(|j| tmp[j] = x[j][i]);
-            out[i] = self.interp_one(tmp);
-        });
+            out[i] = self.interp_one(tmp)?;
+        }
+
+        Ok(())
     }
 
     /// Interpolate the value at a point,
@@ -175,16 +188,18 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
     #[inline(always)]
-    pub fn interp_one(&self, x: &[T]) -> T {
+    pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.ndims;
-        assert!(x.len() == ndims && ndims <= MAXDIMS, "Dimension mismatch");
+        if !(x.len() == ndims && ndims <= MAXDIMS) {
+            return Err("Dimension mismatch");
+        }
 
         // Initialize fixed-size intermediate storage.
         // Maybe counterintuitively, initializing this storage here on every usage
@@ -222,7 +237,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
 
         // Populate lower corner and saturation flag for each dimension
         for i in 0..ndims {
-            (origin[i], sat[i]) = self.get_loc(x[i], i)
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
         }
 
         // Check if any dimension is saturated.
@@ -265,8 +280,14 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
             // Find the vector from the opposite vertex to the observation point
             for j in 0..ndims {
                 let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
-                let loc = self.starts[j] + steps[j] * T::from(iloc).unwrap(); // Loc. of opposite vertex
-                dxs[j] = loc; // Use dxs[j] as storage for float locs
+                let floc = T::from(iloc);
+                match floc {
+                    Some(floc) => {
+                        let loc = self.starts[j] + steps[j] * floc; // Loc. of opposite vertex
+                        dxs[j] = loc; // Use dxs[j] as storage for float locs
+                    }
+                    None => return Err("Unrepresentable coordinate value"),
+                }
             }
             (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
             (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
@@ -397,7 +418,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
             }
         }
 
-        interped / cell_vol
+        Ok(interped / cell_vol)
     }
 
     /// Get the next-lower-or-exact index along this dimension where `x` is found,
@@ -417,30 +438,36 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     /// Unfortunately, using a repr(u8) enum for the saturation flag
     /// causes a significant perf hit.
     #[inline(always)]
-    fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
+    #[must_use]
+    fn get_loc(&self, v: T, dim: usize) -> Result<(usize, u8), &'static str> {
         let saturation: u8; // Saturated low/high/not at all
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        let iloc: isize = <isize as NumCast>::from(floc).unwrap(); // signed integer loc
+        let iloc = <isize as NumCast>::from(floc); // signed integer loc
 
-        let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
+        match iloc {
+            Some(iloc) => {
+                let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
 
-        let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+                let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
-        // Observation point is outside the grid on the low side
-        if iloc < 0 {
-            saturation = 1;
+                // Observation point is outside the grid on the low side
+                if iloc < 0 {
+                    saturation = 1;
+                }
+                // Observation point is outside the grid on the high side
+                else if iloc > dimmax as isize {
+                    saturation = 2;
+                }
+                // Observation point is on the interior
+                else {
+                    saturation = 0;
+                }
+
+                Ok((loc, saturation))
+            }
+            None => Err("Unrepresentable coordinate value"),
         }
-        // Observation point is outside the grid on the high side
-        else if iloc > dimmax as isize {
-            saturation = 2;
-        }
-        // Observation point is on the interior
-        else {
-            saturation = 0;
-        }
-
-        (loc, saturation)
     }
 }
 
@@ -455,6 +482,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
 #[inline(always)]
+#[must_use]
 pub fn interpn<T: Float>(
     dims: &[usize],
     starts: &[T],
@@ -462,8 +490,9 @@ pub fn interpn<T: Float>(
     vals: &[T],
     obs: &[&[T]],
     out: &mut [T],
-) {
-    RegularGridInterpolator::<'_, T, 8>::new(dims, starts, steps, vals).interp(obs, out);
+) -> Result<(), &'static str> {
+    RegularGridInterpolator::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    Ok(())
 }
 
 /// Check whether a list of observation points are inside the grid within some absolute tolerance.
@@ -472,10 +501,11 @@ pub fn interpn<T: Float>(
 /// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
 /// and set to `true` if there is a bounds violation on that axis.
 ///
-/// # Panics
+/// # Errors
 /// * If the dimensionality of the grid does not match the dimensionality of the observation points
 /// * If the output slice length does not match the dimensionality of the grid
 #[inline(always)]
+#[must_use]
 pub fn check_bounds<T: Float>(
     dims: &[usize],
     starts: &[T],
@@ -483,24 +513,36 @@ pub fn check_bounds<T: Float>(
     obs: &[&[T]],
     atol: T,
     out: &mut [bool],
-) {
+) -> Result<(), &'static str> {
     let ndims = dims.len();
-    assert!(
-        obs.len() == ndims && out.len() == ndims,
-        "Dimension mismatch"
-    );
+    if !(obs.len() == ndims && out.len() == ndims) {
+        return Err("Dimension mismatch");
+    }
 
     for i in 0..ndims {
         let first = starts[i];
-        let last = starts[i] + steps[i] * <T as NumCast>::from(dims[i] - 1).unwrap();
-        let lo = first.min(last);
-        let hi = first.max(last);
+        let last_elem = <T as NumCast>::from(dims[i] - 1); // Last element in grid
 
-        let bad = obs[i]
-            .iter()
-            .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
-        out[i] = bad;
+        match last_elem {
+            Some(last_elem) => {
+                let last = starts[i] + steps[i] * last_elem;
+                let lo = first.min(last);
+                let hi = first.max(last);
+
+                let bad = obs[i]
+                    .iter()
+                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
+                out[i] = bad;
+            }
+            // Passing an unrepresentable number in isn't, strictly speaking, an error
+            // and since an unrepresentable number can't be on the grid,
+            // we can just flag it for the bounds check like normal
+            None => {
+                out[i] = true;
+            }
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -539,7 +581,7 @@ mod test {
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]);
+            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
@@ -593,7 +635,7 @@ mod test {
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]);
+            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
