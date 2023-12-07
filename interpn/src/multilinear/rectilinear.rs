@@ -47,7 +47,7 @@
 //! let mut out = [0.0; 2];
 //!
 //! // Do interpolation
-//! rectilinear::interpn(grids, &z, &obs, &mut out);
+//! rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
 //! ```
 //!
 //! References
