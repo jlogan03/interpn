@@ -47,7 +47,7 @@
 //! let mut out = [0.0; 2];
 //!
 //! // Do interpolation
-//! rectilinear::interpn(grids, &z, &obs, &mut out);
+//! rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
 //! ```
 //!
 //! References
@@ -108,32 +108,32 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     /// Assumes grids are monotonically _increasing_. Checking this is expensive, and is
     /// left to the user.
     ///
-    /// # Panics
+    /// # Errors
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 2
     /// * If any grid's first two entries are not monotonically increasing
     ///   * This is a courtesy to catch _some_, but not all, cases where a non-monotonic
     ///     or reversed-order grid is provided.
     #[inline(always)]
-    pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Self {
+    pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
         let nvals = dims[..ndims].iter().product();
-        assert!(
-            vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS,
-            "Dimension mismatch"
-        );
+        if !(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS) {
+            return Err("Dimension mismatch");
+        };
         // Check if any grids are degenerate
         let degenerate = (0..ndims).any(|i| dims[i] < 2);
-        assert!(!degenerate, "All grids must have at least 2 entries");
+        if degenerate {
+            return Err("All grids must have at least 2 entries");
+        };
         // Check that at least the first two entries in each grid are monotonic
         let monotonic_maybe = (0..ndims).all(|i| grids[i][1] > grids[i][0]);
-        assert!(
-            monotonic_maybe,
-            "All grids must be monotonically increasing"
-        );
+        if !monotonic_maybe {
+            return Err("All grids must be monotonically increasing");
+        };
 
         // Populate cumulative product of higher dimensions for indexing.
         //
@@ -147,30 +147,36 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
             acc *= dims[ndims - i - 1];
         });
 
-        Self {
+        Ok(Self {
             grids,
             dims,
             dimprod,
             vals,
-        }
+        })
     }
 
     /// Interpolate on a contiguous list of observation points.
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     #[inline(always)]
-    pub fn interp(&self, x: &[&[T]], out: &mut [T]) {
+    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.grids.len();
+
         // Make sure there are enough coordinate inputs for each dimension
-        assert!(x.len() == ndims, "Dimension mismatch");
+        if x.len() != ndims {
+            return Err("Dimension mismatch");
+        }
+
         // Make sure the size of inputs and output match
         let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
-        assert!(size_matches, "Dimension mismatch");
+        if !size_matches {
+            return Err("Dimension mismatch");
+        }
 
         // Indices of lower corner of grid cell,
         // used as a rolling initial guess for the grid index of
@@ -179,10 +185,12 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         let origin = &mut [0; MAXDIMS][..ndims];
 
         let tmp = &mut [T::zero(); MAXDIMS][..ndims];
-        (0..n).for_each(|i| {
+        for i in 0..n {
             (0..ndims).for_each(|j| tmp[j] = x[j][i]);
-            out[i] = self.interp_one(tmp, origin);
-        });
+            out[i] = self.interp_one(tmp, origin)?;
+        }
+
+        Ok(())
     }
 
     /// Interpolate the value at a point,
@@ -194,15 +202,17 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
-    /// # Panics
+    /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If values in `origin` are initialized to an index outside the grid
     #[inline(always)]
-    fn interp_one(&self, x: &[T], origin: &mut [usize]) -> T {
+    fn interp_one(&self, x: &[T], origin: &mut [usize]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.grids.len();
-        assert!(x.len() == ndims, "Dimension mismatch");
+        if x.len() != ndims {
+            return Err("Dimension mismatch");
+        }
 
         // Initialize fixed-size intermediate storage.
         // This storage _could_ be initialized with the interpolator struct, but
@@ -368,7 +378,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
             }
         }
 
-        interped / cell_vol
+        Ok(interped / cell_vol)
     }
 
     /// Get the next-lower-or-exact index along this dimension where `x` is found,
@@ -431,7 +441,9 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
             iloc = -1;
         }
         // Check for extrapolation above
-        else if v > *grid.last().unwrap() {
+        // Ok to unwrap here because we have already checked that the grid
+        // is populated before this point
+        else if v > grid[grid.len() - 1] {
             iloc = grid.len() as isize - 1
         }
         // If all else fails, do the actual binary search
@@ -494,8 +506,14 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
 #[inline(always)]
-pub fn interpn<T: Float>(grids: &[&[T]], vals: &[T], obs: &[&[T]], out: &mut [T]) {
-    RectilinearGridInterpolator::<'_, T, 8>::new(grids, vals).interp(obs, out);
+pub fn interpn<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    RectilinearGridInterpolator::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
+    Ok(())
 }
 
 /// Check whether a list of observation points are inside the grid within some absolute tolerance.
@@ -504,25 +522,35 @@ pub fn interpn<T: Float>(grids: &[&[T]], vals: &[T], obs: &[&[T]], out: &mut [T]
 /// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
 /// and set to `true` if there is a bounds violation on that axis.
 ///
-/// # Panics
+/// # Errors
 /// * If the dimensionality of the grid does not match the dimensionality of the observation points
 /// * If the output slice length does not match the dimensionality of the grid
 #[inline(always)]
-pub fn check_bounds<T: Float>(grids: &[&[T]], obs: &[&[T]], atol: T, out: &mut [bool]) {
+pub fn check_bounds<T: Float>(
+    grids: &[&[T]],
+    obs: &[&[T]],
+    atol: T,
+    out: &mut [bool],
+) -> Result<(), &'static str> {
     let ndims = grids.len();
-    assert!(
-        obs.len() == ndims && out.len() == ndims,
-        "Dimension mismatch"
-    );
-
+    if !(obs.len() == ndims && out.len() == ndims && (0..ndims).all(|i| !grids[i].is_empty())) {
+        return Err("Dimension mismatch");
+    }
     for i in 0..ndims {
         let lo = grids[i][0];
-        let hi = *grids[i].last().unwrap();
-        let bad = obs[i]
-            .iter()
-            .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
-        out[i] = bad;
+        let hi = grids[i].last();
+        match hi {
+            Some(&hi) => {
+                let bad = obs[i]
+                    .iter()
+                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
+
+                out[i] = bad;
+            }
+            None => return Err("Dimension mismatch"),
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -552,13 +580,13 @@ mod test {
             .collect(); // Every `z` should match the degenerate `y` value
 
         let interpolator: RectilinearGridInterpolator<'_, _, 2> =
-            RectilinearGridInterpolator::new(&grids, &z[..]);
+            RectilinearGridInterpolator::new(&grids, &z[..]).unwrap();
 
         let origin = &mut [0_usize; 2][..];
 
         // Check values at every incident vertex
         xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
-            let zii = interpolator.interp_one(&[xyi[0], xyi[1]], origin);
+            let zii = interpolator.interp_one(&[xyi[0], xyi[1]], origin).unwrap();
             assert!((*zi - zii).abs() < 1e-12)
         });
     }
@@ -603,7 +631,7 @@ mod test {
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&grids, &u, &xobsslice, &mut out[..]);
+            interpn(&grids, &u, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,

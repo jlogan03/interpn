@@ -29,8 +29,8 @@ pub fn _start() -> ! {
 
     let obs = [&[0.0_f64][..], &[0.0_f64][..]]; // Slightly weird syntax to get slice of slice without vec
 
-    regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
-    rectilinear::interpn(grids, &z, &obs, &mut out);
+    regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
+    rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
 
     loop {} // We don't actually run this, just compile it
 }

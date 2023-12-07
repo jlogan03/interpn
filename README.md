@@ -40,7 +40,7 @@ let obs = [&xobs[..], &yobs[..]];
 let mut out = [0.0; 2];
 
 // Do interpolation
-regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
 ```
 
 # Example: Multilinear w/ Rectilinear Grid
@@ -66,7 +66,7 @@ let obs = [&xobs[..], &yobs[..]];
 let mut out = [0.0; 2];
 
 // Do interpolation
-rectilinear::interpn(grids, &z, &obs, &mut out);
+rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
 ```
 
 # Development Roadmap
