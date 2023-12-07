@@ -53,7 +53,7 @@ macro_rules! bench_interp_specific {
                     black_box({
                         let interpolator: RegularGridInterpolator<'_, _, $ndims> =
                             RegularGridInterpolator::new(&dims, &starts, &steps, &z).unwrap();
-                        interpolator.interp(&obs, &mut out)
+                        interpolator.interp(&obs, &mut out).unwrap()
                     })
                 });
             },
@@ -89,7 +89,7 @@ macro_rules! bench_interp_specific {
 
                 b.iter(|| {
                     black_box({
-                        multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out)
+                        multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap()
                     })
                 });
             },
@@ -123,7 +123,7 @@ macro_rules! bench_interp_specific {
                 b.iter(|| {
                     black_box(multilinear::rectilinear::interpn(
                         &gridslice, &z, &obs, &mut out,
-                    ))
+                    ).unwrap())
                 });
             },
         );
