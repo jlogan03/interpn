@@ -378,7 +378,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
         let grid = self.grids[dim];
         let saturation: u8; // Saturated low/high/not at all
-        let iloc: isize; // Signed integer index location of this point
+         // Signed integer index location of this point
 
         // Bisection search to find location on the grid.
         //
@@ -391,7 +391,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         //
         // This process accounts for essentially the entire difference in
         // performance between this method and the regular-grid method.
-        iloc = grid.partition_point(|x| *x < v) as isize - 1;
+        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 1;
         let dimmax = self.dims[dim] - 2; // maximum index for lower corner
         let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
