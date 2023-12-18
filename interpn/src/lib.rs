@@ -6,10 +6,10 @@
 //! to each observation point, and as such, that is the theoretical floor for performance scaling. That said,
 //! depending on the implementation, the constant term can vary by more than an order of magnitude.
 //!
-//! | Method                        | RAM       | Interp. Cost (Best Case) | Interp. Cost (Worst Case)           | Extrap. Cost (Worst Case)                      |
-//! |-------------------------------|-----------|--------------------------|-------------------------------------|------------------------------------------------|
-//! | multilinear::regular          | O(ndims)  | O(2^ndims)               | O(2^ndims)                          | O(2^ndims + ndims^2)                           |
-//! | multilinear::rectilinear      | O(ndims)  | O(2^ndims)               | O(2^ndims + ndims * log2(gridsize)) | O(2^ndims + ndims^2 + ndims * log2(gridsize))  |
+//! | Method                        | RAM       | Interp. Cost (Best Case) | Interp. Cost (Worst Case)               | Extrap. Cost (Worst Case)                      |
+//! |-------------------------------|-----------|--------------------------|-----------------------------------------|------------------------------------------------|
+//! | multilinear::regular          | O(ndims)  | O(2^ndims * ndims)       | O(2^ndims * ndims)                      | O(2^ndims + ndims^2)                           |
+//! | multilinear::rectilinear      | O(ndims)  | O(2^ndims * ndims)       | O(ndims * (2^ndims + log2(gridsize)))   | O(ndims * (2^ndims + ndims + log2(gridsize)))  |
 //!
 //! # Example: Multilinear w/ Regular Grid
 //! ```rust

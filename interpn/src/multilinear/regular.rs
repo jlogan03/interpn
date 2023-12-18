@@ -10,7 +10,7 @@
 //! and throughput performance is similar to existing methods.
 //!
 //! Operation Complexity
-//! * Interpolating or extrapolating in face regions goes like O(2^ndims).
+//! * Interpolating or extrapolating in face regions goes like O(2^ndims * ndims).
 //! * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
 //!
 //! Memory Complexity

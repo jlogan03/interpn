@@ -11,8 +11,8 @@
 //!
 //! Operation Complexity
 //! * Interpolating or extrapolating in face regions goes like
-//!   * Best case: O(2^ndims) when evaluating points in neighboring grid cells.
-//!   * Worst case: O(2^ndims + ndims * log2(gridsize)) when evaluating arbitrary points.
+//!   * Best case: O(2^ndims * ndims) when evaluating points in neighboring grid cells.
+//!   * Worst case: O(ndims * (2^ndims + ndims * log2(gridsize))) when evaluating arbitrary points.
 //! * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
 //!
 //! Memory Complexity
@@ -71,8 +71,8 @@ use num_traits::Float;
 ///
 /// Operation Complexity
 /// * Interpolating or extrapolating in face regions goes like
-///   * Best case: O(2^ndims) when evaluating points in neighboring grid cells.
-///   * Worst case: O(2^ndims + ndims * log2(gridsize)) when evaluating arbitrary points.
+///   * Best case: O(2^ndims * ndims) when evaluating points in neighboring grid cells.
+///   * Worst case: O(ndims * (2^ndims + ndims * log2(gridsize))) when evaluating arbitrary points.
 /// * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
 ///
 /// Memory Complexity
@@ -378,7 +378,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
         let grid = self.grids[dim];
         let saturation: u8; // Saturated low/high/not at all
-         // Signed integer index location of this point
+                            // Signed integer index location of this point
 
         // Bisection search to find location on the grid.
         //
