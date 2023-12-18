@@ -10,7 +10,7 @@
 //! and throughput performance is similar to existing methods.
 //!
 //! Operation Complexity
-//! * Interpolating or extrapolating in face regions goes like O(2^ndims).
+//! * Interpolating or extrapolating in face regions goes like O(2^ndims * ndims).
 //! * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
 //!
 //! Memory Complexity
@@ -105,7 +105,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     /// # Errors
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 2
-    /// * If any step sizes have zero magnitude
+    /// * If any step sizes have zero or negative magnitude
     #[inline(always)]
     pub fn new(
         dims: &[usize],
@@ -121,14 +121,14 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         }
 
         // Make sure all dimensions have at least two entries
-        let degenerate = (0..ndims).any(|i| dims[i] < 2);
+        let degenerate = dims[..ndims].iter().any(|&x| x < 2);
         if degenerate {
             return Err("All grids must have at least two entries");
         }
         // Check if any dimensions have zero step size
-        let steps_are_nonzero = (0..ndims).all(|i| steps[i] != T::zero());
-        if !steps_are_nonzero {
-            return Err("All grid steps must have nonzero magnitude");
+        let steps_are_positive = steps.iter().all(|&x| x > T::zero());
+        if !steps_are_positive {
+            return Err("All grids must be monotonically increasing");
         }
 
         // Copy grid info into struct.
@@ -168,7 +168,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
             return Err("Dimension mismatch");
         }
         // Make sure the size of inputs and output match
-        let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
+        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
         if !size_matches {
             return Err("Dimension mismatch");
         }
@@ -212,9 +212,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
-        let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
-        let opsat = &mut [false; MAXDIMS][..ndims]; // Whether the opposite vertex is on the saturated bound
-        let thissat = &mut [false; MAXDIMS][..ndims]; // Whether the current vertex is on the saturated bound
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
         // Populate cumulative product of higher dimensions for indexing.
@@ -223,16 +220,16 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         // higher than this one, which is the stride between blocks
         // relating to a given index along each dimension.
         let mut acc = 1;
-        (0..ndims).for_each(|i| {
+        for i in 0..ndims {
             dimprod[ndims - i - 1] = acc;
             acc *= self.dims[ndims - i - 1];
-        });
+        }
 
         // Compute volume of reference cell.
         // Maybe counterintuitively, doing this calculation for every call
         // is as fast or faster than doing it once at struct initialization
         // then referring to the stored value.
-        let cell_vol = steps.iter().fold(T::one(), |acc, x| acc * *x).abs();
+        let cell_vol = steps[1..].iter().fold(steps[0], |acc, x| acc * *x);
 
         // Populate lower corner and saturation flag for each dimension
         for i in 0..ndims {
@@ -240,7 +237,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         }
 
         // Check if any dimension is saturated.
-        let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
+        let any_dims_saturated = sat.iter().any(|&x| x != 0);
 
         // Traverse vertices, summing contributions to the interpolated value.
         //
@@ -250,46 +247,38 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         let nverts = 2_usize.pow(ndims as u32);
         for i in 0..nverts {
             let mut k: usize = 0; // index of the value for this vertex in self.vals
-            let mut sign = T::one(); // sign of the contribution from this vertex
 
-            // Every 2^nth vertex, flip which side of the cube we are examining
-            // in the nth dimension.
-            //
-            // Because i % 2^n has double the period for each sequential n,
-            // and their phase is only aligned once every 2^n for the largest
-            // n in the set, this is guaranteed to produce a path that visits
-            // each vertex exactly once.
             for j in 0..ndims {
+                // Every 2^nth vertex, flip which side of the cube we are examining
+                // in the nth dimension.
+                //
+                // Because i % 2^n has double the period for each sequential n,
+                // and their phase is only aligned once every 2^n for the largest
+                // n in the set, this is guaranteed to produce a path that visits
+                // each vertex exactly once.
                 let flip = i % 2_usize.pow(j as u32) == 0;
                 if flip {
                     ioffs[j] = !ioffs[j];
                 }
-            }
 
-            // Accumulate the index into the value array,
-            // saturating to the bound if the resulting index would be outside.
-            for j in 0..ndims {
-                k += dimprod[j]
-                    * (origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
-            }
+                // Accumulate the index into the value array,
+                // saturating to the bound if the resulting index would be outside.
+                k += dimprod[j] * (origin[j] + ioffs[j] as usize);
 
-            // Get the value at this vertex
-            let v = self.vals[k];
-
-            // Find the vector from the opposite vertex to the observation point
-            for j in 0..ndims {
+                // Find the vector from the opposite vertex to the observation point
                 let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
                 let floc = T::from(iloc);
                 match floc {
                     Some(floc) => {
                         let loc = self.starts[j] + steps[j] * floc; // Loc. of opposite vertex
-                        dxs[j] = loc; // Use dxs[j] as storage for float locs
+                        dxs[j] = (x[j] - loc).abs(); // Use dxs[j] as storage for float locs
                     }
                     None => return Err("Unrepresentable coordinate value"),
                 }
             }
-            (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
-            (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
+
+            // Get the value at this vertex
+            let v = self.vals[k];
 
             // Accumulate contribution from this vertex
             // * Interpolating: just take the volume-weighted value and continue on
@@ -307,18 +296,24 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
             // to read than it already is.
             if !any_dims_saturated {
                 // Interpolating
-                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x);
                 interped = interped + v * vol;
             } else {
                 // Extrapolating requires some special attention.
+                let opsat = &mut [false; MAXDIMS][..ndims]; // Whether the opposite vertex is on the saturated bound
+                let thissat = &mut [false; MAXDIMS][..ndims]; // Whether the current vertex is on the saturated bound
+                let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
 
-                // For which dimensions is the opposite vertex on a saturated bound?
-                (0..ndims).for_each(|j| {
-                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1)
-                });
+                let mut opsatcount = 0;
+                for j in 0..ndims {
+                    // For which dimensions is the opposite vertex on a saturated bound?
+                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1);
+                    // For how many total dimensions is the opposite vertex on a saturated bound?
+                    opsatcount += opsat[j] as usize;
 
-                // For how many total dimensions is the opposite vertex on a saturated bound?
-                let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
+                    // For which dimensions is the current vertex on a saturated bound?
+                    thissat[j] = sat[j] > 0 && !opsat[j];
+                }
 
                 // If the opposite vertex is on _more_ than one saturated bound,
                 // it should be clipped on multiple axes which, if the clipping
@@ -333,9 +328,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
                     continue;
                 }
 
-                // For which dimensions is the current vertex on a saturated bound?
-                (0..ndims).for_each(|j| thissat[j] = sat[j] > 0 && !opsat[j]);
-
                 // If the opposite vertex is on exactly one saturated bound, negate its contribution
                 // in order to move smoothly from weighted-average on the interior to extrapolation
                 // on the exterior.
@@ -346,14 +338,13 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
                 // don't produce an overlapping partition in outside-corner regions.
                 let neg = opsatcount == 1;
                 if neg {
-                    sign = sign.neg();
                     for j in 0..ndims {
                         if thissat[j] {
-                            dxs[j] = dxs[j].min(steps[j].abs());
+                            dxs[j] = dxs[j].min(steps[j]);
                         }
                     }
 
-                    let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                    let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x).neg();
                     interped = interped + v * vol;
                     continue;
                 }
@@ -394,9 +385,9 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
                 // Get the volume that is inside the cell
                 //   Copy forward the original dxs, extrapolated or not,
                 //   and clip to the cell boundary
-                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j].abs()));
+                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j]));
                 //   Get the volume of this region which does not extend outside the cell
-                let vinterior = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
+                let vinterior = extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
 
                 // Find each linear exterior region by, one at a time, taking the volume
                 // with one extrapolated dimension masked into the extrapdxs
@@ -405,14 +396,14 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
                 for j in 0..ndims {
                     if thissat[j] {
                         let dx_was = extrapdxs[j];
-                        extrapdxs[j] = dxs[j] - steps[j].abs();
-                        vexterior = vexterior + extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
+                        extrapdxs[j] = dxs[j] - steps[j];
+                        vexterior =
+                            vexterior + extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
                         extrapdxs[j] = dx_was; // Reset extrapdxs to original state for next calc
                     }
                 }
 
-                let vol = (vexterior + vinterior) * sign;
-
+                let vol = vexterior + vinterior;
                 interped = interped + v * vol;
             }
         }
@@ -445,8 +436,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
 
         match iloc {
             Some(iloc) => {
-                let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
-
+                let dimmax = self.dims[dim] - 2; // maximum index for lower corner
                 let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
                 // Observation point is outside the grid on the low side
@@ -563,60 +553,6 @@ mod test {
             let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
             let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
             let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
-
-            // Observation points
-            let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
-                .collect();
-            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| gridobs.iter().map(|x| x[i]).collect())
-                .collect(); // transpose
-            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
-            let mut out = vec![0.0; uobs.len()];
-
-            // Evaluate
-            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
-
-            // Check that interpolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
-        }
-    }
-
-    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
-    /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
-    /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
-    /// rapidly becomes prohibitively slow after about ndims=9.
-    ///
-    ///  Make every other dimension have a negative step size to make sure
-    ///  that mixing negative and positive steps works as intended.
-    #[test]
-    fn test_negative_step_1d_to_8d() {
-        for ndims in 1..=8 {
-            println!("Testing in {ndims} dims");
-            // Interp grid
-            let dims: Vec<usize> = vec![2; ndims];
-            //  Make every other dimension have a negative step size to make sure
-            //  that mixing negative and positive steps works as intended.
-            let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| {
-                    linspace(
-                        -5.0 * (i as f64) * (-1.0_f64).powi((i + 1) as i32),
-                        5.0 * ((i + 1) as f64) * (-1.0_f64).powi((i + 1) as i32),
-                        dims[i],
-                    )
-                })
-                .collect();
-            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs
-                .iter()
-                .map(|x| if x.len() > 1 { x[1] - x[0] } else { 1.0 })
-                .collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
