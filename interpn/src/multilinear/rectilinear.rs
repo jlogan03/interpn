@@ -91,9 +91,6 @@ pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     /// Size of each dimension
     dims: [usize; MAXDIMS],
 
-    /// Cumulative products of higher dimensions, used for indexing
-    dimprod: [usize; MAXDIMS],
-
     /// Values at each point, size prod(dims)
     vals: &'a [T],
 }
@@ -125,34 +122,17 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
             return Err("Dimension mismatch");
         };
         // Check if any grids are degenerate
-        let degenerate = (0..ndims).any(|i| dims[i] < 2);
+        let degenerate = dims[..ndims].iter().any(|&x| x < 2);
         if degenerate {
             return Err("All grids must have at least 2 entries");
         };
         // Check that at least the first two entries in each grid are monotonic
-        let monotonic_maybe = (0..ndims).all(|i| grids[i][1] > grids[i][0]);
+        let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
         if !monotonic_maybe {
             return Err("All grids must be monotonically increasing");
         };
 
-        // Populate cumulative product of higher dimensions for indexing.
-        //
-        // Each entry is the cumulative product of the size of dimensions
-        // higher than this one, which is the stride between blocks
-        // relating to a given index along each dimension.
-        let mut dimprod = [1_usize; MAXDIMS];
-        let mut acc = 1;
-        (0..ndims).for_each(|i| {
-            dimprod[ndims - i - 1] = acc;
-            acc *= dims[ndims - i - 1];
-        });
-
-        Ok(Self {
-            grids,
-            dims,
-            dimprod,
-            vals,
-        })
+        Ok(Self { grids, dims, vals })
     }
 
     /// Interpolate on a contiguous list of observation points.
@@ -173,21 +153,15 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         }
 
         // Make sure the size of inputs and output match
-        let size_matches = (0..ndims).all(|i| x[i].len() == out.len());
+        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
         if !size_matches {
             return Err("Dimension mismatch");
         }
 
-        // Indices of lower corner of grid cell,
-        // used as a rolling initial guess for the grid index of
-        // the observation point, and mutated on every evaluation
-        // of the interpolator.
-        let origin = &mut [0; MAXDIMS][..ndims];
-
         let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         for i in 0..n {
             (0..ndims).for_each(|j| tmp[j] = x[j][i]);
-            out[i] = self.interp_one(tmp, origin)?;
+            out[i] = self.interp_one(tmp)?;
         }
 
         Ok(())
@@ -207,7 +181,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If values in `origin` are initialized to an index outside the grid
     #[inline(always)]
-    fn interp_one(&self, x: &[T], origin: &mut [usize]) -> Result<T, &'static str> {
+    fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.grids.len();
         if x.len() != ndims {
@@ -219,22 +193,32 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         // this would then require that every usage of struct be `mut`, which is
         // ergonomically unpleasant. Based on testing with the regular grid method,
         // it would likely also be slower.
+        let origin = &mut [0; MAXDIMS][..ndims]; // Indices of lower corner of grid cell
         let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
         let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturated-low flag
         let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
-        let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
         let steps = &mut [T::zero(); MAXDIMS][..ndims]; // Step size on each dimension
-        let opsat = &mut [false; MAXDIMS][..ndims]; // Whether the opposite vertex is on the saturated bound
-        let thissat = &mut [false; MAXDIMS][..ndims]; // Whether the current vertex is on the saturated bound
+        let dimprod = &mut [1_usize; MAXDIMS][..ndims];
+
+        // Populate cumulative product of higher dimensions for indexing.
+        //
+        // Each entry is the cumulative product of the size of dimensions
+        // higher than this one, which is the stride between blocks
+        // relating to a given index along each dimension.
+        let mut acc = 1;
+        for i in 0..ndims {
+            dimprod[ndims - i - 1] = acc;
+            acc *= self.dims[ndims - i - 1];
+        }
 
         // Populate lower corner
         for i in 0..ndims {
-            (origin[i], sat[i]) = self.get_loc(x[i], i, origin[i])
+            (origin[i], sat[i]) = self.get_loc(x[i], i)
         }
 
         // Check if any dimension is saturated.
         // This gives a ~15% overall speedup for points on the interior.
-        let any_dims_saturated = (0..ndims).any(|j| sat[j] != 0);
+        let any_dims_saturated = sat.iter().any(|&x| x != 0);
 
         // Calculate the total volume of this cell
         let cell_vol = self.get_cell(origin, steps);
@@ -247,40 +231,31 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         let nverts = 2_usize.pow(ndims as u32);
         for i in 0..nverts {
             let mut k: usize = 0; // index of the value for this vertex in self.vals
-            let mut sign = T::one(); // sign of the contribution from this vertex
 
-            // Every 2^nth vertex, flip which side of the cube we are examining
-            // in the nth dimension.
-            //
-            // Because i % 2^n has double the period for each sequential n,
-            // and their phase is only aligned once every 2^n for the largest
-            // n in the set, this is guaranteed to produce a path that visits
-            // each vertex exactly once.
             for j in 0..ndims {
+                // Every 2^nth vertex, flip which side of the cube we are examining
+                // in the nth dimension.
+                //
+                // Because i % 2^n has double the period for each sequential n,
+                // and their phase is only aligned once every 2^n for the largest
+                // n in the set, this is guaranteed to produce a path that visits
+                // each vertex exactly once.
                 let flip = i % 2_usize.pow(j as u32) == 0;
                 if flip {
                     ioffs[j] = !ioffs[j];
                 }
-            }
 
-            // Accumulate the index into the value array,
-            // saturating to the bound if the resulting index would be outside.
-            for j in 0..ndims {
-                k += self.dimprod[j]
-                    * (origin[j] + ioffs[j] as usize).min(self.dims[j].saturating_sub(1));
+                // Accumulate the index into the value array,
+                // saturating to the bound if the resulting index would be outside.
+                k += dimprod[j] * (origin[j] + ioffs[j] as usize);
+
+                // Find the vector from the opposite vertex to the observation point
+                let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
+                dxs[j] = (x[j] - self.grids[j][iloc]).abs(); // Loc. of opposite vertex
             }
 
             // Get the value at this vertex
             let v = self.vals[k];
-
-            // Find the vector from the opposite vertex to the observation point
-            for j in 0..ndims {
-                let iloc = (origin[j] + !ioffs[j] as usize).min(self.dims[j].saturating_sub(1)); // Index of location of opposite vertex
-                let loc = self.grids[j][iloc]; // Loc. of opposite vertex
-                dxs[j] = loc;
-            }
-            (0..ndims).for_each(|j| dxs[j] = x[j] - dxs[j]);
-            (0..ndims).for_each(|j| dxs[j] = dxs[j].abs());
 
             // Accumulate contribution from this vertex
             // * Interpolating: just take the volume-weighted value and continue on
@@ -298,18 +273,24 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
             // to read than it already is.
             if !any_dims_saturated {
                 // Interpolating
-                let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x);
                 interped = interped + v * vol;
             } else {
                 // Extrapolating requires some special attention.
+                let opsat = &mut [false; MAXDIMS][..ndims]; // Whether the opposite vertex is on the saturated bound
+                let thissat = &mut [false; MAXDIMS][..ndims]; // Whether the current vertex is on the saturated bound
+                let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
 
-                // For which dimensions is the opposite vertex on a saturated bound?
-                (0..ndims).for_each(|j| {
-                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1)
-                });
+                let mut opsatcount = 0;
+                for j in 0..ndims {
+                    // For which dimensions is the opposite vertex on a saturated bound?
+                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1);
+                    // For how many total dimensions is the opposite vertex on a saturated bound?
+                    opsatcount += opsat[j] as usize;
 
-                // For how many total dimensions is the opposite vertex on a saturated bound?
-                let opsatcount = opsat.iter().fold(0, |acc, x| acc + *x as usize);
+                    // For which dimensions is the current vertex on a saturated bound?
+                    thissat[j] = sat[j] > 0 && !opsat[j];
+                }
 
                 // If the opposite vertex is on _more_ than one saturated bound,
                 // it should be clipped on multiple axes which, if the clipping
@@ -324,9 +305,6 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
                     continue;
                 }
 
-                // For which dimensions is the current vertex on a saturated bound?
-                (0..ndims).for_each(|j| thissat[j] = sat[j] > 0 && !opsat[j]);
-
                 // If the opposite vertex is on exactly one saturated bound, negate its contribution
                 // in order to move smoothly from weighted-average on the interior to extrapolation
                 // on the exterior.
@@ -337,14 +315,13 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
                 // don't produce an overlapping partition in outside-corner regions.
                 let neg = opsatcount == 1;
                 if neg {
-                    sign = sign.neg();
                     for j in 0..ndims {
                         if thissat[j] {
-                            dxs[j] = dxs[j].min(steps[j].abs());
+                            dxs[j] = dxs[j].min(steps[j]);
                         }
                     }
 
-                    let vol = dxs.iter().fold(T::one(), |acc, x| acc * *x) * sign;
+                    let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x).neg();
                     interped = interped + v * vol;
                     continue;
                 }
@@ -355,9 +332,9 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
                 // Get the volume that is inside the cell
                 //   Copy forward the original dxs, extrapolated or not,
                 //   and clip to the cell boundary
-                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j].abs()));
+                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j]));
                 //   Get the volume of this region which does not extend outside the cell
-                let vinterior = extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
+                let vinterior = extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
 
                 // Find each linear exterior region by, one at a time, taking the volume
                 // with one extrapolated dimension masked into the extrapdxs
@@ -366,14 +343,14 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
                 for j in 0..ndims {
                     if thissat[j] {
                         let dx_was = extrapdxs[j];
-                        extrapdxs[j] = dxs[j] - steps[j].abs();
-                        vexterior = vexterior + extrapdxs.iter().fold(T::one(), |acc, x| acc * *x);
+                        extrapdxs[j] = dxs[j] - steps[j];
+                        vexterior =
+                            vexterior + extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
                         extrapdxs[j] = dx_was; // Reset extrapdxs to original state for next calc
                     }
                 }
 
-                let vol = (vexterior + vinterior) * sign;
-
+                let vol = vexterior + vinterior;
                 interped = interped + v * vol;
             }
         }
@@ -398,7 +375,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
     /// Unfortunately, using a repr(u8) enum for the saturation flag
     /// causes a significant perf hit.
     #[inline(always)]
-    fn get_loc(&self, v: T, dim: usize, guess: usize) -> (usize, u8) {
+    fn get_loc(&self, v: T, dim: usize) -> (usize, u8) {
         let grid = self.grids[dim];
         let saturation: u8; // Saturated low/high/not at all
         let iloc: isize; // Signed integer index location of this point
@@ -409,50 +386,13 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         // and will return `self.dims[dim]` if outside-high.
         //
         // We still need to convert to a signed integer here, because
-        // if the grid has less than 2 points in this dimension,
+        // if the point is extrapolated below the grid,
         // we may need to (briefly) represent a negative index.
         //
         // This process accounts for essentially the entire difference in
         // performance between this method and the regular-grid method.
-        //
-        // First, try hard to avoid doing the bisection search at all
-        // by checking for extrapolation and by keeping a rolling
-        // initial guess that drastically improves perf for batch runs,
-        // and by checking the next and previous index after the guess as well,
-        // since usages that traverse from low to high or high to low indices
-        // will often move from one index to its immediate neighbor.
-        let guess_minus_one = guess.saturating_sub(1);
-        let guess_plus_one = (guess + 1).min(grid.len() - 1);
-        let guess_plus_two = (guess + 2).min(grid.len() - 1);
-        // Check guess
-        if grid[guess] < v && grid[guess_plus_one] >= v {
-            iloc = guess as isize;
-        }
-        // Check next cell
-        else if grid[guess_plus_one] < v && grid[guess_plus_two] >= v {
-            iloc = guess_plus_one as isize;
-        }
-        // Check previous cell
-        else if grid[guess_minus_one] < v && grid[guess] >= v {
-            iloc = guess_minus_one as isize;
-        }
-        // Check for extrapolation below
-        else if v < grid[0] {
-            iloc = -1;
-        }
-        // Check for extrapolation above
-        // Ok to unwrap here because we have already checked that the grid
-        // is populated before this point
-        else if v > grid[grid.len() - 1] {
-            iloc = grid.len() as isize - 1
-        }
-        // If all else fails, do the actual binary search
-        else {
-            iloc = grid.partition_point(|x| *x < v) as isize - 1;
-        }
-
-        let dimmax = self.dims[dim].saturating_sub(2); // maximum index for lower corner
-
+        iloc = grid.partition_point(|x| *x < v) as isize - 1;
+        let dimmax = self.dims[dim] - 2; // maximum index for lower corner
         let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side
@@ -478,18 +418,11 @@ impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXD
         let ndims = self.grids.len();
         for i in 0..ndims {
             // Index of upper face (saturating to bounds)
-            let j = (origin[i] + 1).min(self.dims[i].saturating_sub(1));
-            let mut dx = self.grids[i][j] - self.grids[i][origin[i]];
-
-            // Clip degenerate dimensions to one to prevent crashing when a dimension has size one
-            if j == 0 {
-                dx = T::one();
-            }
-
-            steps[i] = dx;
+            let j = origin[i] + 1;
+            steps[i] = self.grids[i][j] - self.grids[i][origin[i]];
         }
 
-        let cell_vol = steps.iter().fold(T::one(), |acc, x| acc * *x);
+        let cell_vol = steps[1..ndims].iter().fold(steps[0], |acc, x| acc * *x);
 
         cell_vol
     }
@@ -582,11 +515,9 @@ mod test {
         let interpolator: RectilinearGridInterpolator<'_, _, 2> =
             RectilinearGridInterpolator::new(&grids, &z[..]).unwrap();
 
-        let origin = &mut [0_usize; 2][..];
-
         // Check values at every incident vertex
         xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
-            let zii = interpolator.interp_one(&[xyi[0], xyi[1]], origin).unwrap();
+            let zii = interpolator.interp_one(&[xyi[0], xyi[1]]).unwrap();
             assert!((*zi - zii).abs() < 1e-12)
         });
     }
