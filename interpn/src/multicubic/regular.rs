@@ -1,5 +1,6 @@
 use num_traits::{Float, NumCast};
 
+#[derive(Clone, Copy, PartialEq)]
 enum Saturation {
     None,
     InsideLow,
@@ -35,7 +36,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     ///
     /// # Errors
     /// * If any input dimensions do not match
-    /// * If any dimensions have size < 2
+    /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
     #[inline(always)]
     pub fn new(
@@ -51,7 +52,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             return Err("Dimension mismatch");
         }
 
-        // Make sure all dimensions have at least two entries
+        // Make sure all dimensions have at least four entries
         let degenerate = dims[..ndims].iter().any(|&x| x < 4);
         if degenerate {
             return Err("All grids must have at least four entries");
@@ -81,6 +82,103 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             steps: steps_local,
             vals,
         })
+    }
+
+    /// Interpolate the value at a point,
+    /// using fixed-size intermediate storage of O(ndims) and no allocation.
+    ///
+    /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+    ///
+    /// # Errors
+    ///   * If the dimensionality of the point does not match the data
+    ///   * If the dimensionality of either one exceeds the fixed maximum
+    ///   * If the index along any dimension exceeds the maximum representable
+    ///     integer value within the value type `T`
+    #[inline(always)]
+    pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
+        // Check sizes
+        let ndims = self.ndims;
+        if !(x.len() == ndims && ndims <= MAXDIMS) {
+            return Err("Dimension mismatch");
+        }
+
+        // Initialize fixed-size intermediate storage.
+        // Maybe counterintuitively, initializing this storage here on every usage
+        // instead of once with the top level struct is a significant speedup
+        // and does not increase peak stack usage.
+        //
+        // Also notably, storing the index offsets as bool instead of usize
+        // reduces memory overhead, but has not effect on throughput rate.
+        let steps = &self.steps[..ndims]; // Step size for each dimension
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
+        let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
+        let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
+        let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
+        let dimprod = &mut [1_usize; MAXDIMS][..ndims];
+
+        // Populate cumulative product of higher dimensions for indexing.
+        //
+        // Each entry is the cumulative product of the size of dimensions
+        // higher than this one, which is the stride between blocks
+        // relating to a given index along each dimension.
+        let mut acc = 1;
+        for i in 0..ndims {
+            dimprod[ndims - i - 1] = acc;
+            acc *= self.dims[ndims - i - 1];
+        }
+
+        // Populate lower corner and saturation flag for each dimension
+        for i in 0..ndims {
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+        }
+
+        // Check if any dimension is saturated.
+        let any_dims_saturated = sat.iter().any(|&x| x != Saturation::None);
+
+        // Traverse vertices, summing contributions to the interpolated value.
+        //
+        // This visits the 2^ndims elements of the cartesian product
+        // of `[0, 1] x ... x [0, 1]` without simultaneously actualizing them in storage.
+        let mut interped = T::zero();
+        let nverts = 2_usize.pow(ndims as u32);
+        for i in 0..nverts {
+            let mut k: usize = 0; // index of the value for this vertex in self.vals
+
+            for j in 0..ndims {
+                // Every 2^nth vertex, flip which side of the cube we are examining
+                // in the nth dimension.
+                //
+                // Because i % 2^n has double the period for each sequential n,
+                // and their phase is only aligned once every 2^n for the largest
+                // n in the set, this is guaranteed to produce a path that visits
+                // each vertex exactly once.
+                let flip = i % 2_usize.pow(j as u32) == 0;
+                if flip {
+                    ioffs[j] = !ioffs[j];
+                }
+
+                // Accumulate the index into the value array,
+                // saturating to the bound if the resulting index would be outside.
+                k += dimprod[j] * (origin[j] + ioffs[j] as usize);
+
+                // Find the vector from the opposite vertex to the observation point
+                let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
+                let floc = T::from(iloc);
+                match floc {
+                    Some(floc) => {
+                        let loc = self.starts[j] + steps[j] * floc; // Loc. of opposite vertex
+                        dxs[j] = (x[j] - loc).abs(); // Use dxs[j] as storage for float locs
+                    }
+                    None => return Err("Unrepresentable coordinate value"),
+                }
+            }
+
+            // Get the value at this vertex
+            let v = self.vals[k];
+
+        }
+
+        Ok(interped)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
