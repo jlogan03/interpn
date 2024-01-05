@@ -125,7 +125,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         if degenerate {
             return Err("All grids must have at least two entries");
         }
-        // Check if any dimensions have zero step size
+        // Check if any dimensions have zero or negative step size
         let steps_are_positive = steps.iter().all(|&x| x > T::zero());
         if !steps_are_positive {
             return Err("All grids must be monotonically increasing");

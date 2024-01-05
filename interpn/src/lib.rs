@@ -79,6 +79,8 @@
 pub mod multilinear;
 pub use multilinear::{RectilinearGridInterpolator, RegularGridInterpolator};
 
+pub mod multicubic;
+
 #[cfg(feature = "std")]
 pub mod utils;
 
