@@ -30,7 +30,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions with only a single
-    /// grid entry; all grids must have at least 2 entries.
+    /// grid entry; all grids must have at least 4 entries.
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
@@ -229,5 +229,34 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             }
             None => Err("Unrepresentable coordinate value"),
         }
+    }
+
+    #[inline]
+    fn populate(&self, ind: usize, dim: usize, sat: &[Saturation], loc: &[usize], dimprod: &[usize], dts: &[T]) -> T {
+        if dim == 0 {
+            // Index into data
+            let mut thisloc = [0_usize; MAXDIMS];
+            thisloc[0] += ind;
+            // TODO: actual indexing
+            return T::zero();
+        } else {
+            // Populate next dim and interpolate
+            let mut vals = [T::zero(); 4];
+            for i in 0..4 {
+                vals[i] = self.populate(i, dim-1, sat, loc, dimprod, dts);
+            }
+
+            let v = interp_inner::<T, MAXDIMS>(vals, dts[dim], sat[dim]);
+            return v
+        }
+    }
+
+}
+
+
+#[inline]
+fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturation) -> T {
+    match sat {
+
     }
 }
