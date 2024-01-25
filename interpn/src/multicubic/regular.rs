@@ -259,7 +259,11 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 #[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturation) -> T {
     match sat {
-
+        Saturation::None => {},
+        Saturation::InsideLow => {},
+        Saturation::OutsideLow => {},
+        Saturation::InsideHigh => {},
+        Saturation::OutsideHigh => {},
     }
 }
 
