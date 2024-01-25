@@ -260,3 +260,14 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
 
     }
 }
+
+/// Index a single value from an array
+#[inline]
+fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
+    let mut i = 0;
+    for j in 0..dimprod.len() {
+        i += loc[j] * dimprod[j];
+    }
+
+    return data[i]
+}
