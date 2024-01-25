@@ -1,4 +1,5 @@
 use num_traits::{Float, NumCast};
+use rand::seq::index;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Saturation {
@@ -233,12 +234,13 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 
     #[inline]
     fn populate(&self, ind: usize, dim: usize, sat: &[Saturation], loc: &[usize], dimprod: &[usize], dts: &[T]) -> T {
+        let ndims = loc.len();
         if dim == 0 {
             // Index into data
-            let mut thisloc = [0_usize; MAXDIMS];
+            let thisloc = &mut [0_usize; MAXDIMS][..ndims];
             thisloc[0] += ind;
-            // TODO: actual indexing
-            return T::zero();
+            let v = index_arr(thisloc, dimprod, self.vals);
+            return v
         } else {
             // Populate next dim and interpolate
             let mut vals = [T::zero(); 4];
