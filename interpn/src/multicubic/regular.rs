@@ -256,15 +256,103 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 }
 
 
+/// Calculate slopes and 
 #[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturation) -> T {
+    // Construct some constants using generic methods
+    let one = T::one(); 
+    let two = one + one;
+
+    let dx = one;  // Normalized coordinates, regular grid
     match sat {
-        Saturation::None => {},
-        Saturation::InsideLow => {},
-        Saturation::OutsideLow => {},
-        Saturation::InsideHigh => {},
-        Saturation::OutsideHigh => {},
+        Saturation::None => {
+            // This is the nominal case
+            let y0 = vals[1];
+            let dy = vals[2] - vals[1];
+
+            // Take slopes from centered difference
+            let k0 = (vals[2] - vals[0]) / two;
+            let k1 = (vals[3] - vals[1]) / two;
+
+            hermite_spline(t, y0, dx, dy, k0, k1)
+        },
+        Saturation::InsideLow => {
+            // Flip direction to maintain symmetry
+            // with the InsideHigh case
+            let t = -t;  // `t` always w.r.t. index 1 of cube
+            let y0 = vals[1];  // Same starting point, opposite direction
+            let dy = vals[0] - vals[1];
+
+            // Take one backward difference and one centered,
+            // in the opposite direction
+            let k0 = -(vals[2] - vals[0]) / two;
+            let k1 = -(vals[1] - vals[0]);
+
+            hermite_spline(t, y0, dx, dy, k0, k1)
+        },
+        Saturation::OutsideLow => {
+            // Fall back on linear extrapolation
+            // `t` is already negative, since it's calculated
+            // w.r.t. index 1, but is off by a normalized cell (1.0)
+            let t = t + one;
+            let y0 = vals[0];
+            let dy = vals[1] - vals[0];
+
+            // Since the grid is regular and `t` is normalized,
+            // dx = 1 -> dy/dx = dy
+            let k0 = dy; // Just to be explicit
+
+            y0 + k0 * t  // `t` is negative
+        },
+        Saturation::InsideHigh => {
+            // Shift cell up an index
+            // and offset `t`, which has value between 1 and 2
+            // because it is calculated w.r.t. index 1
+            let t = t - one;
+            let y0 = vals[2];
+            let dy = vals[3] - vals[2];
+
+            // Take one backward difference and one centered
+            let k0 = (vals[3] - vals[1]) / two;
+            let k1 = vals[3] - vals[2];
+
+            hermite_spline(t, y0, dx, dy, k0, k1)
+        },
+        Saturation::OutsideHigh => {
+            // Fall back on linear extrapolation
+            // and offset `t`, which has value relative to index 1
+            // but will be used relative to index 3
+            let t = t - two;
+            let y0 = vals[3];
+            let dy = vals[3] - vals[2];
+
+            // Since the grid is regular and `t` is normalized,
+            // dx = 1 -> dy/dx = dy
+            let k0 = dy; // Just to be explicit
+
+            y0 + k0 * t
+        },
     }
+}
+
+/// Evaluate a hermite spline function on an interval from x0 to x1,
+/// with imposed slopes k0 and k1 at the endpoints, and normalized
+/// coordinate t = (x - x0) / (x1 - x0)
+#[inline]
+fn hermite_spline<T: Float>(t: T, y0: T, dx: T, dy: T, k0: T, k1: T) -> T {
+    // `a` and `b` are difference between this function and a linear one going
+    // forward or backward with the imposed slopes.
+    let a = k0 * dx - dy;
+    let b = -k1 * dx + dy;
+
+    let t2 = t * t;
+    let t3 = t * t * t;
+
+    let c1 = dy + a;
+    let c2 = b - (a + a);
+    let c3 = a - b;
+
+    y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
 }
 
 /// Index a single value from an array

@@ -27,3 +27,6 @@ std = ["itertools"]
 [[bench]]
 name = "bench"
 harness = false
+
+[lints.rust]
+unsafe_code = "forbid"
