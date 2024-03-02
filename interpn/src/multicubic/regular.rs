@@ -1,5 +1,4 @@
 use num_traits::{Float, NumCast};
-use rand::seq::index;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Saturation {
@@ -110,11 +109,9 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let steps = &self.steps[..ndims]; // Step size for each dimension
-        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
-        let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
         let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
-        let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
+        let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
         // Populate cumulative product of higher dimensions for indexing.
@@ -133,51 +130,19 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             (origin[i], sat[i]) = self.get_loc(x[i], i)?;
         }
 
-        // Check if any dimension is saturated.
-        let any_dims_saturated = sat.iter().any(|&x| x != Saturation::None);
-
-        // Traverse vertices, summing contributions to the interpolated value.
-        //
-        // This visits the 2^ndims elements of the cartesian product
-        // of `[0, 1] x ... x [0, 1]` without simultaneously actualizing them in storage.
-        let mut interped = T::zero();
-        let nverts = 2_usize.pow(ndims as u32);
-        for i in 0..nverts {
-            let mut k: usize = 0; // index of the value for this vertex in self.vals
-
-            for j in 0..ndims {
-                // Every 2^nth vertex, flip which side of the cube we are examining
-                // in the nth dimension.
-                //
-                // Because i % 2^n has double the period for each sequential n,
-                // and their phase is only aligned once every 2^n for the largest
-                // n in the set, this is guaranteed to produce a path that visits
-                // each vertex exactly once.
-                let flip = i % 2_usize.pow(j as u32) == 0;
-                if flip {
-                    ioffs[j] = !ioffs[j];
-                }
-
-                // Accumulate the index into the value array,
-                // saturating to the bound if the resulting index would be outside.
-                k += dimprod[j] * (origin[j] + ioffs[j] as usize);
-
-                // Find the vector from the opposite vertex to the observation point
-                let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
-                let floc = T::from(iloc);
-                match floc {
-                    Some(floc) => {
-                        let loc = self.starts[j] + steps[j] * floc; // Loc. of opposite vertex
-                        dxs[j] = (x[j] - loc).abs(); // Use dxs[j] as storage for float locs
-                    }
-                    None => return Err("Unrepresentable coordinate value"),
-                }
-            }
-
-            // Get the value at this vertex
-            let v = self.vals[k];
-
+        // Calculate normalized delta locations
+        for i in 0..ndims {
+            let index_one_loc = self.starts[i]
+                + self.steps[i]
+                    * <T as NumCast>::from(origin[i] + 1).ok_or("Unrepresentable coordinate value")?;
+            dts[i] = (x[i] - index_one_loc) / self.steps[i];
         }
+
+        // Recursive interpolation of one dependency tree at a time
+        let loc = &origin;  // Starting location in the tree is the origin
+        let dim =self.dims[ndims - 1];  // Start from the end and recurse back to zero
+        let ind = 0;  // Start from the zero-index
+        let interped = self.populate(ind, dim, sat, origin, loc, dimprod, dts);
 
         Ok(interped)
     }
@@ -232,38 +197,53 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         }
     }
 
+    /// Recursive evaluation of interpolant on each dimension
     #[inline]
-    fn populate(&self, ind: usize, dim: usize, sat: &[Saturation], loc: &[usize], dimprod: &[usize], dts: &[T]) -> T {
+    fn populate(
+        &self,
+        ind: usize,
+        dim: usize,
+        sat: &[Saturation],
+        origin: &[usize],
+        loc: &[usize],
+        dimprod: &[usize],
+        dts: &[T],
+    ) -> T {
+        // Keep track of where we are in the tree
+        // so that we can index into the value array properly
+        // when we reach the leaves
         let ndims = loc.len();
+        let thisloc = &mut [0_usize; MAXDIMS][..ndims];
+        thisloc.copy_from_slice(loc);
+        thisloc[dim] = origin[dim] + ind;
+
+        // Do the calc for this entry
         if dim == 0 {
-            // Index into data
-            let thisloc = &mut [0_usize; MAXDIMS][..ndims];
-            thisloc[0] += ind;
+            // If we have arrived at a leaf, index into data
             let v = index_arr(thisloc, dimprod, self.vals);
-            return v
+            return v;
         } else {
-            // Populate next dim and interpolate
+            // Populate next dim's values
+            let next_dim = dim - 1;
             let mut vals = [T::zero(); 4];
             for i in 0..4 {
-                vals[i] = self.populate(i, dim-1, sat, loc, dimprod, dts);
+                vals[i] = self.populate(i, next_dim, sat, origin, thisloc, dimprod, dts);
             }
-
+            // Interpolate on next dim's values to populate an entry in this dim
             let v = interp_inner::<T, MAXDIMS>(vals, dts[dim], sat[dim]);
-            return v
+            return v;
         }
     }
-
 }
 
-
-/// Calculate slopes and 
+/// Calculate slopes and offsets & select evaluation method
 #[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturation) -> T {
     // Construct some constants using generic methods
-    let one = T::one(); 
+    let one = T::one();
     let two = one + one;
 
-    let dx = one;  // Normalized coordinates, regular grid
+    let dx = one; // Normalized coordinates, regular grid
     match sat {
         Saturation::None => {
             // This is the nominal case
@@ -275,12 +255,12 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k1 = (vals[3] - vals[1]) / two;
 
             hermite_spline(t, y0, dx, dy, k0, k1)
-        },
+        }
         Saturation::InsideLow => {
             // Flip direction to maintain symmetry
             // with the InsideHigh case
-            let t = -t;  // `t` always w.r.t. index 1 of cube
-            let y0 = vals[1];  // Same starting point, opposite direction
+            let t = -t; // `t` always w.r.t. index 1 of cube
+            let y0 = vals[1]; // Same starting point, opposite direction
             let dy = vals[0] - vals[1];
 
             // Take one backward difference and one centered,
@@ -289,7 +269,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k1 = -(vals[1] - vals[0]);
 
             hermite_spline(t, y0, dx, dy, k0, k1)
-        },
+        }
         Saturation::OutsideLow => {
             // Fall back on linear extrapolation
             // `t` is already negative, since it's calculated
@@ -302,8 +282,8 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // dx = 1 -> dy/dx = dy
             let k0 = dy; // Just to be explicit
 
-            y0 + k0 * t  // `t` is negative
-        },
+            y0 + k0 * t // `t` is negative
+        }
         Saturation::InsideHigh => {
             // Shift cell up an index
             // and offset `t`, which has value between 1 and 2
@@ -317,7 +297,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k1 = vals[3] - vals[2];
 
             hermite_spline(t, y0, dx, dy, k0, k1)
-        },
+        }
         Saturation::OutsideHigh => {
             // Fall back on linear extrapolation
             // and offset `t`, which has value relative to index 1
@@ -331,7 +311,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k0 = dy; // Just to be explicit
 
             y0 + k0 * t
-        },
+        }
     }
 }
 
@@ -363,5 +343,5 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
         i += loc[j] * dimprod[j];
     }
 
-    return data[i]
+    return data[i];
 }
