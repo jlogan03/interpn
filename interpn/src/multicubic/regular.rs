@@ -47,7 +47,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
-        let nvals = dims.iter().product();
+        let nvals: usize = dims.iter().product();
         if !(starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0) {
             return Err("Dimension mismatch");
         }
@@ -82,6 +82,36 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             steps: steps_local,
             vals,
         })
+    }
+
+    /// Interpolate on a contiguous list of observation points.
+    ///
+    /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+    ///
+    /// # Errors
+    ///   * If the dimensionality of the point does not match the data
+    ///   * If the dimensionality of point or data does not match the grid
+    #[inline(always)]
+    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
+        let n = out.len();
+        let ndims = self.ndims;
+        // Make sure there are enough coordinate inputs for each dimension
+        if x.len() != ndims {
+            return Err("Dimension mismatch");
+        }
+        // Make sure the size of inputs and output match
+        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
+        if !size_matches {
+            return Err("Dimension mismatch");
+        }
+
+        let tmp = &mut [T::zero(); MAXDIMS][..ndims];
+        for i in 0..n {
+            (0..ndims).for_each(|j| tmp[j] = x[j][i]);
+            out[i] = self.interp_one(tmp)?;
+        }
+
+        Ok(())
     }
 
     /// Interpolate the value at a point,
@@ -344,4 +374,77 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     }
 
     return data[i];
+}
+
+
+/// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+#[inline(always)]
+pub fn interpn<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    Ok(())
+}
+
+pub use crate::multilinear::regular::check_bounds;
+
+
+#[cfg(test)]
+mod test {
+    use super::interpn;
+    use crate::utils::*;
+
+    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
+    /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
+    /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
+    /// rapidly becomes prohibitively slow after about ndims=9.
+    #[test]
+    fn test_interp_extrap_1d_to_8d() {
+        for ndims in 1..=8 {
+            println!("Testing in {ndims} dims");
+            // Interp grid
+            let dims: Vec<usize> = vec![4; ndims];
+            let xs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .collect();
+            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+            let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
+            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+
+            // Observation points
+            let xobs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
+                .collect();
+            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| gridobs.iter().map(|x| x[i]).collect())
+                .collect(); // transpose
+            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
+            let mut out = vec![0.0; uobs.len()];
+
+            // Evaluate
+            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
+
+            // Check that interpolated values match expectation,
+            // using an absolute difference because some points are very close to or exactly at zero,
+            // and do not do well under a check on relative difference.
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+        }
+    }
 }
