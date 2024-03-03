@@ -348,7 +348,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0)
-#[inline]
+#[inline(always)]
 fn hermite_spline<T: Float>(t: T, y0: T, dx: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are difference between this function and a linear one going
     // forward or backward with the imposed slopes.
@@ -366,7 +366,7 @@ fn hermite_spline<T: Float>(t: T, y0: T, dx: T, dy: T, k0: T, k1: T) -> T {
 }
 
 /// Index a single value from an array
-#[inline]
+#[inline(always)]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {
@@ -376,7 +376,7 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     return data[i];
 }
 
-/// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
+/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
@@ -399,6 +399,7 @@ pub fn interpn<T: Float>(
     Ok(())
 }
 
+// We can use the same regular-grid method again
 pub use crate::multilinear::regular::check_bounds;
 
 #[cfg(test)]
