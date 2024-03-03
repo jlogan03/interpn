@@ -46,3 +46,4 @@
 
 
 pub mod regular;
+pub use regular::MulticubicRegular;

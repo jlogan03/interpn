@@ -77,9 +77,10 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod multilinear;
-pub use multilinear::{RectilinearGridInterpolator, RegularGridInterpolator};
+pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 
 pub mod multicubic;
+pub use multicubic::MulticubicRegular;
 
 #[cfg(feature = "std")]
 pub mod utils;

@@ -77,7 +77,7 @@ use num_traits::{Float, NumCast};
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
 ///   when evaluated at off-grid points.
-pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
+pub struct MultilinearRegular<'a, T: Float, const MAXDIMS: usize> {
     /// Number of dimensions
     ndims: usize,
 
@@ -94,7 +94,7 @@ pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     vals: &'a [T],
 }
 
-impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS> {
+impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions with only a single
@@ -478,7 +478,7 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    RegularGridInterpolator::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
     Ok(())
 }
 
