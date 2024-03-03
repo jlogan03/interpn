@@ -170,8 +170,10 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         }
 
         // Recursive interpolation of one dependency tree at a time
-        let loc = &origin; // Starting location in the tree is the origin
+        // let loc = &origin; // Starting location in the tree is the origin
         let dim = ndims; // Start from the end and recurse back to zero
+        let loc = &mut [0_usize; MAXDIMS][..ndims];
+        loc.copy_from_slice(origin);
         let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
 
         Ok(interped)
@@ -234,7 +236,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         dim: usize,
         sat: &[Saturation],
         origin: &[usize],
-        loc: &[usize],
+        loc: &mut [usize],
         dimprod: &[usize],
         dts: &[T],
     ) -> T {
@@ -249,16 +251,15 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                 // so that we can index into the value array properly
                 // when we reach the leaves
                 let next_dim = dim - 1;
-                let ndims = loc.len();
-                let thisloc = &mut [0_usize; MAXDIMS][..ndims];
-                thisloc.copy_from_slice(loc);
 
                 // Populate next dim's values
                 let mut vals = [T::zero(); 4];
                 for i in 0..4 {
-                    thisloc[next_dim] = origin[next_dim] + i;
-                    vals[i] = self.populate(next_dim, sat, origin, thisloc, dimprod, dts);
+                    loc[next_dim] = origin[next_dim] + i;
+                    vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, dts);
                 }
+                loc[next_dim] = 0;  // Reset for next usage
+
                 // Interpolate on next dim's values to populate an entry in this dim
                 interp_inner::<T, MAXDIMS>(vals, dts[next_dim], sat[next_dim])
             }
