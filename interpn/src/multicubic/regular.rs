@@ -164,15 +164,15 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         for i in 0..ndims {
             let index_one_loc = self.starts[i]
                 + self.steps[i]
-                    * <T as NumCast>::from(origin[i] + 1).ok_or("Unrepresentable coordinate value")?;
+                    * <T as NumCast>::from(origin[i] + 1)
+                        .ok_or("Unrepresentable coordinate value")?;
             dts[i] = (x[i] - index_one_loc) / self.steps[i];
         }
 
         // Recursive interpolation of one dependency tree at a time
-        let loc = &origin;  // Starting location in the tree is the origin
-        let dim =self.dims[ndims - 1];  // Start from the end and recurse back to zero
-        let ind = 0;  // Start from the zero-index
-        let interped = self.populate(ind, dim, sat, origin, loc, dimprod, dts);
+        let loc = &origin; // Starting location in the tree is the origin
+        let dim = ndims; // Start from the end and recurse back to zero
+        let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
 
         Ok(interped)
     }
@@ -231,7 +231,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     #[inline]
     fn populate(
         &self,
-        ind: usize,
         dim: usize,
         sat: &[Saturation],
         origin: &[usize],
@@ -239,29 +238,30 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         dimprod: &[usize],
         dts: &[T],
     ) -> T {
-        // Keep track of where we are in the tree
-        // so that we can index into the value array properly
-        // when we reach the leaves
-        let ndims = loc.len();
-        let thisloc = &mut [0_usize; MAXDIMS][..ndims];
-        thisloc.copy_from_slice(loc);
-        thisloc[dim] = origin[dim] + ind;
-
         // Do the calc for this entry
-        if dim == 0 {
+        match dim {
             // If we have arrived at a leaf, index into data
-            let v = index_arr(thisloc, dimprod, self.vals);
-            return v;
-        } else {
-            // Populate next dim's values
-            let next_dim = dim - 1;
-            let mut vals = [T::zero(); 4];
-            for i in 0..4 {
-                vals[i] = self.populate(i, next_dim, sat, origin, thisloc, dimprod, dts);
+            0 => index_arr(loc, dimprod, self.vals),
+
+            // Otherwise, continue recursion
+            _ => {
+                // Keep track of where we are in the tree
+                // so that we can index into the value array properly
+                // when we reach the leaves
+                let next_dim = dim - 1;
+                let ndims = loc.len();
+                let thisloc = &mut [0_usize; MAXDIMS][..ndims];
+                thisloc.copy_from_slice(loc);
+
+                // Populate next dim's values
+                let mut vals = [T::zero(); 4];
+                for i in 0..4 {
+                    thisloc[next_dim] = origin[next_dim] + i;
+                    vals[i] = self.populate(next_dim, sat, origin, thisloc, dimprod, dts);
+                }
+                // Interpolate on next dim's values to populate an entry in this dim
+                interp_inner::<T, MAXDIMS>(vals, dts[next_dim], sat[next_dim])
             }
-            // Interpolate on next dim's values to populate an entry in this dim
-            let v = interp_inner::<T, MAXDIMS>(vals, dts[dim], sat[dim]);
-            return v;
         }
     }
 }
@@ -376,7 +376,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     return data[i];
 }
 
-
 /// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
@@ -401,7 +400,6 @@ pub fn interpn<T: Float>(
 }
 
 pub use crate::multilinear::regular::check_bounds;
-
 
 #[cfg(test)]
 mod test {
