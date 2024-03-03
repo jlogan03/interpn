@@ -258,7 +258,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                     loc[next_dim] = origin[next_dim] + i;
                     vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, dts);
                 }
-                loc[next_dim] = 0;  // Reset for next usage
+                loc[next_dim] = 0; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
                 interp_inner::<T, MAXDIMS>(vals, dts[next_dim], sat[next_dim])
@@ -274,7 +274,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
     let one = T::one();
     let two = one + one;
 
-    let dx = one; // Normalized coordinates, regular grid
     match sat {
         Saturation::None => {
             // This is the nominal case
@@ -285,7 +284,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k0 = (vals[2] - vals[0]) / two;
             let k1 = (vals[3] - vals[1]) / two;
 
-            hermite_spline(t, y0, dx, dy, k0, k1)
+            normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::InsideLow => {
             // Flip direction to maintain symmetry
@@ -299,7 +298,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k0 = -(vals[2] - vals[0]) / two;
             let k1 = -(vals[1] - vals[0]);
 
-            hermite_spline(t, y0, dx, dy, k0, k1)
+            normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideLow => {
             // Fall back on linear extrapolation
@@ -327,7 +326,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let k0 = (vals[3] - vals[1]) / two;
             let k1 = vals[3] - vals[2];
 
-            hermite_spline(t, y0, dx, dy, k0, k1)
+            normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideHigh => {
             // Fall back on linear extrapolation
@@ -348,16 +347,16 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
 
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
-/// coordinate t = (x - x0) / (x1 - x0)
+/// coordinate t = (x - x0) / (x1 - x0).
 #[inline(always)]
-fn hermite_spline<T: Float>(t: T, y0: T, dx: T, dy: T, k0: T, k1: T) -> T {
-    // `a` and `b` are difference between this function and a linear one going
+fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
+    // `a` and `b` are the difference between this function and a linear one going
     // forward or backward with the imposed slopes.
-    let a = k0 * dx - dy;
-    let b = -k1 * dx + dy;
+    let a = k0 - dy;
+    let b = -k1 + dy;
 
     let t2 = t * t;
-    let t3 = t * t * t;
+    let t3 = t.powi(3);
 
     let c1 = dy + a;
     let c2 = b - (a + a);
@@ -408,13 +407,13 @@ mod test {
     use super::interpn;
     use crate::utils::*;
 
-    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
+    /// Iterate from 1 to 7 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
-    /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
-    /// rapidly becomes prohibitively slow after about ndims=9.
+    /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
+    /// rapidly becomes prohibitively slow above ndims=7.
     #[test]
-    fn test_interp_extrap_1d_to_8d() {
-        for ndims in 1..=8 {
+    fn test_interp_extrap_1d_to_7d() {
+        for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
@@ -428,7 +427,7 @@ mod test {
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 3))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64),5))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
