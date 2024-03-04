@@ -210,12 +210,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                 }
                 // Observation point is in the upper part of the cell
                 // but not outside the grid
-                else if iloc > (n - 1) as isize {
+                else if iloc >= (n - 1) as isize {
                     saturation = Saturation::OutsideHigh;
                 }
                 // Observation point is in the upper part of the cell
                 // but not outside the grid
-                else if iloc > (n - 2) as isize {
+                else if iloc >= (n - 2) as isize {
                     saturation = Saturation::InsideHigh;
                 }
                 // Observation point is on the interior
