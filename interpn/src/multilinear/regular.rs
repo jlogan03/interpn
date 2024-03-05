@@ -59,9 +59,6 @@ use num_traits::{Float, NumCast};
 
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 ///
-/// Unlike `RectilinearGridInterpolator`, this method can accommodate grids with a
-/// negative step size.
-///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// Operation Complexity

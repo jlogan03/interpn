@@ -1,3 +1,72 @@
+//! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
+//! 
+//! On interior points, a hermite spline is used, with the derivative at each
+//! grid point matched to a second-order central difference. This allows the
+//! interpolant to reproduce a quadratic function exactly, and to approximate
+//! others with minimal overshoot and wobble.
+//! 
+//! At the grid boundary, a natural spline boundary condition is applied,
+//! meaning the third derivative of the interpolant is constrainted to zero
+//! at the last grid point, with the result that the interpolant is quadratic
+//! on the last interval before the boundary.
+//! 
+//! Extrapolation is linear on the extrapolated dimensions, holding the same
+//! derivative as the natural boundary condition produces at the last grid point.
+//! 
+//! This effectively gives a gradual decrease in the order of the interpolant
+//! as the observation point approaches then leaves the grid:
+//! 
+//! ---|---|---|---|---|---|--- Grid
+//!  1   2   3   3   3   2   1  Order of interpolant between grid points
+//!
+//! Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+//!
+//! Operation Complexity
+//! * O(4^ndims) for interpolation and extrapolation in all regions.
+//!
+//! Memory Complexity
+//! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
+//! * While evaluation is recursive, the recursion has constant
+//!   max depth of MAXDIMS, which provides a guarantee on peak
+//!   memory usage.
+//!
+//! Timing
+//! * Timing determinism very tight, but is not exact due to the
+//!   differences in calculations (but not complexity) between 
+//!   interpolation and extrapolation.
+//! * An interpolation-only variant of this algorithm could achieve
+//!   near-deterministic timing, but would produce incorrect results
+//!   when evaluated at off-grid points.
+//!
+//! ```rust
+//! use interpn::multicubic::regular::interpn;
+//!
+//! // Define a grid
+//! let x = [1.0_f64, 2.0, 3.0, 4.0];
+//! let y = [0.0_f64, 1.0, 2.0, 3.0];
+//!
+//! // Grid input for rectilinear method
+//! let grids = &[&x[..], &y[..]];
+//!
+//! // Grid input for regular grid method
+//! let dims = [x.len(), y.len()];
+//! let starts = [x[0], y[0]];
+//! let steps = [x[1] - x[0], y[1] - y[0]];
+//!
+//! // Values at grid points
+//! let z = [2.0; 16];
+//!
+//! // Observation points to interpolate/extrapolate
+//! let xobs = [0.0_f64, 5.0];
+//! let yobs = [-1.0, 3.0];
+//! let obs = [&xobs[..], &yobs[..]];
+//!
+//! // Storage for output
+//! let mut out = [0.0; 2];
+//!
+//! // Do interpolation
+//! interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
+//! ```
 use num_traits::{Float, NumCast};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -9,6 +78,45 @@ enum Saturation {
     OutsideHigh,
 }
 
+/// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
+/// 
+/// On interior points, a hermite spline is used, with the derivative at each
+/// grid point matched to a second-order central difference. This allows the
+/// interpolant to reproduce a quadratic function exactly, and to approximate
+/// others with minimal overshoot and wobble.
+/// 
+/// At the grid boundary, a natural spline boundary condition is applied,
+/// meaning the third derivative of the interpolant is constrainted to zero
+/// at the last grid point, with the result that the interpolant is quadratic
+/// on the last interval before the boundary.
+/// 
+/// Extrapolation is linear on the extrapolated dimensions, holding the same
+/// derivative as the natural boundary condition produces at the last grid point.
+/// 
+/// This effectively gives a gradual decrease in the order of the interpolant
+/// as the observation point approaches then leaves the grid:
+/// 
+/// ---|---|---|---|---|---|--- Grid
+///  1   2   3   3   3   2   1  Order of interpolant between grid points
+///
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// Operation Complexity
+/// * O(4^ndims) for interpolation and extrapolation in all regions.
+///
+/// Memory Complexity
+/// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
+/// * While evaluation is recursive, the recursion has constant
+///   max depth of MAXDIMS, which provides a guarantee on peak
+///   memory usage.
+///
+/// Timing
+/// * Timing determinism very tight, but is not exact due to the
+///   differences in calculations (but not complexity) between 
+///   interpolation and extrapolation.
+/// * An interpolation-only variant of this algorithm could achieve
+///   near-deterministic timing, but would produce incorrect results
+///   when evaluated at off-grid points.
 pub struct MulticubicRegular<'a, T: Float, const MAXDIMS: usize> {
     /// Number of dimensions
     ndims: usize,
@@ -29,8 +137,7 @@ pub struct MulticubicRegular<'a, T: Float, const MAXDIMS: usize> {
 impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
-    /// This method does not handle degenerate dimensions with only a single
-    /// grid entry; all grids must have at least 4 entries.
+    /// This method does not handle degenerate dimensions; all grids must have at least 4 entries.
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
@@ -293,10 +400,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let y0 = vals[1]; // Same starting point, opposite direction
             let dy = vals[0] - vals[1];
 
-            // Take one backward difference and one centered,
-            // in the opposite direction
+            // Take one centered difference for the inside derivative,
+            // then for the derivative at the edge, impose a natural
+            // spline constraint, meaning the third derivative q'''(t) = 0
+            // at the last grid point, which produces a quadratic in the
+            // last cell, reducing wobble that would be cause by enforcing
+            // the use of a cubic function where there is not enough information
+            // to support it.
             let k0 = -(vals[2] - vals[0]) / two;
-            let k1 = -(vals[1] - vals[0]);
+            let k1 = two * dy - k0;  // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -304,15 +416,21 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // Fall back on linear extrapolation
             // `t` is already negative, since it's calculated
             // w.r.t. index 1, but is off by a normalized cell (1.0)
-            let t = t + one;
-            let y0 = vals[0];
-            let dy = vals[1] - vals[0];
+            let t = -(t + one);
+            let y1 = vals[0];
+            let dy = vals[0] - vals[1];
 
-            // Since the grid is regular and `t` is normalized,
-            // dx = 1 -> dy/dx = dy
-            let k0 = dy; // Just to be explicit
+            // Take one centered difference for the inside derivative,
+            // then for the derivative at the edge, impose a natural
+            // spline constraint, meaning the third derivative q'''(t) = 0
+            // at the last grid point, which produces a quadratic in the
+            // last cell, reducing wobble that would be cause by enforcing
+            // the use of a cubic function where there is not enough information
+            // to support it.
+            let k0 = -(vals[2] - vals[0]) / two;
+            let k1 = two * dy - k0;  // Natural spline boundary condition
 
-            y0 + k0 * t // `t` is negative
+            y1 + k1 * t // `t` is negative
         }
         Saturation::InsideHigh => {
             // Shift cell up an index
@@ -322,9 +440,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             let y0 = vals[2];
             let dy = vals[3] - vals[2];
 
-            // Take one backward difference and one centered
+            // Take one centered difference for the inside derivative,
+            // then for the derivative at the edge, impose a natural
+            // spline constraint, meaning the third derivative q'''(t) = 0
+            // at the last grid point, which produces a quadratic in the
+            // last cell, reducing wobble that would be cause by enforcing
+            // the use of a cubic function where there is not enough information
+            // to support it.
             let k0 = (vals[3] - vals[1]) / two;
-            let k1 = vals[3] - vals[2];
+            let k1 = two * dy - k0;  // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -333,14 +457,20 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // and offset `t`, which has value relative to index 1
             // but will be used relative to index 3
             let t = t - two;
-            let y0 = vals[3];
+            let y1 = vals[3];
             let dy = vals[3] - vals[2];
 
-            // Since the grid is regular and `t` is normalized,
-            // dx = 1 -> dy/dx = dy
-            let k0 = dy; // Just to be explicit
+            // Take one centered difference for the inside derivative,
+            // then for the derivative at the edge, impose a natural
+            // spline constraint, meaning the third derivative q'''(t) = 0
+            // at the last grid point, which produces a quadratic in the
+            // last cell, reducing wobble that would be cause by enforcing
+            // the use of a cubic function where there is not enough information
+            // to support it.
+            let k0 = (vals[3] - vals[1]) / two;
+            let k1 = two * dy - k0;  // Natural spline boundary condition
 
-            y0 + k0 * t
+            y1 + k1 * t
         }
     }
 }
