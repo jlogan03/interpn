@@ -11,13 +11,13 @@
 //! | multilinear::regular          | O(ndims)  | O(2^ndims * ndims)       | O(2^ndims * ndims)                      | O(2^ndims + ndims^2)                           |
 //! | multilinear::rectilinear      | O(ndims)  | O(2^ndims * ndims)       | O(ndims * (2^ndims + log2(gridsize)))   | O(ndims * (2^ndims + ndims + log2(gridsize)))  |
 //!
-//! # Example: Multilinear w/ Regular Grid
+//! # Example: Multilinear and Multicubic w/ Regular Grid
 //! ```rust
-//! use interpn::multilinear::regular;
+//! use interpn::{multilinear, multicubic};
 //!
 //! // Define a grid
-//! let x = [1.0_f64, 2.0];
-//! let y = [1.0_f64, 1.5];
+//! let x = [1.0_f64, 2.0, 3.0, 4.0];
+//! let y = [0.0_f64, 1.0, 2.0, 3.0];
 //!
 //! // Grid input for rectilinear method
 //! let grids = &[&x[..], &y[..]];
@@ -28,7 +28,7 @@
 //! let steps = [x[1] - x[0], y[1] - y[0]];
 //!
 //! // Values at grid points
-//! let z = [2.0; 4];
+//! let z = [2.0; 16];
 //!
 //! // Observation points to interpolate/extrapolate
 //! let xobs = [0.0_f64, 5.0];
@@ -39,7 +39,8 @@
 //! let mut out = [0.0; 2];
 //!
 //! // Do interpolation
-//! regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+//! multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+//! multicubic::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
 //! ```
 //!
 //! # Example: Multilinear w/ Rectilinear Grid
@@ -69,9 +70,7 @@
 //! ```
 //!
 //! # Development Roadmap
-//! * Limited-memory multi-cubic interpolation/extrapolation
-//! * Vectorized multilinear interpolation/extrapolation (with less strict memory limits)
-//! * Vectorized multi-cubic interpolation/extrapolation (with less strict memory limits)
+//! * Recursive 
 #![cfg_attr(not(feature = "std"), no_std)]
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]

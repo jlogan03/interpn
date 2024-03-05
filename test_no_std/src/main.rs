@@ -6,6 +6,7 @@
 use core::panic::PanicInfo;
 
 use interpn::multilinear::{regular, rectilinear};
+use interpn::multicubic;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -15,22 +16,32 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[no_mangle]
 pub fn _start() -> ! {
-    let x = [1.0_f64, 2.0];
-    let y = [1.0_f64, 2.0];
+    // Define a grid
+    let x = [1.0_f64, 2.0, 3.0, 4.0];
+    let y = [0.0_f64, 1.0, 2.0, 3.0];
+    
+    // Grid input for rectilinear method
     let grids = &[&x[..], &y[..]];
-
-    let z = [2.0; 4];
-
-    let mut out = [0.0; 1];
-
+    
+    // Grid input for regular grid method
     let dims = [x.len(), y.len()];
     let starts = [x[0], y[0]];
-    let steps = [1.0, 1.0];
-
-    let obs = [&[0.0_f64][..], &[0.0_f64][..]]; // Slightly weird syntax to get slice of slice without vec
+    let steps = [x[1] - x[0], y[1] - y[0]];
+    
+    // Values at grid points
+    let z = [2.0; 16];
+    
+    // Observation points to interpolate/extrapolate
+    let xobs = [0.0_f64, 5.0];
+    let yobs = [-1.0, 3.0];
+    let obs = [&xobs[..], &yobs[..]];
+    
+    // Storage for output
+    let mut out = [0.0; 2];
 
     regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
     rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
+    multicubic::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
 
     loop {} // We don't actually run this, just compile it
 }
