@@ -577,6 +577,8 @@ mod test {
         }
     }
 
+    /// Under interpolation, a hermite spline with natural boundary condition
+    /// can reproduce an N-dimensional quadratic function exactly
     #[test]
     fn test_interp_1d_to_7d_quadratic() {
         for ndims in 1..6 {
