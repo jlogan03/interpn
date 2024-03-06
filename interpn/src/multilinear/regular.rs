@@ -59,9 +59,6 @@ use num_traits::{Float, NumCast};
 
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 ///
-/// Unlike `RectilinearGridInterpolator`, this method can accommodate grids with a
-/// negative step size.
-///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// Operation Complexity
@@ -77,7 +74,7 @@ use num_traits::{Float, NumCast};
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
 ///   when evaluated at off-grid points.
-pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
+pub struct MultilinearRegular<'a, T: Float, const MAXDIMS: usize> {
     /// Number of dimensions
     ndims: usize,
 
@@ -94,7 +91,7 @@ pub struct RegularGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     vals: &'a [T],
 }
 
-impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS> {
+impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions with only a single
@@ -125,7 +122,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
         if degenerate {
             return Err("All grids must have at least two entries");
         }
-        // Check if any dimensions have zero step size
+        // Check if any dimensions have zero or negative step size
         let steps_are_positive = steps.iter().all(|&x| x > T::zero());
         if !steps_are_positive {
             return Err("All grids must be monotonically increasing");
@@ -459,7 +456,7 @@ impl<'a, T: Float, const MAXDIMS: usize> RegularGridInterpolator<'a, T, MAXDIMS>
     }
 }
 
-/// Evaluate multilinear interpolation on a regular grid in up to 10 dimensions.
+/// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
@@ -478,7 +475,7 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    RegularGridInterpolator::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
     Ok(())
 }
 

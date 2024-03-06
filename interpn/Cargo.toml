@@ -1,6 +1,6 @@
 [package]
 name = "interpn"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["James Logan <jlogan03@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -27,3 +27,6 @@ std = ["itertools"]
 [[bench]]
 name = "bench"
 harness = false
+
+[lints.rust]
+unsafe_code = "forbid"

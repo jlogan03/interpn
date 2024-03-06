@@ -84,7 +84,7 @@ use num_traits::Float;
 ///   as well as due to the use of a bisection search for the grid index
 ///   location (which is itself not timing-deterministic) and the various
 ///   methods used to attempt to avoid that bisection search.
-pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
+pub struct MultilinearRectilinear<'a, T: Float, const MAXDIMS: usize> {
     /// x, y, ... coordinate grids, each entry of size dims[i]
     grids: &'a [&'a [T]],
 
@@ -95,7 +95,7 @@ pub struct RectilinearGridInterpolator<'a, T: Float, const MAXDIMS: usize> {
     vals: &'a [T],
 }
 
-impl<'a, T: Float, const MAXDIMS: usize> RectilinearGridInterpolator<'a, T, MAXDIMS> {
+impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions with only a single
@@ -445,7 +445,7 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    RectilinearGridInterpolator::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
+    MultilinearRectilinear::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
     Ok(())
 }
 
@@ -488,7 +488,7 @@ pub fn check_bounds<T: Float>(
 
 #[cfg(test)]
 mod test {
-    use super::{interpn, RectilinearGridInterpolator};
+    use super::{interpn, MultilinearRectilinear};
     use crate::testing::*;
     use crate::utils::*;
 
@@ -512,8 +512,8 @@ mod test {
             .map(|i| &xyobs[i][0] + &xyobs[i][1])
             .collect(); // Every `z` should match the degenerate `y` value
 
-        let interpolator: RectilinearGridInterpolator<'_, _, 2> =
-            RectilinearGridInterpolator::new(&grids, &z[..]).unwrap();
+        let interpolator: MultilinearRectilinear<'_, _, 2> =
+            MultilinearRectilinear::new(&grids, &z[..]).unwrap();
 
         // Check values at every incident vertex
         xyobs.iter().zip(zobs.iter()).for_each(|(xyi, zi)| {
