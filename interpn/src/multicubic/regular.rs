@@ -312,42 +312,39 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        let iloc = <isize as NumCast>::from(floc); // signed integer loc
+                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
+                                                                       // coordinate t=0 at cell index 1
+        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
-        let n = self.dims[dim]; // Number of grid points on this dimension
-        match iloc {
-            Some(iloc) => {
-                let dimmax = n - 4; // maximum index for lower corner
-                let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+        let n = self.dims[dim] as isize; // Number of grid points on this dimension
+        let dimmax = (n - 4).max(0); // maximum index for lower corner
+        let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
-                // Observation point is outside the grid on the low side
-                if iloc < 0 {
-                    saturation = Saturation::OutsideLow;
-                }
-                // Observation point is in the lower part of the cell
-                // but not outside the grid
-                else if iloc < 1 {
-                    saturation = Saturation::InsideLow;
-                }
-                // Observation point is in the upper part of the cell
-                // but not outside the grid
-                else if iloc >= (n - 1) as isize {
-                    saturation = Saturation::OutsideHigh;
-                }
-                // Observation point is in the upper part of the cell
-                // but not outside the grid
-                else if iloc >= (n - 2) as isize {
-                    saturation = Saturation::InsideHigh;
-                }
-                // Observation point is on the interior
-                else {
-                    saturation = Saturation::None;
-                }
-
-                Ok((loc, saturation))
-            }
-            None => Err("Unrepresentable coordinate value"),
+        // Observation point is outside the grid on the low side
+        if iloc < -1 {
+            saturation = Saturation::OutsideLow;
         }
+        // Observation point is in the lower part of the cell
+        // but not outside the grid
+        else if iloc == -1 {
+            saturation = Saturation::InsideLow;
+        }
+        // Observation point is in the upper part of the cell
+        // but not outside the grid
+        else if iloc > (n - 3) {
+            saturation = Saturation::OutsideHigh;
+        }
+        // Observation point is in the upper part of the cell
+        // but not outside the grid
+        else if iloc == (n - 3) {
+            saturation = Saturation::InsideHigh;
+        }
+        // Observation point is on the interior
+        else {
+            saturation = Saturation::None;
+        }
+
+        Ok((loc, saturation))
     }
 
     /// Recursive evaluation of interpolant on each dimension
@@ -379,7 +376,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                     loc[next_dim] = origin[next_dim] + i;
                     vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, dts);
                 }
-                loc[next_dim] = 0; // Reset for next usage
+                loc[next_dim] = origin[next_dim]; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
                 interp_inner::<T, MAXDIMS>(
@@ -408,6 +405,11 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
     match sat {
         Saturation::None => {
             // This is the nominal case
+            if !(t >= T::zero() && t <= one) {
+                let tprint = <f64 as NumCast>::from(t).unwrap();
+                println!("{tprint}");
+                // panic!();
+            }
             let y0 = vals[1];
             let dy = vals[2] - vals[1];
 
