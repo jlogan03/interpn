@@ -2,7 +2,7 @@
 
 use criterion::*;
 use gridgen::*;
-use interpn::{multilinear, multicubic, MultilinearRegular};
+use interpn::{multicubic, multilinear, MultilinearRegular};
 
 enum Kind {
     Interp,
@@ -155,8 +155,10 @@ macro_rules! bench_interp_specific {
 
                 b.iter(|| {
                     black_box({
-                        multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out)
-                            .unwrap()
+                        multicubic::regular::interpn(
+                            &dims, &starts, &steps, &z, false, &obs, &mut out,
+                        )
+                        .unwrap()
                     })
                 });
             },

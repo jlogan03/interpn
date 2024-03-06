@@ -5,7 +5,7 @@
 //! Note that for a self-consistent multidimensional linear interpolation, there are 2^ndims grid values that contribute
 //! to each observation point, and as such, that is the theoretical floor for performance scaling. That said,
 //! depending on the implementation, the constant term can vary by more than an order of magnitude.
-//! 
+//!
 //! Cubic interpolations require two more degrees of freedom per dimension, and have a minimal runtime scaling of 4^ndims.
 //! Similar to the linear methods, depending on implementation, the constant term can vary by orders of magnitude,
 //! as can the RAM usage.
@@ -75,7 +75,7 @@
 //! ```
 //!
 //! # Development Roadmap
-//! * Recursive 
+//! * Recursive
 #![cfg_attr(not(feature = "std"), no_std)]
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]

@@ -10,14 +10,14 @@
 //! at the last grid point, with the result that the interpolant is quadratic
 //! on the last interval before the boundary.
 //!
-//! With "linearize_extrapolation" set, extrapolation is linear on the extrapolated 
+//! With "linearize_extrapolation" set, extrapolation is linear on the extrapolated
 //! dimensions, holding the same derivative as the natural boundary condition produces
 //! at the last grid point. Otherwise, the last grid cell's spline function is continued,
 //! producing a quadratic extrapolation.
 //!
 //! This effectively gives a gradual decrease in the order of the interpolant
 //! as the observation point approaches then leaves the grid:
-//! 
+//!
 //! out                     out
 //! ---|---|---|---|---|---|--- Grid
 //!  2   2   3   3   3   2   2  Order of interpolant between grid points
@@ -95,14 +95,14 @@ enum Saturation {
 /// at the last grid point, with the result that the interpolant is quadratic
 /// on the last interval before the boundary.
 ///
-/// With "linearize_extrapolation" set, extrapolation is linear on the extrapolated 
+/// With "linearize_extrapolation" set, extrapolation is linear on the extrapolated
 /// dimensions, holding the same derivative as the natural boundary condition produces
 /// at the last grid point. Otherwise, the last grid cell's spline function is continued,
 /// producing a quadratic extrapolation.
 ///
 /// This effectively gives a gradual decrease in the order of the interpolant
 /// as the observation point approaches then leaves the grid:
-/// 
+///
 /// out                     out
 /// ---|---|---|---|---|---|--- Grid
 ///  2   2   3   3   3   2   2  Order of interpolant between grid points
