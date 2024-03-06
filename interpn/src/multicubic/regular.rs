@@ -540,7 +540,7 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
         i += loc[j] * dimprod[j];
     }
 
-    return data[i];
+    data[i]
 }
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
