@@ -312,42 +312,39 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        let iloc = <isize as NumCast>::from(floc); // signed integer loc
+                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
+                                                                       // coordinate t=0 at cell index 1
+        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
-        let n = self.dims[dim]; // Number of grid points on this dimension
-        match iloc {
-            Some(iloc) => {
-                let dimmax = n - 4; // maximum index for lower corner
-                let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+        let n = self.dims[dim] as isize; // Number of grid points on this dimension
+        let dimmax = (n - 4).max(0); // maximum index for lower corner
+        let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
-                // Observation point is outside the grid on the low side
-                if iloc < 0 {
-                    saturation = Saturation::OutsideLow;
-                }
-                // Observation point is in the lower part of the cell
-                // but not outside the grid
-                else if iloc < 1 {
-                    saturation = Saturation::InsideLow;
-                }
-                // Observation point is in the upper part of the cell
-                // but not outside the grid
-                else if iloc >= (n - 1) as isize {
-                    saturation = Saturation::OutsideHigh;
-                }
-                // Observation point is in the upper part of the cell
-                // but not outside the grid
-                else if iloc >= (n - 2) as isize {
-                    saturation = Saturation::InsideHigh;
-                }
-                // Observation point is on the interior
-                else {
-                    saturation = Saturation::None;
-                }
-
-                Ok((loc, saturation))
-            }
-            None => Err("Unrepresentable coordinate value"),
+        // Observation point is outside the grid on the low side
+        if iloc < -1 {
+            saturation = Saturation::OutsideLow;
         }
+        // Observation point is in the lower part of the cell
+        // but not outside the grid
+        else if iloc == -1 {
+            saturation = Saturation::InsideLow;
+        }
+        // Observation point is in the upper part of the cell
+        // but not outside the grid
+        else if iloc > (n - 3) {
+            saturation = Saturation::OutsideHigh;
+        }
+        // Observation point is in the upper part of the cell
+        // but not outside the grid
+        else if iloc == (n - 3) {
+            saturation = Saturation::InsideHigh;
+        }
+        // Observation point is on the interior
+        else {
+            saturation = Saturation::None;
+        }
+
+        Ok((loc, saturation))
     }
 
     /// Recursive evaluation of interpolant on each dimension
@@ -379,7 +376,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                     loc[next_dim] = origin[next_dim] + i;
                     vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, dts);
                 }
-                loc[next_dim] = 0; // Reset for next usage
+                loc[next_dim] = origin[next_dim]; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
                 interp_inner::<T, MAXDIMS>(
@@ -576,12 +573,12 @@ mod test {
     use super::interpn;
     use crate::utils::*;
 
-    /// Iterate from 1 to 7 dimensions, making a minimum-sized grid for each one
+    /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
     /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
-    /// rapidly becomes prohibitively slow above ndims=7.
+    /// rapidly becomes prohibitively slow above ndims=6.
     #[test]
-    fn test_interp_extrap_1d_to_7d_linear() {
+    fn test_interp_extrap_1d_to_6d_linear() {
         for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
@@ -624,10 +621,10 @@ mod test {
         }
     }
 
-    /// Under interpolation, a hermite spline with natural boundary condition
+    /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_extrap_1d_to_7d_quadratic() {
+    fn test_interp_extrap_1d_to_6d_quadratic() {
         for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
@@ -675,6 +672,68 @@ mod test {
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
+        }
+    }
+
+    /// Under interpolation, a hermite spline with natural boundary condition
+    /// can reproduce an N-dimensional sine function fairly closely, but not exactly.
+    /// More points are required to capture a sine function, so fewer dimensions are tested
+    /// to keep test run times low.
+    #[test]
+    fn test_interp_1d_to_3d_sine() {
+        for ndims in 1..3 {
+            println!("Testing in {ndims} dims");
+            // Interp grid
+            let dims: Vec<usize> = vec![10; ndims];
+            let xs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .collect();
+            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+            let u: Vec<f64> = (0..grid.len())
+                .map(|i| {
+                    let mut v = 0.0;
+                    for j in 0..ndims {
+                        v += (grid[i][j] * 6.28 / 10.0).sin();
+                    }
+                    v
+                })
+                .collect(); // Quadratic in every direction
+            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+
+            // Observation points
+            let xobs: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 1))
+                .collect();
+            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+                .map(|i| gridobs.iter().map(|x| x[i]).collect())
+                .collect(); // transpose
+            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+            let uobs: Vec<f64> = (0..gridobs.len())
+                .map(|i| {
+                    let mut v = 0.0;
+                    for j in 0..ndims {
+                        v += (gridobs[i][j] * 6.28 / 10.0).sin();
+                    }
+                    v
+                })
+                .collect(); // Quadratic in every direction
+            let mut out = vec![0.0; uobs.len()];
+
+            // Evaluate
+            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+
+            // Check that interpolated and extrapolated values match expectation,
+            // using an absolute difference because some points are very close to or exactly at zero,
+            // and do not do well under a check on relative difference.
+            let tol = 2e-2 * f64::from(ndims as u32);
+
+            (0..uobs.len()).for_each(|i| {
+                let err = out[i] - uobs[i];
+                println!("{err}");
+                assert!(err.abs() < tol);
+            });
         }
     }
 }
