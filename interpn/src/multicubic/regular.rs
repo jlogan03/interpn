@@ -405,11 +405,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
     match sat {
         Saturation::None => {
             // This is the nominal case
-            if !(t >= T::zero() && t <= one) {
-                let tprint = <f64 as NumCast>::from(t).unwrap();
-                println!("{tprint}");
-                // panic!();
-            }
             let y0 = vals[1];
             let dy = vals[2] - vals[1];
 
