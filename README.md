@@ -7,7 +7,7 @@ Note that for a self-consistent multidimensional linear interpolation, there are
 to each observation point, and as such, that is the theoretical floor for performance scaling. That said,
 depending on the implementation, the constant term can vary by more than an order of magnitude.
 
-Cubic interpolations require two more degrees of freedom per dimension, and have a minimal runtime scaling of 4^ndims.
+Cubic interpolations require two more degrees of freedom per dimension, which results in a minimal runtime scaling of 4^ndims.
 Similar to the linear methods, depending on implementation, the constant term can vary by orders of magnitude,
 as can the RAM usage.
 
