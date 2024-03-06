@@ -1,23 +1,27 @@
 //! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
-//! 
+//!
 //! On interior points, a hermite spline is used, with the derivative at each
 //! grid point matched to a second-order central difference. This allows the
 //! interpolant to reproduce a quadratic function exactly, and to approximate
 //! others with minimal overshoot and wobble.
-//! 
+//!
 //! At the grid boundary, a natural spline boundary condition is applied,
 //! meaning the third derivative of the interpolant is constrainted to zero
 //! at the last grid point, with the result that the interpolant is quadratic
 //! on the last interval before the boundary.
-//! 
-//! Extrapolation is linear on the extrapolated dimensions, holding the same
-//! derivative as the natural boundary condition produces at the last grid point.
-//! 
+//!
+//! With "linearize_extrapolation" set, extrapolation is linear on the extrapolated 
+//! dimensions, holding the same derivative as the natural boundary condition produces
+//! at the last grid point. Otherwise, the last grid cell's spline function is continued,
+//! producing a quadratic extrapolation.
+//!
 //! This effectively gives a gradual decrease in the order of the interpolant
 //! as the observation point approaches then leaves the grid:
 //! 
+//! out                     out
 //! ---|---|---|---|---|---|--- Grid
-//!  1   2   3   3   3   2   1  Order of interpolant between grid points
+//!  2   2   3   3   3   2   2  Order of interpolant between grid points
+//!  1                       1  Extrapolation with linearize_extrapolation
 //!
 //! Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 //!
@@ -32,7 +36,7 @@
 //!
 //! Timing
 //! * Timing determinism very tight, but is not exact due to the
-//!   differences in calculations (but not complexity) between 
+//!   differences in calculations (but not complexity) between
 //!   interpolation and extrapolation.
 //! * An interpolation-only variant of this algorithm could achieve
 //!   near-deterministic timing, but would produce incorrect results
@@ -65,7 +69,8 @@
 //! let mut out = [0.0; 2];
 //!
 //! // Do interpolation
-//! interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
+//! let linearize_extrapolation = false;
+//! interpn(&dims, &starts, &steps, &z, linearize_extrapolation, &obs, &mut out).unwrap();
 //! ```
 use num_traits::{Float, NumCast};
 
@@ -79,25 +84,29 @@ enum Saturation {
 }
 
 /// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
-/// 
+///
 /// On interior points, a hermite spline is used, with the derivative at each
 /// grid point matched to a second-order central difference. This allows the
 /// interpolant to reproduce a quadratic function exactly, and to approximate
 /// others with minimal overshoot and wobble.
-/// 
+///
 /// At the grid boundary, a natural spline boundary condition is applied,
 /// meaning the third derivative of the interpolant is constrainted to zero
 /// at the last grid point, with the result that the interpolant is quadratic
 /// on the last interval before the boundary.
-/// 
-/// Extrapolation is linear on the extrapolated dimensions, holding the same
-/// derivative as the natural boundary condition produces at the last grid point.
-/// 
+///
+/// With "linearize_extrapolation" set, extrapolation is linear on the extrapolated 
+/// dimensions, holding the same derivative as the natural boundary condition produces
+/// at the last grid point. Otherwise, the last grid cell's spline function is continued,
+/// producing a quadratic extrapolation.
+///
 /// This effectively gives a gradual decrease in the order of the interpolant
 /// as the observation point approaches then leaves the grid:
 /// 
+/// out                     out
 /// ---|---|---|---|---|---|--- Grid
-///  1   2   3   3   3   2   1  Order of interpolant between grid points
+///  2   2   3   3   3   2   2  Order of interpolant between grid points
+///  1                       1  Extrapolation with linearize_extrapolation
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
@@ -112,7 +121,7 @@ enum Saturation {
 ///
 /// Timing
 /// * Timing determinism very tight, but is not exact due to the
-///   differences in calculations (but not complexity) between 
+///   differences in calculations (but not complexity) between
 ///   interpolation and extrapolation.
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
@@ -132,6 +141,9 @@ pub struct MulticubicRegular<'a, T: Float, const MAXDIMS: usize> {
 
     /// Values at each point, size prod(dims)
     vals: &'a [T],
+
+    /// Whether to extrapolate linearly instead of continuing spline
+    linearize_extrapolation: bool,
 }
 
 impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
@@ -151,6 +163,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         starts: &[T],
         steps: &[T],
         vals: &'a [T],
+        linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
@@ -188,6 +201,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             starts: starts_local,
             steps: steps_local,
             vals,
+            linearize_extrapolation,
         })
     }
 
@@ -368,7 +382,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                 loc[next_dim] = 0; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
-                interp_inner::<T, MAXDIMS>(vals, dts[next_dim], sat[next_dim])
+                interp_inner::<T, MAXDIMS>(
+                    vals,
+                    dts[next_dim],
+                    sat[next_dim],
+                    self.linearize_extrapolation,
+                )
             }
         }
     }
@@ -376,7 +395,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturation) -> T {
+fn interp_inner<T: Float, const MAXDIMS: usize>(
+    vals: [T; 4],
+    t: T,
+    sat: Saturation,
+    linearize_extrapolation: bool,
+) -> T {
     // Construct some constants using generic methods
     let one = T::one();
     let two = one + one;
@@ -408,15 +432,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // the use of a cubic function where there is not enough information
             // to support it.
             let k0 = -(vals[2] - vals[0]) / two;
-            let k1 = two * dy - k0;  // Natural spline boundary condition
+            let k1 = two * dy - k0; // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideLow => {
-            // Fall back on linear extrapolation
-            // `t` is already negative, since it's calculated
-            // w.r.t. index 1, but is off by a normalized cell (1.0)
-            let t = -(t + one);
+            // Flip direction to maintain symmetry
+            // with the InsideHigh case
+            let t = -t; // `t` always w.r.t. index 1 of cube
+            let y0 = vals[1]; // Same starting point, opposite direction
             let y1 = vals[0];
             let dy = vals[0] - vals[1];
 
@@ -428,9 +452,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // the use of a cubic function where there is not enough information
             // to support it.
             let k0 = -(vals[2] - vals[0]) / two;
-            let k1 = two * dy - k0;  // Natural spline boundary condition
+            let k1 = two * dy - k0; // Natural spline boundary condition
 
-            y1 + k1 * t // `t` is negative
+            // If we are linearizing the interpolant under extrapolation,
+            // hold the last slope outside the grid
+            if linearize_extrapolation {
+                y1 + k1 * (t - one)
+            } else {
+                normalized_hermite_spline(t, y0, dy, k0, k1)
+            }
         }
         Saturation::InsideHigh => {
             // Shift cell up an index
@@ -448,15 +478,16 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // the use of a cubic function where there is not enough information
             // to support it.
             let k0 = (vals[3] - vals[1]) / two;
-            let k1 = two * dy - k0;  // Natural spline boundary condition
+            let k1 = two * dy - k0; // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideHigh => {
-            // Fall back on linear extrapolation
-            // and offset `t`, which has value relative to index 1
-            // but will be used relative to index 3
-            let t = t - two;
+            // Shift cell up an index
+            // and offset `t`, which has value between 1 and 2
+            // because it is calculated w.r.t. index 1
+            let t = t - one;
+            let y0 = vals[2];
             let y1 = vals[3];
             let dy = vals[3] - vals[2];
 
@@ -468,9 +499,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(vals: [T; 4], t: T, sat: Saturat
             // the use of a cubic function where there is not enough information
             // to support it.
             let k0 = (vals[3] - vals[1]) / two;
-            let k1 = two * dy - k0;  // Natural spline boundary condition
+            let k1 = two * dy - k0; // Natural spline boundary condition
 
-            y1 + k1 * t
+            // If we are linearizing the interpolant under extrapolation,
+            // hold the last slope outside the grid
+            if linearize_extrapolation {
+                y1 + k1 * (t - one)
+            } else {
+                normalized_hermite_spline(t, y0, dy, k0, k1)
+            }
         }
     }
 }
@@ -522,10 +559,12 @@ pub fn interpn<T: Float>(
     starts: &[T],
     steps: &[T],
     vals: &[T],
+    linearize_extrapolation: bool,
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
+        .interp(obs, out)?;
     Ok(())
 }
 
@@ -557,7 +596,7 @@ mod test {
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64),5))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -567,8 +606,16 @@ mod test {
             let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
             let mut out = vec![0.0; uobs.len()];
 
-            // Evaluate
-            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
+            // Evaluate with spline extrapolation, which should collapse to linear
+            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+
+            // Check that interpolated values match expectation,
+            // using an absolute difference because some points are very close to or exactly at zero,
+            // and do not do well under a check on relative difference.
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+
+            // Evaluate with linear extrapolation
+            interpn(&dims, &starts, &steps, &u, true, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
@@ -580,7 +627,7 @@ mod test {
     /// Under interpolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_1d_to_7d_quadratic() {
+    fn test_interp_extrap_1d_to_7d_quadratic() {
         for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
@@ -589,41 +636,45 @@ mod test {
                 .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
                 .collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = (0..grid.len()).map(|i| {
-                let mut v = 0.0;
-                for j in 0..ndims {
-                    v += grid[i][j] * grid[i][j];
-                }
-                v
-            }).collect();  // Quadratic in every direction
+            let u: Vec<f64> = (0..grid.len())
+                .map(|i| {
+                    let mut v = 0.0;
+                    for j in 0..ndims {
+                        v += grid[i][j] * grid[i][j];
+                    }
+                    v
+                })
+                .collect(); // Quadratic in every direction
             let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
             let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64),5))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
                 .map(|i| gridobs.iter().map(|x| x[i]).collect())
                 .collect(); // transpose
             let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = (0..gridobs.len()).map(|i| {
-                let mut v = 0.0;
-                for j in 0..ndims {
-                    v += gridobs[i][j] * gridobs[i][j];
-                }
-                v
-            }).collect();  // Quadratic in every direction
+            let uobs: Vec<f64> = (0..gridobs.len())
+                .map(|i| {
+                    let mut v = 0.0;
+                    for j in 0..ndims {
+                        v += gridobs[i][j] * gridobs[i][j];
+                    }
+                    v
+                })
+                .collect(); // Quadratic in every direction
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
+            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
 
-            // Check that interpolated values match expectation,
+            // Check that interpolated and extrapolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
         }
     }
 }

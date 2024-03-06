@@ -2,14 +2,19 @@
 //! prioritizing correctness, performance, and compatiblity with memory-constrained environments.
 //!
 //! # Performance Scalings
-//! Note that for a self-consistent multidimensional interpolation, there are 2^ndims grid values that contribute
+//! Note that for a self-consistent multidimensional linear interpolation, there are 2^ndims grid values that contribute
 //! to each observation point, and as such, that is the theoretical floor for performance scaling. That said,
 //! depending on the implementation, the constant term can vary by more than an order of magnitude.
+//! 
+//! Cubic interpolations require two more degrees of freedom per dimension, and have a minimal runtime scaling of 4^ndims.
+//! Similar to the linear methods, depending on implementation, the constant term can vary by orders of magnitude,
+//! as can the RAM usage.
 //!
 //! | Method                        | RAM       | Interp. Cost (Best Case) | Interp. Cost (Worst Case)               | Extrap. Cost (Worst Case)                      |
 //! |-------------------------------|-----------|--------------------------|-----------------------------------------|------------------------------------------------|
 //! | multilinear::regular          | O(ndims)  | O(2^ndims * ndims)       | O(2^ndims * ndims)                      | O(2^ndims + ndims^2)                           |
 //! | multilinear::rectilinear      | O(ndims)  | O(2^ndims * ndims)       | O(ndims * (2^ndims + log2(gridsize)))   | O(ndims * (2^ndims + ndims + log2(gridsize)))  |
+//! | multicubic::regular           | O(ndims)  | O(4^ndims)               | O(4^ndims)                              | O(4^ndims)                                     |
 //!
 //! # Example: Multilinear and Multicubic w/ Regular Grid
 //! ```rust
@@ -40,7 +45,7 @@
 //!
 //! // Do interpolation
 //! multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
-//! multicubic::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+//! multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out);
 //! ```
 //!
 //! # Example: Multilinear w/ Rectilinear Grid

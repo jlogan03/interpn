@@ -155,7 +155,7 @@ macro_rules! bench_interp_specific {
 
                 b.iter(|| {
                     black_box({
-                        multicubic::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out)
+                        multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out)
                             .unwrap()
                     })
                 });
