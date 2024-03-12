@@ -593,7 +593,7 @@ mod test {
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), dims[i] + 2))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -647,7 +647,7 @@ mod test {
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), dims[i] + 2))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -703,7 +703,7 @@ mod test {
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 1))
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 2))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -731,7 +731,7 @@ mod test {
 
             (0..uobs.len()).for_each(|i| {
                 let err = out[i] - uobs[i];
-                println!("{err}");
+                // println!("{err}");
                 assert!(err.abs() < tol);
             });
         }

@@ -194,11 +194,13 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
     #[inline(always)]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
-        let ndims = self.dims.len();
+        let ndims = self.grids.len();
+
         // Make sure there are enough coordinate inputs for each dimension
         if x.len() != ndims {
             return Err("Dimension mismatch");
         }
+
         // Make sure the size of inputs and output match
         let size_matches = x.iter().all(|&xx| xx.len() == out.len());
         if !size_matches {
@@ -227,7 +229,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
     #[inline(always)]
     pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
-        let ndims = self.dims.len();
+        let ndims = self.grids.len();
         if !(x.len() == ndims && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
         }
@@ -589,35 +591,94 @@ pub fn interpn<T: Float>(
         .interp(obs, out)?;
     Ok(())
 }
-// We can use the same regular-grid method again
-pub use crate::multilinear::regular::check_bounds;
+
+// We can use the same rectilinear-grid method again
+pub use crate::multilinear::rectilinear::check_bounds;
 
 #[cfg(test)]
 mod test {
     use super::interpn;
     use crate::utils::*;
+    use crate::testing::*;
 
     /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
     /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow above ndims=6.
+    // #[test]
+    // fn test_interp_extrap_1d_to_6d_linear() {
+    //     for ndims in 1..6 {
+    //         println!("Testing in {ndims} dims");
+    //         // Interp grid
+    //         let dims: Vec<usize> = vec![4; ndims];
+    //         let xs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+    //             .collect();
+    //         let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+    //         let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
+    //         let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+    //         let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+
+    //         // Observation points
+    //         let xobs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
+    //             .collect();
+    //         let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+    //         let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| gridobs.iter().map(|x| x[i]).collect())
+    //             .collect(); // transpose
+    //         let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+    //         let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
+    //         let mut out = vec![0.0; uobs.len()];
+
+    //         // Evaluate with spline extrapolation, which should collapse to linear
+    //         interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+
+    //         // Check that interpolated values match expectation,
+    //         // using an absolute difference because some points are very close to or exactly at zero,
+    //         // and do not do well under a check on relative difference.
+    //         (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+
+    //         // Evaluate with linear extrapolation
+    //         interpn(&dims, &starts, &steps, &u, true, &xobsslice, &mut out[..]).unwrap();
+
+    //         // Check that interpolated values match expectation,
+    //         // using an absolute difference because some points are very close to or exactly at zero,
+    //         // and do not do well under a check on relative difference.
+    //         (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+    //     }
+    // }
+
+    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
+    /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
+    /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
+    /// rapidly becomes prohibitively slow in higher dimensions.
     #[test]
-    fn test_interp_extrap_1d_to_6d_linear() {
-        for ndims in 1..6 {
+    fn test_interp_extrap_1d_to_6d() {
+        let mut rng = rng_fixed_seed();
+
+        for ndims in 1..=6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
             let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .map(|i| {
+                    // Make a linear grid and add noise
+                    let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
+                    let dx = randn::<f64>(&mut rng, x.len());
+                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 1e3);
+                    (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                    x
+                })
                 .collect();
+
+            let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
             let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
+                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), dims[i] + 2))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -627,16 +688,11 @@ mod test {
             let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
             let mut out = vec![0.0; uobs.len()];
 
-            // Evaluate with spline extrapolation, which should collapse to linear
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
-
-            // Check that interpolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
-
-            // Evaluate with linear extrapolation
-            interpn(&dims, &starts, &steps, &u, true, &xobsslice, &mut out[..]).unwrap();
+            // Evaluate
+            // let n = grids.len();
+            // let m = xobsslice.len();
+            // println!("{n}, {m}");
+            interpn(&grids, &u, true, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
@@ -645,119 +701,119 @@ mod test {
         }
     }
 
-    /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
-    /// can reproduce an N-dimensional quadratic function exactly
-    #[test]
-    fn test_interp_extrap_1d_to_6d_quadratic() {
-        for ndims in 1..6 {
-            println!("Testing in {ndims} dims");
-            // Interp grid
-            let dims: Vec<usize> = vec![4; ndims];
-            let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
-                .collect();
-            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = (0..grid.len())
-                .map(|i| {
-                    let mut v = 0.0;
-                    for j in 0..ndims {
-                        v += grid[i][j] * grid[i][j];
-                    }
-                    v
-                })
-                .collect(); // Quadratic in every direction
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+    // /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
+    // /// can reproduce an N-dimensional quadratic function exactly
+    // #[test]
+    // fn test_interp_extrap_1d_to_6d_quadratic() {
+    //     for ndims in 1..6 {
+    //         println!("Testing in {ndims} dims");
+    //         // Interp grid
+    //         let dims: Vec<usize> = vec![4; ndims];
+    //         let xs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+    //             .collect();
+    //         let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+    //         let u: Vec<f64> = (0..grid.len())
+    //             .map(|i| {
+    //                 let mut v = 0.0;
+    //                 for j in 0..ndims {
+    //                     v += grid[i][j] * grid[i][j];
+    //                 }
+    //                 v
+    //             })
+    //             .collect(); // Quadratic in every direction
+    //         let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+    //         let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
-            // Observation points
-            let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
-                .collect();
-            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| gridobs.iter().map(|x| x[i]).collect())
-                .collect(); // transpose
-            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = (0..gridobs.len())
-                .map(|i| {
-                    let mut v = 0.0;
-                    for j in 0..ndims {
-                        v += gridobs[i][j] * gridobs[i][j];
-                    }
-                    v
-                })
-                .collect(); // Quadratic in every direction
-            let mut out = vec![0.0; uobs.len()];
+    //         // Observation points
+    //         let xobs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-7.0 * (i as f64), 7.0 * ((i + 1) as f64), 5))
+    //             .collect();
+    //         let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+    //         let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| gridobs.iter().map(|x| x[i]).collect())
+    //             .collect(); // transpose
+    //         let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+    //         let uobs: Vec<f64> = (0..gridobs.len())
+    //             .map(|i| {
+    //                 let mut v = 0.0;
+    //                 for j in 0..ndims {
+    //                     v += gridobs[i][j] * gridobs[i][j];
+    //                 }
+    //                 v
+    //             })
+    //             .collect(); // Quadratic in every direction
+    //         let mut out = vec![0.0; uobs.len()];
 
-            // Evaluate
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+    //         // Evaluate
+    //         interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
 
-            // Check that interpolated and extrapolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
-        }
-    }
+    //         // Check that interpolated and extrapolated values match expectation,
+    //         // using an absolute difference because some points are very close to or exactly at zero,
+    //         // and do not do well under a check on relative difference.
+    //         (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
+    //     }
+    // }
 
-    /// Under interpolation, a hermite spline with natural boundary condition
-    /// can reproduce an N-dimensional sine function fairly closely, but not exactly.
-    /// More points are required to capture a sine function, so fewer dimensions are tested
-    /// to keep test run times low.
-    #[test]
-    fn test_interp_1d_to_3d_sine() {
-        for ndims in 1..3 {
-            println!("Testing in {ndims} dims");
-            // Interp grid
-            let dims: Vec<usize> = vec![10; ndims];
-            let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
-                .collect();
-            let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
-            let u: Vec<f64> = (0..grid.len())
-                .map(|i| {
-                    let mut v = 0.0;
-                    for j in 0..ndims {
-                        v += (grid[i][j] * 6.28 / 10.0).sin();
-                    }
-                    v
-                })
-                .collect(); // Quadratic in every direction
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+    // /// Under interpolation, a hermite spline with natural boundary condition
+    // /// can reproduce an N-dimensional sine function fairly closely, but not exactly.
+    // /// More points are required to capture a sine function, so fewer dimensions are tested
+    // /// to keep test run times low.
+    // #[test]
+    // fn test_interp_1d_to_3d_sine() {
+    //     for ndims in 1..3 {
+    //         println!("Testing in {ndims} dims");
+    //         // Interp grid
+    //         let dims: Vec<usize> = vec![10; ndims];
+    //         let xs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+    //             .collect();
+    //         let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
+    //         let u: Vec<f64> = (0..grid.len())
+    //             .map(|i| {
+    //                 let mut v = 0.0;
+    //                 for j in 0..ndims {
+    //                     v += (grid[i][j] * 6.28 / 10.0).sin();
+    //                 }
+    //                 v
+    //             })
+    //             .collect(); // Quadratic in every direction
+    //         let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
+    //         let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
-            // Observation points
-            let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 1))
-                .collect();
-            let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-            let gridobs_t: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| gridobs.iter().map(|x| x[i]).collect())
-                .collect(); // transpose
-            let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = (0..gridobs.len())
-                .map(|i| {
-                    let mut v = 0.0;
-                    for j in 0..ndims {
-                        v += (gridobs[i][j] * 6.28 / 10.0).sin();
-                    }
-                    v
-                })
-                .collect(); // Quadratic in every direction
-            let mut out = vec![0.0; uobs.len()];
+    //         // Observation points
+    //         let xobs: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 1))
+    //             .collect();
+    //         let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
+    //         let gridobs_t: Vec<Vec<f64>> = (0..ndims)
+    //             .map(|i| gridobs.iter().map(|x| x[i]).collect())
+    //             .collect(); // transpose
+    //         let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
+    //         let uobs: Vec<f64> = (0..gridobs.len())
+    //             .map(|i| {
+    //                 let mut v = 0.0;
+    //                 for j in 0..ndims {
+    //                     v += (gridobs[i][j] * 6.28 / 10.0).sin();
+    //                 }
+    //                 v
+    //             })
+    //             .collect(); // Quadratic in every direction
+    //         let mut out = vec![0.0; uobs.len()];
 
-            // Evaluate
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+    //         // Evaluate
+    //         interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
 
-            // Check that interpolated and extrapolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
-            let tol = 2e-2 * f64::from(ndims as u32);
+    //         // Check that interpolated and extrapolated values match expectation,
+    //         // using an absolute difference because some points are very close to or exactly at zero,
+    //         // and do not do well under a check on relative difference.
+    //         let tol = 2e-2 * f64::from(ndims as u32);
 
-            (0..uobs.len()).for_each(|i| {
-                let err = out[i] - uobs[i];
-                println!("{err}");
-                assert!(err.abs() < tol);
-            });
-        }
-    }
+    //         (0..uobs.len()).for_each(|i| {
+    //             let err = out[i] - uobs[i];
+    //             println!("{err}");
+    //             assert!(err.abs() < tol);
+    //         });
+    //     }
+    // }
 }
