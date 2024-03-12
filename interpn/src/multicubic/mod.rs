@@ -44,8 +44,8 @@
 //!     on the correctness and continuity of the first derivative,
 //!     but can tolerate some discontinuity in the second derivative
 
-pub mod regular;
 pub mod rectilinear;
+pub mod regular;
 
-pub use regular::MulticubicRegular;
 pub use rectilinear::MulticubicRectilinear;
+pub use regular::MulticubicRegular;

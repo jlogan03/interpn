@@ -402,8 +402,24 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
     let one = T::one();
     let two = one + one;
 
+    // For cases on the interior, use two slopes (from centered difference) and two values
+    // as the BCs.
+    //
+    // For locations falling near and edge, take one centered
+    // difference for the inside derivative,
+    // then for the derivative at the edge, impose a natural
+    // spline constraint, meaning the third derivative q'''(t) = 0
+    // at the last grid point, which produces a quadratic in the
+    // last cell, reducing wobble that would be cause by enforcing
+    // the use of a cubic function where there is not enough information
+    // to support it.
+
     match sat {
         Saturation::None => {
+            //       |-> t
+            // --|---|---|---|--
+            //         x
+            //
             // This is the nominal case
             let y0 = vals[1];
             let dy = vals[2] - vals[1];
@@ -415,25 +431,26 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::InsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            //     x
+            //
             // Flip direction to maintain symmetry
             // with the InsideHigh case
             let t = -t; // `t` always w.r.t. index 1 of cube
             let y0 = vals[1]; // Same starting point, opposite direction
             let dy = vals[0] - vals[1];
 
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
             let k0 = -(vals[2] - vals[0]) / two;
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            // x
+            //
             // Flip direction to maintain symmetry
             // with the InsideHigh case
             let t = -t; // `t` always w.r.t. index 1 of cube
@@ -441,13 +458,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             let y1 = vals[0];
             let dy = vals[0] - vals[1];
 
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
             let k0 = -(vals[2] - vals[0]) / two;
             let k1 = two * dy - k0; // Natural spline boundary condition
 
@@ -460,6 +470,10 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             }
         }
         Saturation::InsideHigh => {
+            //           |-> t
+            // --|---|---|---|--
+            //             x
+            //
             // Shift cell up an index
             // and offset `t`, which has value between 1 and 2
             // because it is calculated w.r.t. index 1
@@ -467,19 +481,16 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             let y0 = vals[2];
             let dy = vals[3] - vals[2];
 
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
             let k0 = (vals[3] - vals[1]) / two;
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideHigh => {
+            //           |-> t
+            // --|---|---|---|--
+            //                 x
+            //
             // Shift cell up an index
             // and offset `t`, which has value between 1 and 2
             // because it is calculated w.r.t. index 1
@@ -488,13 +499,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             let y1 = vals[3];
             let dy = vals[3] - vals[2];
 
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
             let k0 = (vals[3] - vals[1]) / two;
             let k1 = two * dy - k0; // Natural spline boundary condition
 
