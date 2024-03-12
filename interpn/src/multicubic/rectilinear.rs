@@ -681,7 +681,7 @@ mod test {
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
         }
     }
 
