@@ -243,7 +243,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
         // reduces memory overhead, but has not effect on throughput rate.
         let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
         let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
-        let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
         // Populate cumulative product of higher dimensions for indexing.
@@ -262,20 +261,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
             (origin[i], sat[i]) = self.get_loc(x[i], i)?;
         }
 
-        // Calculate normalized delta locations
-        for i in 0..ndims {
-            let index_one_loc = self.grids[i][origin[i] + 1];
-            let index_two_loc = self.grids[i][origin[i] + 2];
-            let dx = index_two_loc - index_one_loc;
-            dts[i] = (x[i] - index_one_loc) / dx;
-        }
-
         // Recursive interpolation of one dependency tree at a time
         // let loc = &origin; // Starting location in the tree is the origin
         let dim = ndims; // Start from the end and recurse back to zero
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
-        let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
+        let interped = self.populate(dim, sat, origin, loc, dimprod, x);
 
         Ok(interped)
     }
@@ -299,19 +290,14 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
         //
         // This process accounts for essentially the entire difference in
         // performance between this method and the regular-grid method.
-        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 1;
-
-        // let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        // Signed integer loc, with the bottom of the cell aligned to place the normalized
-        // coordinate t=0 at cell index 1
-        // let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
+        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 2;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
         let dimmax = n.saturating_sub(4).max(0); // maximum index for lower corner
         let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side
-        if iloc < -1 {
+        if iloc == -2 {
             saturation = Saturation::OutsideLow;
         }
         // Observation point is in the lower part of the cell
@@ -321,12 +307,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
         }
         // Observation point is in the upper part of the cell
         // but not outside the grid
-        else if iloc > (n - 3) {
+        else if iloc == n - 2 {
             saturation = Saturation::OutsideHigh;
         }
         // Observation point is in the upper part of the cell
         // but not outside the grid
-        else if iloc == (n - 3) {
+        else if iloc == n - 3 {
             saturation = Saturation::InsideHigh;
         }
         // Observation point is on the interior
@@ -346,7 +332,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
         origin: &[usize],
         loc: &mut [usize],
         dimprod: &[usize],
-        xs: &[T],
+        x: &[T],
     ) -> T {
         // Do the calc for this entry
         match dim {
@@ -364,7 +350,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
                 let mut vals = [T::zero(); 4];
                 for i in 0..4 {
                     loc[next_dim] = origin[next_dim] + i;
-                    vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, xs);
+                    vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, x);
                 }
                 loc[next_dim] = origin[next_dim]; // Reset for next usage
 
@@ -373,7 +359,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
                 interp_inner::<T, MAXDIMS>(
                     vals,
                     grid_cell,
-                    xs[next_dim],
+                    x[next_dim],
                     sat[next_dim],
                     self.linearize_extrapolation,
                 )
@@ -404,8 +390,8 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[0], vals[1], vals[2], h01, h12);
-            let k1 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12, h23);
+            let k0 = centered_difference_nonuniform(vals[0], vals[1], vals[2], h01 / h12, T::one());
+            let k1 = centered_difference_nonuniform(vals[1], vals[2], vals[3], T::one(), h23 / h12);
 
             let t = (x - grid_cell[1]) / h12;
 
@@ -428,7 +414,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], h01, h12);
+            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = -(x - grid_cell[1]) / h01;
@@ -452,7 +438,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], h01, h12);
+            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = -(x - grid_cell[1]) / h01;
@@ -481,7 +467,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12, h23);
+            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23,T::one());
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = (x - grid_cell[2]) / h23;
@@ -507,7 +493,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12, h23);
+            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = (x - grid_cell[2]) / h23;
@@ -548,7 +534,10 @@ fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
 /// A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 /// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
 ///
-/// Method B.
+/// Method B,
+/// which is essentially a distance-weighted average of the forward and backward
+/// differences s.t. the closer points have more influence on the estimate
+/// of the derivative.
 fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T) -> T {
     let a = h01 / (h01 + h12);
     let b = (y2 - y1) / h12;
