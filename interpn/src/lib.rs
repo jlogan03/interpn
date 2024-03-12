@@ -77,7 +77,8 @@
 //! ```
 //!
 //! # Development Roadmap
-//! * Recursive
+//! * Recursive multilinear methods (for better extrapolation speed and timing determinism)
+//! * Methods for unstructured triangular and tetrahedral meshes
 #![cfg_attr(not(feature = "std"), no_std)]
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]
