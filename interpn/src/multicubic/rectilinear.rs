@@ -381,8 +381,24 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
     let one = T::one();
     let two = one + one;
 
+    // For cases on the interior, use two slopes (from centered difference) and two values
+    // as the BCs.
+    //
+    // For locations falling near and edge, take one centered
+    // difference for the inside derivative,
+    // then for the derivative at the edge, impose a natural
+    // spline constraint, meaning the third derivative q'''(t) = 0
+    // at the last grid point, which produces a quadratic in the
+    // last cell, reducing wobble that would be cause by enforcing
+    // the use of a cubic function where there is not enough information
+    // to support it.
+
     match sat {
         Saturation::None => {
+            //       |-> t
+            // --|---|---|---|--
+            //         x
+            //
             // This is the nominal case
             let y0 = vals[1];
             let dy = vals[2] - vals[1];
@@ -398,23 +414,20 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::InsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            //     x
+            //
             // Flip direction to maintain symmetry
             // with the InsideHigh case.
-
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
 
             let y0 = vals[1]; // Same starting point, opposite direction
             let dy = vals[0] - vals[1];
 
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
+            let k0 =
+                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = -(x - grid_cell[1]) / h01;
@@ -422,23 +435,21 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            // x
+            //
             // Flip direction to maintain symmetry
-            // with the InsideHigh case
+            // with the InsideHigh case.
 
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
             let y0 = vals[1];
             let y1 = vals[0];
             let dy = vals[0] - vals[1];
 
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 = -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
+            let k0 =
+                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = -(x - grid_cell[1]) / h01;
@@ -452,22 +463,15 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             }
         }
         Saturation::InsideHigh => {
-            // Shift cell up an index
-
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
-
+            //           |-> t
+            // --|---|---|---|--
+            //             x
             let y0 = vals[2];
             let dy = vals[3] - vals[2];
 
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23,T::one());
+            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
             let k1 = two * dy - k0; // Natural spline boundary condition
 
             let t = (x - grid_cell[2]) / h23;
@@ -475,18 +479,9 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
         Saturation::OutsideHigh => {
-            // Shift cell up an index
-            // and offset `t`, which has value between 1 and 2
-            // because it is calculated w.r.t. index 1
-
-            // Take one centered difference for the inside derivative,
-            // then for the derivative at the edge, impose a natural
-            // spline constraint, meaning the third derivative q'''(t) = 0
-            // at the last grid point, which produces a quadratic in the
-            // last cell, reducing wobble that would be cause by enforcing
-            // the use of a cubic function where there is not enough information
-            // to support it.
-
+            //           |-> t
+            // --|---|---|---|--
+            //                 x
             let y0 = vals[2];
             let y1 = vals[3];
             let dy = vals[3] - vals[2];
@@ -587,8 +582,8 @@ pub use crate::multilinear::rectilinear::check_bounds;
 #[cfg(test)]
 mod test {
     use super::interpn;
-    use crate::utils::*;
     use crate::testing::*;
+    use crate::utils::*;
 
     /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
