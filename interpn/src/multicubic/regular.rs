@@ -317,7 +317,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
-        let dimmax = (n - 4).max(0); // maximum index for lower corner
+        let dimmax = n.saturating_sub(4).max(0); // maximum index for lower corner
         let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side

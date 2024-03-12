@@ -163,6 +163,40 @@ macro_rules! bench_interp_specific {
                 });
             },
         );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Cubic Rectilinear {}x{}D MAXDIMS=8, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                // Interpolation grid with noise
+                let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
+
+                // Observation grid
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = match $kind {
+                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                };
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let mut out = vec![0.0; size];
+
+                // Interpolator inputs
+                let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+
+                b.iter(|| {
+                    black_box(
+                        multicubic::rectilinear::interpn(&gridslice, &z, false, &obs, &mut out)
+                            .unwrap(),
+                    )
+                });
+            },
+        );
     };
 }
 
