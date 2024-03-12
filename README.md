@@ -16,6 +16,7 @@ as can the RAM usage.
 | multilinear::regular          | O(ndims)  | O(2^ndims * ndims)       | O(2^ndims * ndims)                      | O(2^ndims + ndims^2)                           |
 | multilinear::rectilinear      | O(ndims)  | O(2^ndims * ndims)       | O(ndims * (2^ndims + log2(gridsize)))   | O(ndims * (2^ndims + ndims + log2(gridsize)))  |
 | multicubic::regular           | O(ndims)  | O(4^ndims)               | O(4^ndims)                              | O(4^ndims)                                     |
+| multicubic::rectilinear       | O(ndims)  | O(4^ndims)               | O(4^ndims) + ndims * log2(gridsize)     | O(4^ndims) + ndims * log2(gridsize)            |
 
 # Example: Multilinear and Multicubic w/ Regular Grid
 ```rust
@@ -49,19 +50,19 @@ multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
 multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out);
 ```
 
-# Example: Multilinear w/ Rectilinear Grid
+# Example: Multilinear and Multicubic w/ Rectilinear Grid
 ```rust
-use interpn::multilinear::rectilinear;
+use interpn::{multilinear, multicubic};
 
 // Define a grid
-let x = [1.0_f64, 1.2, 2.0];
-let y = [1.0_f64, 1.3, 1.5];
+let x = [1.0_f64, 2.0, 3.0, 4.0];
+let y = [0.0_f64, 1.0, 2.0, 3.0];
 
 // Grid input for rectilinear method
 let grids = &[&x[..], &y[..]];
 
 // Values at grid points
-let z = [2.0; 9];
+let z = [2.0; 16];
 
 // Points to interpolate/extrapolate
 let xobs = [0.0_f64, 5.0];
@@ -72,11 +73,13 @@ let obs = [&xobs[..], &yobs[..]];
 let mut out = [0.0; 2];
 
 // Do interpolation
-rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
+multilinear::rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
+multicubic::rectilinear::interpn(grids, &z, false, &obs, &mut out).unwrap();
 ```
 
 # Development Roadmap
-* Recursive multilinear method (for better extrapolation speed and timing determinism)
+* Recursive multilinear methods (for better extrapolation speed and timing determinism)
+* Methods for unstructured triangular and tetrahedral meshes
 
 # License
 Licensed under either of

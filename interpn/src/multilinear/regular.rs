@@ -112,7 +112,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
-        let nvals = dims.iter().product();
+        let nvals: usize = dims.iter().product();
         if !(starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0) {
             return Err("Dimension mismatch");
         }

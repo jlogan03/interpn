@@ -117,7 +117,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
-        let nvals = dims[..ndims].iter().product();
+        let nvals: usize = dims[..ndims].iter().product();
         if !(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
         };
@@ -539,7 +539,7 @@ mod test {
                     // Make a linear grid and add noise
                     let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
                     let dx = randn::<f64>(&mut rng, x.len());
-                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 1e3);
+                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
                     (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
                     x
                 })

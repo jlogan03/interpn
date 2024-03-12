@@ -42,6 +42,7 @@ pub fn _start() -> ! {
     regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
     rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
     multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out).unwrap();
+    multicubic::rectilinear::interpn(grids, &z, false, &obs, &mut out).unwrap();
 
     loop {} // We don't actually run this, just compile it
 }
