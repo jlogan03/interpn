@@ -67,7 +67,7 @@
 //! let linearize_extrapolation = false;
 //! rectilinear::interpn(grids, &z, linearize_extrapolation, &obs, &mut out).unwrap();
 //! ```
-//! 
+//!
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
