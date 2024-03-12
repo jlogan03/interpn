@@ -45,4 +45,7 @@
 //!     but can tolerate some discontinuity in the second derivative
 
 pub mod regular;
+pub mod rectilinear;
+
 pub use regular::MulticubicRegular;
+pub use rectilinear::MulticubicRectilinear;

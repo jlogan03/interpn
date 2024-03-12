@@ -117,7 +117,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         let ndims = grids.len();
         let mut dims = [1_usize; MAXDIMS];
         (0..ndims).for_each(|i| dims[i] = grids[i].len());
-        let nvals = dims[..ndims].iter().product();
+        let nvals: usize = dims[..ndims].iter().product();
         if !(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
         };
