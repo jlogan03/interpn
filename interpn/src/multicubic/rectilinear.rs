@@ -1,4 +1,4 @@
-//! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
+//! An arbitrary-dimensional multicubic interpolator / extrapolator on a rectilinear grid.
 //!
 //! On interior points, a hermite spline is used, with the derivative at each
 //! grid point matched to a second-order central difference. This allows the
@@ -43,7 +43,7 @@
 //!   when evaluated at off-grid points.
 //!
 //! ```rust
-//! use interpn::multicubic::regular::interpn;
+//! use interpn::multicubic::rectilinear;
 //!
 //! // Define a grid
 //! let x = [1.0_f64, 2.0, 3.0, 4.0];
@@ -52,15 +52,10 @@
 //! // Grid input for rectilinear method
 //! let grids = &[&x[..], &y[..]];
 //!
-//! // Grid input for regular grid method
-//! let dims = [x.len(), y.len()];
-//! let starts = [x[0], y[0]];
-//! let steps = [x[1] - x[0], y[1] - y[0]];
-//!
 //! // Values at grid points
 //! let z = [2.0; 16];
 //!
-//! // Observation points to interpolate/extrapolate
+//! // Points to interpolate/extrapolate
 //! let xobs = [0.0_f64, 5.0];
 //! let yobs = [-1.0, 3.0];
 //! let obs = [&xobs[..], &yobs[..]];
@@ -70,8 +65,12 @@
 //!
 //! // Do interpolation
 //! let linearize_extrapolation = false;
-//! interpn(&dims, &starts, &steps, &z, linearize_extrapolation, &obs, &mut out).unwrap();
+//! rectilinear::interpn(grids, &z, linearize_extrapolation, &obs, &mut out).unwrap();
 //! ```
+//! 
+//! References
+//! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
+//!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
 use num_traits::Float;
 
 #[derive(Clone, Copy, PartialEq)]
