@@ -10,18 +10,14 @@
 //! and throughput performance is similar to existing methods.
 //!
 //! Operation Complexity
-//! * Interpolating or extrapolating in face regions goes like O(2^ndims * ndims).
-//! * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
+//! * O(2^ndims) for interpolation and extrapolation in all regions.
 //!
 //! Memory Complexity
 //! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
 //!
 //! Timing
-//! * Timing determinism is not guaranteed due to the
-//!   difference in complexity between interpolation and extrapolation.
-//! * An interpolation-only variant of this algorithm could achieve
-//!   near-deterministic timing, but would produce incorrect results
-//!   when evaluated at off-grid points.
+//! * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
+//!   That said, floating-point calculations can take a different number of clock-cycles depending on numerical values.
 //!
 //! ```rust
 //! use interpn::multilinear::regular;
@@ -54,23 +50,27 @@
 //! ```
 //!
 //! References
-//! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
+//! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
 use num_traits::{Float, NumCast};
 
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
+///
 /// Operation Complexity
-/// * Interpolating or extrapolating in face regions goes like O(2^ndims).
-/// * Extrapolating in corner regions goes like O(2^ndims * ndims^2).
+/// * O(2^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
 /// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
+/// * While evaluation is recursive, the recursion has constant
+///   max depth of MAXDIMS, which provides a guarantee on peak
+///   memory usage.
 ///
 /// Timing
-/// * Timing determinism is not guaranteed due to the
-///   difference in complexity between interpolation and extrapolation.
+/// * Timing determinism very tight, but is not exact due to the
+///   differences in calculations (but not complexity) between
+///   interpolation and extrapolation.
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
 ///   when evaluated at off-grid points.
@@ -94,8 +94,7 @@ pub struct MultilinearRegular<'a, T: Float, const MAXDIMS: usize> {
 impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
-    /// This method does not handle degenerate dimensions with only a single
-    /// grid entry; all grids must have at least 2 entries.
+    /// This method does not handle degenerate dimensions; all grids must have at least 2 entries.
     ///
     /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
     ///
@@ -108,7 +107,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         dims: &[usize],
         starts: &[T],
         steps: &[T],
-        vals: &'a [T],
+        vals: &'a [T]
     ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
@@ -117,7 +116,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
             return Err("Dimension mismatch");
         }
 
-        // Make sure all dimensions have at least two entries
+        // Make sure all dimensions have at least four entries
         let degenerate = dims[..ndims].iter().any(|&x| x < 2);
         if degenerate {
             return Err("All grids must have at least two entries");
@@ -204,11 +203,8 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let steps = &self.steps[..ndims]; // Step size for each dimension
-        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
-        let ioffs = &mut [false; MAXDIMS][..ndims]; // Offset index for selected vertex
-        let sat = &mut [0_u8; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
-        let dxs = &mut [T::zero(); MAXDIMS][..ndims]; // Sub-cell volume storage
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
+        let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
         // Populate cumulative product of higher dimensions for indexing.
@@ -222,239 +218,103 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
             acc *= self.dims[ndims - i - 1];
         }
 
-        // Compute volume of reference cell.
-        // Maybe counterintuitively, doing this calculation for every call
-        // is as fast or faster than doing it once at struct initialization
-        // then referring to the stored value.
-        let cell_vol = steps[1..].iter().fold(steps[0], |acc, x| acc * *x);
-
         // Populate lower corner and saturation flag for each dimension
         for i in 0..ndims {
-            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+            origin[i] = self.get_loc(x[i], i)?;
         }
 
-        // Check if any dimension is saturated.
-        let any_dims_saturated = sat.iter().any(|&x| x != 0);
-
-        // Traverse vertices, summing contributions to the interpolated value.
-        //
-        // This visits the 2^ndims elements of the cartesian product
-        // of `[0, 1] x ... x [0, 1]` without simultaneously actualizing them in storage.
-        let mut interped = T::zero();
-        let nverts = 2_usize.pow(ndims as u32);
-        for i in 0..nverts {
-            let mut k: usize = 0; // index of the value for this vertex in self.vals
-
-            for j in 0..ndims {
-                // Every 2^nth vertex, flip which side of the cube we are examining
-                // in the nth dimension.
-                //
-                // Because i % 2^n has double the period for each sequential n,
-                // and their phase is only aligned once every 2^n for the largest
-                // n in the set, this is guaranteed to produce a path that visits
-                // each vertex exactly once.
-                let flip = i % 2_usize.pow(j as u32) == 0;
-                if flip {
-                    ioffs[j] = !ioffs[j];
-                }
-
-                // Accumulate the index into the value array,
-                // saturating to the bound if the resulting index would be outside.
-                k += dimprod[j] * (origin[j] + ioffs[j] as usize);
-
-                // Find the vector from the opposite vertex to the observation point
-                let iloc = origin[j] + !ioffs[j] as usize; // Index of location of opposite vertex
-                let floc = T::from(iloc);
-                match floc {
-                    Some(floc) => {
-                        let loc = self.starts[j] + steps[j] * floc; // Loc. of opposite vertex
-                        dxs[j] = (x[j] - loc).abs(); // Use dxs[j] as storage for float locs
-                    }
-                    None => return Err("Unrepresentable coordinate value"),
-                }
-            }
-
-            // Get the value at this vertex
-            let v = self.vals[k];
-
-            // Accumulate contribution from this vertex
-            // * Interpolating: just take the volume-weighted value and continue on
-            // * Extrapolating
-            //   * With opposite vertex on multiple extrapolated dims: return zero
-            //   * With opposite vertex on exactly one extrapolated dim
-            //     * Negate contribution & clip extrapolated region to maintain linearity
-            //   * Otherwise (meaning, corner regions)
-            //     * O(ndim^2) operation to accumulate only the linear portions of
-            //       the extrapolated volumes.
-            //
-            // While this section looks nearly identical between the regular grid
-            // and rectilinear methods, it is different in a few subtle but important
-            // ways, and separating it into shared functions makes it even harder
-            // to read than it already is.
-            if !any_dims_saturated {
-                // Interpolating
-                let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x);
-                interped = interped + v * vol;
-            } else {
-                // Extrapolating requires some special attention.
-                let opsat = &mut [false; MAXDIMS][..ndims]; // Whether the opposite vertex is on the saturated bound
-                let thissat = &mut [false; MAXDIMS][..ndims]; // Whether the current vertex is on the saturated bound
-                let extrapdxs = &mut [T::zero(); MAXDIMS][..ndims]; // Extrapolated distances
-
-                let mut opsatcount = 0;
-                for j in 0..ndims {
-                    // For which dimensions is the opposite vertex on a saturated bound?
-                    opsat[j] = (!ioffs[j] && sat[j] == 2) || (ioffs[j] && sat[j] == 1);
-                    // For how many total dimensions is the opposite vertex on a saturated bound?
-                    opsatcount += opsat[j] as usize;
-
-                    // For which dimensions is the current vertex on a saturated bound?
-                    thissat[j] = sat[j] > 0 && !opsat[j];
-                }
-
-                // If the opposite vertex is on _more_ than one saturated bound,
-                // it should be clipped on multiple axes which, if the clipping
-                // were implemented in a general constructive geometry way, would
-                // result in a zero volume. Since we only deal in the difference
-                // in position between vertices and the observation point, our
-                // clipping method would not properly set this volume to zero,
-                // and we need to implement that behavior with explicit logic.
-                let zeroed = opsatcount > 1;
-                if zeroed {
-                    // No contribution from this vertex
-                    continue;
-                }
-
-                // If the opposite vertex is on exactly one saturated bound, negate its contribution
-                // in order to move smoothly from weighted-average on the interior to extrapolation
-                // on the exterior.
-                //
-                // If the opposite vertex is on exactly one saturated bound,
-                // allow the dx on that dimension to be as large as needed,
-                // but clip the dx on other saturated dimensions so that we
-                // don't produce an overlapping partition in outside-corner regions.
-                let neg = opsatcount == 1;
-                if neg {
-                    for j in 0..ndims {
-                        if thissat[j] {
-                            dxs[j] = dxs[j].min(steps[j]);
-                        }
-                    }
-
-                    let vol = dxs[1..].iter().fold(dxs[0], |acc, x| acc * *x).neg();
-                    interped = interped + v * vol;
-                    continue;
-                }
-
-                // If this vertex is on multiple saturated bounds, then the prism formed by the
-                // opposite vertex and the observation point will be extrapolated in more than
-                // one dimension, which will produce some regions with volume that scales
-                // nonlinearly with the position of the observation point.
-                // We need to restore linearity without resorting to using the recursive algorithm
-                // which would drive us to actualize (2^(n-1) * ndims) float values simultaneously.
-                //
-                // To do this, we can subtract the nonlinear regions' volume from the total
-                // volume of the opposite-to-observation prism for this vertex.
-                //
-                // Put differently - find the part of the volume that is scaling non-linearly
-                // in the coordinates, and bookkeep it to be removed entirely later.
-                //
-                // For one dimension, there are no such regions. For two dimensions, only the
-                // corner region contributes. For higher dimensions, there are increasing
-                // numbers of types of regions that appear, so we need a relatively general
-                // way of handling this without knowing all of those types of region.
-                //
-                // One way of circumventing the need to enumerate types of nonlinear region
-                // is to capitalize on the observation that the _linear_ regions are all of the
-                // same form, even in higher dimensions. We can traverse those instead,
-                // subtracting each one from the full extrapolated volume for this vertex
-                // until what's left is only the part that we want to remove. Then, we can
-                // remove that part and keep the rest.
-                //
-                // Continuing from that thought, we can skip evaluating the nonlinear portions
-                // entirely, by evaluating the interior portion and each linear exterior portion
-                // (which we needed to evaluate to remove them from the enclosing volume anyway)
-                // then summing the linear portions together directly. This avoids the loss of
-                // float precision that can come from addressing the nonlinear regions directly,
-                // as this can cause us to add some very large and very small numbers together
-                // in an order that is not necessarily favorable.
-
-                // Get the volume that is inside the cell
-                //   Copy forward the original dxs, extrapolated or not,
-                //   and clip to the cell boundary
-                (0..ndims).for_each(|j| extrapdxs[j] = dxs[j].min(steps[j]));
-                //   Get the volume of this region which does not extend outside the cell
-                let vinterior = extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
-
-                // Find each linear exterior region by, one at a time, taking the volume
-                // with one extrapolated dimension masked into the extrapdxs
-                // which are otherwise clipped to the interior region.
-                let mut vexterior = T::zero();
-                for j in 0..ndims {
-                    if thissat[j] {
-                        let dx_was = extrapdxs[j];
-                        extrapdxs[j] = dxs[j] - steps[j];
-                        vexterior =
-                            vexterior + extrapdxs[1..].iter().fold(extrapdxs[0], |acc, x| acc * *x);
-                        extrapdxs[j] = dx_was; // Reset extrapdxs to original state for next calc
-                    }
-                }
-
-                let vol = vexterior + vinterior;
-                interped = interped + v * vol;
-            }
+        // Calculate normalized delta locations
+        for i in 0..ndims {
+            let index_zero_loc = self.starts[i]
+                + self.steps[i]
+                    * <T as NumCast>::from(origin[i])
+                        .ok_or("Unrepresentable coordinate value")?;
+            dts[i] = (x[i] - index_zero_loc) / self.steps[i];
         }
 
-        Ok(interped / cell_vol)
+        // Recursive interpolation of one dependency tree at a time
+        // let loc = &origin; // Starting location in the tree is the origin
+        let dim = ndims; // Start from the end and recurse back to zero
+        let loc = &mut [0_usize; MAXDIMS][..ndims];
+        loc.copy_from_slice(origin);
+        let interped = self.populate(dim, origin, loc, dimprod, dts);
+
+        Ok(interped)
     }
 
-    /// Get the next-lower-or-exact index along this dimension where `x` is found,
-    /// saturating to the bounds at the edges if the point is outside.
+    /// Get the two-lower index along this dimension where `x` is found,
+    /// saturating to the bounds at the edges if necessary.
     ///
-    /// At the high bound of a given dimension, saturates to the next-most-internal
-    /// point in order to capture a full cube, then saturates to 0 if the resulting
-    /// index would be off the grid (meaning, if a dimension has size one).
+    /// At the high bound of a given dimension, saturates to the fourth internal
+    /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
-    ///
-    /// Saturation flag
-    /// * 0 => inside
-    /// * 1 => low
-    /// * 2 => high
-    ///
-    /// Unfortunately, using a repr(u8) enum for the saturation flag
-    /// causes a significant perf hit.
     #[inline(always)]
-    fn get_loc(&self, v: T, dim: usize) -> Result<(usize, u8), &'static str> {
-        let saturation: u8; // Saturated low/high/not at all
-
+    fn get_loc(&self, v: T, dim: usize) -> Result<usize, &'static str> {
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        let iloc = <isize as NumCast>::from(floc); // signed integer loc
+                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
+                                                                       // coordinate t=0 at cell index 1
+        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
-        match iloc {
-            Some(iloc) => {
-                let dimmax = self.dims[dim] - 2; // maximum index for lower corner
-                let loc: usize = (iloc.max(0) as usize).min(dimmax); // unsigned integer loc clipped to interior
+        let n = self.dims[dim] as isize; // Number of grid points on this dimension
+        let dimmax = n.saturating_sub(2).max(0); // maximum index for lower corner
+        let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
-                // Observation point is outside the grid on the low side
-                if iloc < 0 {
-                    saturation = 1;
-                }
-                // Observation point is outside the grid on the high side
-                else if iloc > dimmax as isize {
-                    saturation = 2;
-                }
-                // Observation point is on the interior
-                else {
-                    saturation = 0;
-                }
+        Ok(loc)
+    }
 
-                Ok((loc, saturation))
+    /// Recursive evaluation of interpolant on each dimension
+    #[inline]
+    fn populate(
+        &self,
+        dim: usize,
+        origin: &[usize],
+        loc: &mut [usize],
+        dimprod: &[usize],
+        dts: &[T],
+    ) -> T {
+        // Do the calc for this entry
+        match dim {
+            // If we have arrived at a leaf, index into data
+            0 => index_arr(loc, dimprod, self.vals),
+
+            // Otherwise, continue recursion
+            _ => {
+                // Keep track of where we are in the tree
+                // so that we can index into the value array properly
+                // when we reach the leaves
+                let next_dim = dim - 1;
+
+                // Populate next dim's values
+                let mut vals = [T::zero(); 2];
+                for i in 0..2 {
+                    loc[next_dim] = origin[next_dim] + i;
+                    vals[i] = self.populate(next_dim, origin, loc, dimprod, dts);
+                }
+                loc[next_dim] = origin[next_dim]; // Reset for next usage
+
+                // Interpolate on next dim's values to populate an entry in this dim
+                let y0 = vals[0];
+                let dy = vals[1] - vals[0];
+                let t = dts[next_dim];
+                y0 + t * dy
             }
-            None => Err("Unrepresentable coordinate value"),
         }
     }
 }
+
+
+/// Index a single value from an array
+#[inline(always)]
+fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
+    let mut i = 0;
+    for j in 0..dimprod.len() {
+        i += loc[j] * dimprod[j];
+    }
+
+    data[i]
+}
+
 
 /// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
@@ -478,6 +338,7 @@ pub fn interpn<T: Float>(
     MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
     Ok(())
 }
+
 
 /// Check whether a list of observation points are inside the grid within some absolute tolerance.
 /// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
@@ -569,7 +430,13 @@ mod test {
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+
+            (0..uobs.len()).for_each(|i| {
+                let outi = out[i];
+                let uobsi = uobs[i];
+                println!("{outi} {uobsi}");
+                assert!((out[i] - uobs[i]).abs() < 1e-12)
+            });
         }
     }
 }

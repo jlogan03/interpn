@@ -9,13 +9,16 @@
 //! Cubic interpolations require two more degrees of freedom per dimension, and have a minimal runtime scaling of 4^ndims.
 //! Similar to the linear methods, depending on implementation, the constant term can vary by orders of magnitude,
 //! as can the RAM usage.
+//! 
+//! Rectilinear methods perform a bisection search to find the relevant grid cell, which takes
+//! a worst-case number of iterations of log2(number of grid elements).
 //!
-//! | Method                        | RAM       | Interp. Cost (Best Case) | Interp. Cost (Worst Case)               | Extrap. Cost (Worst Case)                      |
-//! |-------------------------------|-----------|--------------------------|-----------------------------------------|------------------------------------------------|
-//! | multilinear::regular          | O(ndims)  | O(2^ndims * ndims)       | O(2^ndims * ndims)                      | O(2^ndims + ndims^2)                           |
-//! | multilinear::rectilinear      | O(ndims)  | O(2^ndims * ndims)       | O(ndims * (2^ndims + log2(gridsize)))   | O(ndims * (2^ndims + ndims + log2(gridsize)))  |
-//! | multicubic::regular           | O(ndims)  | O(4^ndims)               | O(4^ndims)                              | O(4^ndims)                                     |
-//! | multicubic::rectilinear       | O(ndims)  | O(4^ndims)               | O(4^ndims) + ndims * log2(gridsize)     | O(4^ndims) + ndims * log2(gridsize)            |
+//! | Method                        | RAM       | Interp. / Extrap. Cost       |
+//! |-------------------------------|-----------|------------------------------|
+//! | multilinear::regular          | O(ndims)  | O(2^ndims)                   |
+//! | multilinear::rectilinear      | O(ndims)  | O(2^ndims) + log2(gridsize)  |
+//! | multicubic::regular           | O(ndims)  | O(4^ndims)                   |
+//! | multicubic::rectilinear       | O(ndims)  | O(4^ndims) + log2(gridsize)  |
 //!
 //! # Example: Multilinear and Multicubic w/ Regular Grid
 //! ```rust

@@ -576,7 +576,7 @@ pub fn interpn<T: Float>(
 }
 
 // We can use the same rectilinear-grid method again
-pub use crate::multilinear::rectilinear::check_bounds;
+// pub use crate::multilinear::rectilinear::check_bounds;
 
 #[cfg(test)]
 mod test {

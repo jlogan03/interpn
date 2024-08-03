@@ -282,6 +282,8 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         }
 
         // Calculate normalized delta locations
+        // For the cubic method, the normalized coordinate `t` is always relative
+        // to cube index 1 (out of 0-3)
         for i in 0..ndims {
             let index_one_loc = self.starts[i]
                 + self.steps[i]
