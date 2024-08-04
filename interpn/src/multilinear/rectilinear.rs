@@ -1,18 +1,5 @@
 //! Multilinear interpolation/extrapolation on a rectilinear grid.
-//!
-//! While this method does not fully capitalize on vectorization,
-//! it results in fairly minimal instantaneous memory usage,
-//! and throughput performance is similar to existing methods.
-//!
-//! Operation Complexity
-//! * O(2^ndims) for interpolation and extrapolation in all regions.
-//!
-//! Memory Complexity
-//! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
-//!
-//! Timing
-//! * Timing determinism is very tight, but not guaranteed due to the use of a bisection search.
-//!
+//! 
 //! ```rust
 //! use interpn::multilinear::rectilinear;
 //!
@@ -42,6 +29,80 @@
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
 use num_traits::Float;
 
+
+/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+#[inline(always)]
+pub fn interpn<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    MultilinearRectilinear::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
+    Ok(())
+}
+
+/// Evaluate interpolant, allocating a new Vec for the output.
+/// 
+/// For best results, use the `interpn` function with preallocated output;
+/// allocation has a significant performance cost, and should be used sparingly.
+#[cfg(feature = "std")]
+pub fn interpn_alloc<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]]
+) -> Result<Vec<T>, &'static str> {
+    let mut out = vec![T::zero(); obs[0].len()];
+    interpn(grids, vals, obs, &mut out)?;
+    Ok(out)
+}
+
+/// Check whether a list of observation points are inside the grid within some absolute tolerance.
+/// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
+///
+/// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
+/// and set to `true` if there is a bounds violation on that axis.
+///
+/// # Errors
+/// * If the dimensionality of the grid does not match the dimensionality of the observation points
+/// * If the output slice length does not match the dimensionality of the grid
+#[inline(always)]
+pub fn check_bounds<T: Float>(
+    grids: &[&[T]],
+    obs: &[&[T]],
+    atol: T,
+    out: &mut [bool],
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    if !(obs.len() == ndims && out.len() == ndims && (0..ndims).all(|i| !grids[i].is_empty())) {
+        return Err("Dimension mismatch");
+    }
+    for i in 0..ndims {
+        let lo = grids[i][0];
+        let hi = grids[i].last();
+        match hi {
+            Some(&hi) => {
+                let bad = obs[i]
+                    .iter()
+                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
+
+                out[i] = bad;
+            }
+            None => return Err("Dimension mismatch"),
+        }
+    }
+    Ok(())
+}
+
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a rectilinear grid.
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
@@ -58,12 +119,7 @@ use num_traits::Float;
 ///   memory usage.
 ///
 /// Timing
-/// * Timing determinism very tight, but is not exact due to the
-///   differences in calculations (but not complexity) between
-///   interpolation and extrapolation.
-/// * An interpolation-only variant of this algorithm could achieve
-///   near-deterministic timing, but would produce incorrect results
-///   when evaluated at off-grid points.
+/// * Timing determinism is very tight, but not guaranteed due to the use of a bisection search.
 pub struct MultilinearRectilinear<'a, T: Float, const MAXDIMS: usize> {
     /// x, y, ... coordinate grids, each entry of size dims[i]
     grids: &'a [&'a [T]],
@@ -275,63 +331,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     data[i]
 }
 
-/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
-/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
-/// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
-/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
-///
-/// While this method initializes the interpolator struct on every call, the overhead of doing this
-/// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
-pub fn interpn<T: Float>(
-    grids: &[&[T]],
-    vals: &[T],
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    MultilinearRectilinear::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
-    Ok(())
-}
-
-/// Check whether a list of observation points are inside the grid within some absolute tolerance.
-/// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
-///
-/// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
-/// and set to `true` if there is a bounds violation on that axis.
-///
-/// # Errors
-/// * If the dimensionality of the grid does not match the dimensionality of the observation points
-/// * If the output slice length does not match the dimensionality of the grid
-#[inline(always)]
-pub fn check_bounds<T: Float>(
-    grids: &[&[T]],
-    obs: &[&[T]],
-    atol: T,
-    out: &mut [bool],
-) -> Result<(), &'static str> {
-    let ndims = grids.len();
-    if !(obs.len() == ndims && out.len() == ndims && (0..ndims).all(|i| !grids[i].is_empty())) {
-        return Err("Dimension mismatch");
-    }
-    for i in 0..ndims {
-        let lo = grids[i][0];
-        let hi = grids[i].last();
-        match hi {
-            Some(&hi) => {
-                let bad = obs[i]
-                    .iter()
-                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
-
-                out[i] = bad;
-            }
-            None => return Err("Dimension mismatch"),
-        }
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod test {

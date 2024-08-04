@@ -1,24 +1,5 @@
 //! Multilinear interpolation/extrapolation on a regular grid.
 //!
-//! This is a fairly literal implementation of the geometric interpretation
-//! of multilinear interpolation as an area- or volume- weighted average
-//! on the interior of the grid, and extends this metaphor to include
-//! extrapolation to off-grid points.
-//!
-//! While this method does not fully capitalize on vectorization,
-//! it results in fairly minimal instantaneous memory usage,
-//! and throughput performance is similar to existing methods.
-//!
-//! Operation Complexity
-//! * O(2^ndims) for interpolation and extrapolation in all regions.
-//!
-//! Memory Complexity
-//! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
-//!
-//! Timing
-//! * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
-//!   That said, floating-point calculations can take a different number of clock-cycles depending on numerical values.
-//!
 //! ```rust
 //! use interpn::multilinear::regular;
 //!
@@ -53,10 +34,98 @@
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
 use num_traits::{Float, NumCast};
 
+/// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+#[inline(always)]
+pub fn interpn<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    Ok(())
+}
+
+/// Evaluate interpolant, allocating a new Vec for the output.
+///
+/// For best results, use the `interpn` function with preallocated output;
+/// allocation has a significant performance cost, and should be used sparingly.
+#[cfg(feature = "std")]
+pub fn interpn_alloc<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    obs: &[&[T]],
+) -> Result<Vec<T>, &'static str> {
+    let mut out = vec![T::zero(); obs[0].len()];
+    interpn(dims, starts, steps, vals, obs, &mut out)?;
+    Ok(out)
+}
+
+/// Check whether a list of observation points are inside the grid within some absolute tolerance.
+/// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
+///
+/// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
+/// and set to `true` if there is a bounds violation on that axis.
+///
+/// # Errors
+/// * If the dimensionality of the grid does not match the dimensionality of the observation points
+/// * If the output slice length does not match the dimensionality of the grid
+#[inline(always)]
+pub fn check_bounds<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    obs: &[&[T]],
+    atol: T,
+    out: &mut [bool],
+) -> Result<(), &'static str> {
+    let ndims = dims.len();
+    if !(obs.len() == ndims && out.len() == ndims) {
+        return Err("Dimension mismatch");
+    }
+
+    for i in 0..ndims {
+        let first = starts[i];
+        let last_elem = <T as NumCast>::from(dims[i] - 1); // Last element in grid
+
+        match last_elem {
+            Some(last_elem) => {
+                let last = starts[i] + steps[i] * last_elem;
+                let lo = first.min(last);
+                let hi = first.max(last);
+
+                let bad = obs[i]
+                    .iter()
+                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
+                out[i] = bad;
+            }
+            // Passing an unrepresentable number in isn't, strictly speaking, an error
+            // and since an unrepresentable number can't be on the grid,
+            // we can just flag it for the bounds check like normal
+            None => {
+                out[i] = true;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 ///
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
 ///
 /// Operation Complexity
 /// * O(2^ndims) for interpolation and extrapolation in all regions.
@@ -68,12 +137,8 @@ use num_traits::{Float, NumCast};
 ///   memory usage.
 ///
 /// Timing
-/// * Timing determinism very tight, but is not exact due to the
-///   differences in calculations (but not complexity) between
-///   interpolation and extrapolation.
-/// * An interpolation-only variant of this algorithm could achieve
-///   near-deterministic timing, but would produce incorrect results
-///   when evaluated at off-grid points.
+/// * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
+///   That said, floating-point calculations can take a different number of clock-cycles depending on numerical values.
 pub struct MultilinearRegular<'a, T: Float, const MAXDIMS: usize> {
     /// Number of dimensions
     ndims: usize,
@@ -107,7 +172,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         dims: &[usize],
         starts: &[T],
         steps: &[T],
-        vals: &'a [T]
+        vals: &'a [T],
     ) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = dims.len();
@@ -115,7 +180,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         if !(starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0) {
             return Err("Dimension mismatch");
         }
-
         // Make sure all dimensions have at least four entries
         let degenerate = dims[..ndims].iter().any(|&x| x < 2);
         if degenerate {
@@ -227,13 +291,11 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         for i in 0..ndims {
             let index_zero_loc = self.starts[i]
                 + self.steps[i]
-                    * <T as NumCast>::from(origin[i])
-                        .ok_or("Unrepresentable coordinate value")?;
+                    * <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
             dts[i] = (x[i] - index_zero_loc) / self.steps[i];
         }
 
         // Recursive interpolation of one dependency tree at a time
-        // let loc = &origin; // Starting location in the tree is the origin
         let dim = ndims; // Start from the end and recurse back to zero
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
@@ -303,7 +365,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     }
 }
 
-
 /// Index a single value from an array
 #[inline(always)]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
@@ -313,80 +374,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     }
 
     data[i]
-}
-
-
-/// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
-/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
-/// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
-/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
-///
-/// While this method initializes the interpolator struct on every call, the overhead of doing this
-/// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
-pub fn interpn<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    vals: &[T],
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
-    Ok(())
-}
-
-
-/// Check whether a list of observation points are inside the grid within some absolute tolerance.
-/// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
-///
-/// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
-/// and set to `true` if there is a bounds violation on that axis.
-///
-/// # Errors
-/// * If the dimensionality of the grid does not match the dimensionality of the observation points
-/// * If the output slice length does not match the dimensionality of the grid
-#[inline(always)]
-pub fn check_bounds<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    obs: &[&[T]],
-    atol: T,
-    out: &mut [bool],
-) -> Result<(), &'static str> {
-    let ndims = dims.len();
-    if !(obs.len() == ndims && out.len() == ndims) {
-        return Err("Dimension mismatch");
-    }
-
-    for i in 0..ndims {
-        let first = starts[i];
-        let last_elem = <T as NumCast>::from(dims[i] - 1); // Last element in grid
-
-        match last_elem {
-            Some(last_elem) => {
-                let last = starts[i] + steps[i] * last_elem;
-                let lo = first.min(last);
-                let hi = first.max(last);
-
-                let bad = obs[i]
-                    .iter()
-                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
-                out[i] = bad;
-            }
-            // Passing an unrepresentable number in isn't, strictly speaking, an error
-            // and since an unrepresentable number can't be on the grid,
-            // we can just flag it for the bounds check like normal
-            None => {
-                out[i] = true;
-            }
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

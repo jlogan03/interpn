@@ -1,47 +1,5 @@
 //! An arbitrary-dimensional multicubic interpolator / extrapolator on a rectilinear grid.
 //!
-//! On interior points, a hermite spline is used, with the derivative at each
-//! grid point matched to a second-order central difference. This allows the
-//! interpolant to reproduce a quadratic function exactly, and to approximate
-//! others with minimal overshoot and wobble.
-//!
-//! At the grid boundary, a natural spline boundary condition is applied,
-//! meaning the third derivative of the interpolant is constrainted to zero
-//! at the last grid point, with the result that the interpolant is quadratic
-//! on the last interval before the boundary.
-//!
-//! With "linearize_extrapolation" set, extrapolation is linear on the extrapolated
-//! dimensions, holding the same derivative as the natural boundary condition produces
-//! at the last grid point. Otherwise, the last grid cell's spline function is continued,
-//! producing a quadratic extrapolation.
-//!
-//! This effectively gives a gradual decrease in the order of the interpolant
-//! as the observation point approaches then leaves the grid:
-//!
-//! out                     out
-//! ---|---|---|---|---|---|--- Grid
-//!  2   2   3   3   3   2   2  Order of interpolant between grid points
-//!  1                       1  Extrapolation with linearize_extrapolation
-//!
-//! Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-//!
-//! Operation Complexity
-//! * O(4^ndims) for interpolation and extrapolation in all regions.
-//!
-//! Memory Complexity
-//! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
-//! * While evaluation is recursive, the recursion has constant
-//!   max depth of MAXDIMS, which provides a guarantee on peak
-//!   memory usage.
-//!
-//! Timing
-//! * Timing determinism very tight, but is not exact due to the
-//!   differences in calculations (but not complexity) between
-//!   interpolation and extrapolation.
-//! * An interpolation-only variant of this algorithm could achieve
-//!   near-deterministic timing, but would produce incorrect results
-//!   when evaluated at off-grid points.
-//!
 //! ```rust
 //! use interpn::multicubic::rectilinear;
 //!
@@ -72,6 +30,48 @@
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
 use num_traits::Float;
+
+/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+#[inline(always)]
+pub fn interpn<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    MulticubicRectilinear::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
+        .interp(obs, out)?;
+    Ok(())
+}
+
+/// Evaluate interpolant, allocating a new Vec for the output.
+///
+/// For best results, use the `interpn` function with preallocated output;
+/// allocation has a significant performance cost, and should be used sparingly.
+#[cfg(feature = "std")]
+pub fn interpn_alloc<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+) -> Result<Vec<T>, &'static str> {
+    let mut out = vec![T::zero(); obs[0].len()];
+    interpn(grids, vals, linearize_extrapolation, obs, &mut out)?;
+    Ok(out)
+}
+
+// We can use the same rectilinear-grid method again
+pub use crate::multilinear::rectilinear::check_bounds;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Saturation {
@@ -551,32 +551,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
 
     data[i]
 }
-
-/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
-/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
-/// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
-/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
-///
-/// While this method initializes the interpolator struct on every call, the overhead of doing this
-/// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
-pub fn interpn<T: Float>(
-    grids: &[&[T]],
-    vals: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    MulticubicRectilinear::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
-        .interp(obs, out)?;
-    Ok(())
-}
-
-// We can use the same rectilinear-grid method again
-// pub use crate::multilinear::rectilinear::check_bounds;
 
 #[cfg(test)]
 mod test {

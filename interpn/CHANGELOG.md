@@ -6,6 +6,8 @@
 
 * Use recursive method to evaluate multilinear interpolation instead of hypercube method
   * This makes extrapolation cost consistent with interpolation cost
+  * Shows about 2x slower perf in micro-benchmarks, but about 10x faster in end-to-end benchmarks after the Python bindings
+* Reduce repeated documentation
 
 ## 0.4.2 - 2024-05-12
 
