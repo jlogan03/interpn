@@ -23,11 +23,8 @@
 //! let yobs = [-1.0, 3.0];
 //! let obs = [&xobs[..], &yobs[..]];
 //!
-//! // Storage for output
-//! let mut out = [0.0; 2];
-//!
-//! // Do interpolation
-//! regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out).unwrap();
+//! // Do interpolation, allocating for the output for convenience
+//! regular::interpn_alloc(&dims, &starts, &steps, &z, &obs).unwrap();
 //! ```
 //!
 //! References

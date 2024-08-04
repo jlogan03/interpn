@@ -1,7 +1,7 @@
 //! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 //!
 //! ```rust
-//! use interpn::multicubic::regular::interpn;
+//! use interpn::multicubic::regular;
 //!
 //! // Define a grid
 //! let x = [1.0_f64, 2.0, 3.0, 4.0];
@@ -26,9 +26,9 @@
 //! // Storage for output
 //! let mut out = [0.0; 2];
 //!
-//! // Do interpolation
+//! // Do interpolation, allocating for the output for convenience
 //! let linearize_extrapolation = false;
-//! interpn(&dims, &starts, &steps, &z, linearize_extrapolation, &obs, &mut out).unwrap();
+//! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 use num_traits::{Float, NumCast};
 

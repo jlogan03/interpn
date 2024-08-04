@@ -21,9 +21,9 @@
 //! // Storage for output
 //! let mut out = [0.0; 2];
 //!
-//! // Do interpolation
+//! // Do interpolation, allocating for the output for convenience
 //! let linearize_extrapolation = false;
-//! rectilinear::interpn(grids, &z, linearize_extrapolation, &obs, &mut out).unwrap();
+//! rectilinear::interpn_alloc(grids, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 //!
 //! References
