@@ -58,7 +58,7 @@ pub fn interpn<T: Float>(
 }
 
 /// Evaluate interpolant, allocating a new Vec for the output.
-/// 
+///
 /// For best results, use the `interpn` function with preallocated output;
 /// allocation has a significant performance cost, and should be used sparingly.
 #[cfg(feature = "std")]
@@ -71,7 +71,15 @@ pub fn interpn_alloc<T: Float>(
     obs: &[&[T]],
 ) -> Result<Vec<T>, &'static str> {
     let mut out = vec![T::zero(); obs[0].len()];
-    interpn(dims, starts, steps, vals, linearize_extrapolation, obs, &mut out)?;
+    interpn(
+        dims,
+        starts,
+        steps,
+        vals,
+        linearize_extrapolation,
+        obs,
+        &mut out,
+    )?;
     Ok(out)
 }
 
@@ -549,7 +557,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
 
     data[i]
 }
-
 
 #[cfg(test)]
 mod test {

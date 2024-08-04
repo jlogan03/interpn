@@ -1,5 +1,5 @@
 //! Multilinear interpolation/extrapolation on a rectilinear grid.
-//! 
+//!
 //! ```rust
 //! use interpn::multilinear::rectilinear;
 //!
@@ -29,7 +29,6 @@
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
 use num_traits::Float;
 
-
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
@@ -52,14 +51,14 @@ pub fn interpn<T: Float>(
 }
 
 /// Evaluate interpolant, allocating a new Vec for the output.
-/// 
+///
 /// For best results, use the `interpn` function with preallocated output;
 /// allocation has a significant performance cost, and should be used sparingly.
 #[cfg(feature = "std")]
 pub fn interpn_alloc<T: Float>(
     grids: &[&[T]],
     vals: &[T],
-    obs: &[&[T]]
+    obs: &[&[T]],
 ) -> Result<Vec<T>, &'static str> {
     let mut out = vec![T::zero(); obs[0].len()];
     interpn(grids, vals, obs, &mut out)?;
@@ -330,7 +329,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
 
     data[i]
 }
-
 
 #[cfg(test)]
 mod test {

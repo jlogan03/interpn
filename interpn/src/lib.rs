@@ -9,7 +9,7 @@
 //! Cubic interpolations require two more degrees of freedom per dimension, and have a minimal runtime scaling of 4^ndims.
 //! Similar to the linear methods, depending on implementation, the constant term can vary by orders of magnitude,
 //! as can the RAM usage.
-//! 
+//!
 //! Rectilinear methods perform a bisection search to find the relevant grid cell, which takes
 //! a worst-case number of iterations of log2(number of grid elements).
 //!
