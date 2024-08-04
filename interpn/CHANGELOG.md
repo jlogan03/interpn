@@ -2,11 +2,16 @@
 
 ## 0.4.3 - 2024-08-03
 
+## Added
+
+* Implement `interpn_alloc` function for each method, which allocates a Vec for the output
+
 ## Changed
 
 * Use recursive method to evaluate multilinear interpolation instead of hypercube method
-  * This makes extrapolation cost consistent with interpolation cost
+  * This makes extrapolation cost consistent with interpolation cost, and reduces nominal perf scaling
   * Shows about 2x slower perf in micro-benchmarks, but about 10x faster in end-to-end benchmarks after the Python bindings
+    * Need to improve benchmarking strategy to better capture perf in real-life usage
 * Reduce repeated documentation
 
 ## 0.4.2 - 2024-05-12
