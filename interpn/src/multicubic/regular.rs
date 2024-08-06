@@ -42,7 +42,6 @@ use num_traits::{Float, NumCast};
 ///
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
 pub fn interpn<T: Float>(
     dims: &[usize],
     starts: &[T],
@@ -169,7 +168,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
-    #[inline(always)]
     pub fn new(
         dims: &[usize],
         starts: &[T],
@@ -224,7 +222,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    #[inline(always)]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.ndims;
@@ -257,7 +254,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
-    #[inline(always)]
     pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.ndims;
@@ -321,7 +317,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
-    #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> Result<(usize, Saturation), &'static str> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
@@ -362,7 +357,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     }
 
     /// Recursive evaluation of interpolant on each dimension
-    #[inline]
     fn populate(
         &self,
         dim: usize,
@@ -405,7 +399,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 }
 
 /// Calculate slopes and offsets & select evaluation method
-#[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(
     vals: [T; 4],
     t: T,
@@ -530,7 +523,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).
-#[inline(always)]
 fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are the difference between this function and a linear one going
     // forward or backward with the imposed slopes.
@@ -548,7 +540,6 @@ fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
 }
 
 /// Index a single value from an array
-#[inline(always)]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {

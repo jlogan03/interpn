@@ -39,7 +39,6 @@ use num_traits::Float;
 ///
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
 pub fn interpn<T: Float>(
     grids: &[&[T]],
     vals: &[T],
@@ -74,7 +73,6 @@ pub fn interpn_alloc<T: Float>(
 /// # Errors
 /// * If the dimensionality of the grid does not match the dimensionality of the observation points
 /// * If the output slice length does not match the dimensionality of the grid
-#[inline(always)]
 pub fn check_bounds<T: Float>(
     grids: &[&[T]],
     obs: &[&[T]],
@@ -141,7 +139,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
-    #[inline(always)]
     pub fn new(grids: &'a [&'a [T]], vals: &'a [T]) -> Result<Self, &'static str> {
         // Check dimensions
         let ndims = grids.len();
@@ -172,7 +169,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    #[inline(always)]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.grids.len();
@@ -207,7 +203,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
-    #[inline(always)]
     pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.grids.len();
@@ -258,7 +253,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
     /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
-    #[inline(always)]
     fn get_loc(&self, v: T, dim: usize) -> Result<usize, &'static str> {
         let grid = self.grids[dim];
 
@@ -279,7 +273,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
     }
 
     /// Recursive evaluation of interpolant on each dimension
-    #[inline]
     fn populate(
         &self,
         dim: usize,
@@ -320,7 +313,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
 }
 
 /// Index a single value from an array
-#[inline(always)]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {
