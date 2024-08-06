@@ -13,6 +13,8 @@
   * Shows about 2x slower perf in micro-benchmarks, but about 2x faster in end-to-end benchmarks after the Python bindings
     * Need to improve benchmarking strategy to better capture perf in real-life usage
 * Reduce repeated documentation
+* Remove all inlining annotations
+  * Minimal effect on performance; provides more flexibility to downstream applications, especially opt-level=s builds
 
 ## 0.4.2 - 2024-05-12
 
