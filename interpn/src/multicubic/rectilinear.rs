@@ -273,6 +273,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
     /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
+    #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<(usize, Saturation), &'static str> {
         let saturation: Saturation; // What part of the grid cell are we in?
         let grid = self.grids[dim];
@@ -318,6 +319,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
     }
 
     /// Recursive evaluation of interpolant on each dimension
+    #[inline]
     fn populate(
         &self,
         dim: usize,
@@ -362,6 +364,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinear<'a, T, MAXDIMS> {
 }
 
 /// Calculate slopes and offsets & select evaluation method
+#[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(
     vals: [T; 4],
     grid_cell: &[T],
@@ -499,6 +502,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).
+#[inline]
 fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are the difference between this function and a linear one going
     // forward or backward with the imposed slopes.
@@ -524,6 +528,7 @@ fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
 /// which is essentially a distance-weighted average of the forward and backward
 /// differences s.t. the closer points have more influence on the estimate
 /// of the derivative.
+#[inline]
 fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T) -> T {
     let a = h01 / (h01 + h12);
     let b = (y2 - y1) / h12;
@@ -534,6 +539,7 @@ fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T)
 }
 
 /// Index a single value from an array
+#[inline]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {

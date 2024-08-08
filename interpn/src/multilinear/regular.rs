@@ -303,6 +303,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
+    #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<usize, &'static str> {
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
                                                                        // Signed integer loc, with the bottom of the cell aligned to place the normalized
@@ -317,6 +318,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     }
 
     /// Recursive evaluation of interpolant on each dimension
+    #[inline]
     fn populate(
         &self,
         dim: usize,
@@ -356,6 +358,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
 }
 
 /// Index a single value from an array
+#[inline]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {
