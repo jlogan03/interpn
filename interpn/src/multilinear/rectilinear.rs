@@ -246,13 +246,10 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         Ok(interped)
     }
 
-    /// Get the two-lower index along this dimension where `x` is found,
+    /// Get the lower-corner index along this dimension where `x` is found,
     /// saturating to the bounds at the edges if necessary.
     ///
-    /// At the high bound of a given dimension, saturates to the fourth internal
-    /// point in order to capture a full 4-cube.
-    ///
-    /// Returned value like (lower_corner_index, saturation_flag).
+    /// At the high bound of a given dimension, saturates to the interior.
     #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<usize, &'static str> {
         let grid = self.grids[dim];
@@ -264,7 +261,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         //
         // This process accounts for essentially the entire difference in
         // performance between this method and the regular-grid method.
-        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 2;
+        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 1;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
         let dimmax = n.saturating_sub(2).max(0); // maximum index for lower corner
@@ -408,5 +405,28 @@ mod test {
             // and do not do well under a check on relative difference.
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
         }
+    }
+
+    /// Interpolate on a hat-shaped function to make sure that the grid cell indexing is aligned properly
+    #[test]
+    fn test_interp_hat_func() {
+        fn hat_func(x: f64) -> f64 {
+            if x <= 1.0 {
+                x
+            } else {
+                2.0 - x
+            }
+        }
+
+        let x = (0..3).map(|x| x as f64).collect::<Vec<f64>>();
+        let grids = [&x[..]];
+        let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();
+        let obs = (-2..6).map(|x| x as f64 * 0.75).collect::<Vec<f64>>();
+
+        let interpolator: MultilinearRectilinear<f64, 1> = MultilinearRectilinear::new(&grids, &y).unwrap();
+
+        (0..obs.len()).for_each(|i| {
+            assert_eq!(hat_func(obs[i]), interpolator.interp_one(&[obs[i]]).unwrap());
+        })
     }
 }

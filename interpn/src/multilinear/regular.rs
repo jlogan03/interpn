@@ -308,7 +308,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
                                                                        // Signed integer loc, with the bottom of the cell aligned to place the normalized
                                                                        // coordinate t=0 at cell index 1
-        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
+        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")?;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
         let dimmax = n.saturating_sub(2).max(0); // maximum index for lower corner
@@ -371,7 +371,7 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
 #[cfg(test)]
 mod test {
     use super::interpn;
-    use crate::utils::*;
+    use crate::{utils::*, MultilinearRegular};
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -417,5 +417,27 @@ mod test {
                 assert!((out[i] - uobs[i]).abs() < 1e-12)
             });
         }
+    }
+
+    /// Interpolate on a hat-shaped function to make sure that the grid cell indexing is aligned properly
+    #[test]
+    fn test_interp_hat_func() {
+        fn hat_func(x: f64) -> f64 {
+            if x <= 1.0 {
+                x
+            } else {
+                2.0 - x
+            }
+        }
+
+        // let x = (0..3).map(|x| x as f64).collect::<Vec<f64>>();
+        let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();
+        let obs = (-2..6).map(|x| x as f64 * 0.75).collect::<Vec<f64>>();
+
+        let interpolator: MultilinearRegular<f64, 1> = MultilinearRegular::new(&[3], &[0.0], &[1.0], &y).unwrap();
+
+        (0..obs.len()).for_each(|i| {
+            assert_eq!(hat_func(obs[i]), interpolator.interp_one(&[obs[i]]).unwrap());
+        })
     }
 }
