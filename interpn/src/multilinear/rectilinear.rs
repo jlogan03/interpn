@@ -423,10 +423,14 @@ mod test {
         let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();
         let obs = (-2..6).map(|x| x as f64 * 0.75).collect::<Vec<f64>>();
 
-        let interpolator: MultilinearRectilinear<f64, 1> = MultilinearRectilinear::new(&grids, &y).unwrap();
+        let interpolator: MultilinearRectilinear<f64, 1> =
+            MultilinearRectilinear::new(&grids, &y).unwrap();
 
         (0..obs.len()).for_each(|i| {
-            assert_eq!(hat_func(obs[i]), interpolator.interp_one(&[obs[i]]).unwrap());
+            assert_eq!(
+                hat_func(obs[i]),
+                interpolator.interp_one(&[obs[i]]).unwrap()
+            );
         })
     }
 }
