@@ -5,6 +5,7 @@
 ## Added
 
 * Implement `interpn_alloc` function for each method, which allocates a Vec for the output
+* Add test of linear methods using hat function to check grid cell alignment
 
 ## Changed
 
