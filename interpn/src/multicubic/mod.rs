@@ -2,8 +2,9 @@
 //!
 //! For interior points, this method gives the same result as
 //! a Hermite spline interpolation, with continuous first derivatives
-//! across the cell boundaries. Under extrapolation, the higher-order
-//! terms are dropped and linear extrapolation is used.
+//! across the cell boundaries. Under extrapolation, either quadratic
+//! or linear extrapolation is used depending on configuration, and
+//! both maintain continuous first derivatives everywhere.
 //!
 //! The solution on interior points is notably different from B-splines,
 //! where the exact values of the first and second derivatives are taken

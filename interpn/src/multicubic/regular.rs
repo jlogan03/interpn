@@ -1,49 +1,7 @@
 //! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 //!
-//! On interior points, a hermite spline is used, with the derivative at each
-//! grid point matched to a second-order central difference. This allows the
-//! interpolant to reproduce a quadratic function exactly, and to approximate
-//! others with minimal overshoot and wobble.
-//!
-//! At the grid boundary, a natural spline boundary condition is applied,
-//! meaning the third derivative of the interpolant is constrainted to zero
-//! at the last grid point, with the result that the interpolant is quadratic
-//! on the last interval before the boundary.
-//!
-//! With "linearize_extrapolation" set, extrapolation is linear on the extrapolated
-//! dimensions, holding the same derivative as the natural boundary condition produces
-//! at the last grid point. Otherwise, the last grid cell's spline function is continued,
-//! producing a quadratic extrapolation.
-//!
-//! This effectively gives a gradual decrease in the order of the interpolant
-//! as the observation point approaches then leaves the grid:
-//!
-//! out                     out
-//! ---|---|---|---|---|---|--- Grid
-//!  2   2   3   3   3   2   2  Order of interpolant between grid points
-//!  1                       1  Extrapolation with linearize_extrapolation
-//!
-//! Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-//!
-//! Operation Complexity
-//! * O(4^ndims) for interpolation and extrapolation in all regions.
-//!
-//! Memory Complexity
-//! * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
-//! * While evaluation is recursive, the recursion has constant
-//!   max depth of MAXDIMS, which provides a guarantee on peak
-//!   memory usage.
-//!
-//! Timing
-//! * Timing determinism very tight, but is not exact due to the
-//!   differences in calculations (but not complexity) between
-//!   interpolation and extrapolation.
-//! * An interpolation-only variant of this algorithm could achieve
-//!   near-deterministic timing, but would produce incorrect results
-//!   when evaluated at off-grid points.
-//!
 //! ```rust
-//! use interpn::multicubic::regular::interpn;
+//! use interpn::multicubic::regular;
 //!
 //! // Define a grid
 //! let x = [1.0_f64, 2.0, 3.0, 4.0];
@@ -68,11 +26,64 @@
 //! // Storage for output
 //! let mut out = [0.0; 2];
 //!
-//! // Do interpolation
+//! // Do interpolation, allocating for the output for convenience
 //! let linearize_extrapolation = false;
-//! interpn(&dims, &starts, &steps, &z, linearize_extrapolation, &obs, &mut out).unwrap();
+//! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 use num_traits::{Float, NumCast};
+
+/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+pub fn interpn<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+    out: &mut [T],
+) -> Result<(), &'static str> {
+    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
+        .interp(obs, out)?;
+    Ok(())
+}
+
+/// Evaluate interpolant, allocating a new Vec for the output.
+///
+/// For best results, use the `interpn` function with preallocated output;
+/// allocation has a significant performance cost, and should be used sparingly.
+#[cfg(feature = "std")]
+pub fn interpn_alloc<T: Float>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    vals: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+) -> Result<Vec<T>, &'static str> {
+    let mut out = vec![T::zero(); obs[0].len()];
+    interpn(
+        dims,
+        starts,
+        steps,
+        vals,
+        linearize_extrapolation,
+        obs,
+        &mut out,
+    )?;
+    Ok(out)
+}
+
+// We can use the same regular-grid method again
+pub use crate::multilinear::regular::check_bounds;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Saturation {
@@ -157,7 +168,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// * If any input dimensions do not match
     /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
-    #[inline(always)]
     pub fn new(
         dims: &[usize],
         starts: &[T],
@@ -212,7 +222,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    #[inline(always)]
     pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
         let ndims = self.ndims;
@@ -245,7 +254,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
-    #[inline(always)]
     pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.ndims;
@@ -260,7 +268,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
         let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
@@ -282,6 +290,8 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         }
 
         // Calculate normalized delta locations
+        // For the cubic method, the normalized coordinate `t` is always relative
+        // to cube index 1 (out of 0-3)
         for i in 0..ndims {
             let index_one_loc = self.starts[i]
                 + self.steps[i]
@@ -307,7 +317,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
     /// point in order to capture a full 4-cube.
     ///
     /// Returned value like (lower_corner_index, saturation_flag).
-    #[inline(always)]
+    #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<(usize, Saturation), &'static str> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
@@ -516,7 +526,7 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).
-#[inline(always)]
+#[inline]
 fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are the difference between this function and a linear one going
     // forward or backward with the imposed slopes.
@@ -534,7 +544,7 @@ fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
 }
 
 /// Index a single value from an array
-#[inline(always)]
+#[inline]
 fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
     let mut i = 0;
     for j in 0..dimprod.len() {
@@ -543,34 +553,6 @@ fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
 
     data[i]
 }
-
-/// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
-/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
-/// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
-/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
-///
-/// While this method initializes the interpolator struct on every call, the overhead of doing this
-/// is minimal even when using it to evaluate one observation point at a time.
-#[inline(always)]
-pub fn interpn<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    vals: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
-        .interp(obs, out)?;
-    Ok(())
-}
-
-// We can use the same regular-grid method again
-pub use crate::multilinear::regular::check_bounds;
 
 #[cfg(test)]
 mod test {
