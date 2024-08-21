@@ -421,7 +421,7 @@ mod test {
         let x = (0..3).map(|x| x as f64).collect::<Vec<f64>>();
         let grids = [&x[..]];
         let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();
-        let obs = (-2..6).map(|x| x as f64 * 0.75).collect::<Vec<f64>>();
+        let obs = linspace(-2.0, 4.0, 100);
 
         let interpolator: MultilinearRectilinear<f64, 1> =
             MultilinearRectilinear::new(&grids, &y).unwrap();
