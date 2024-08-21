@@ -81,7 +81,6 @@ multicubic::rectilinear::interpn(grids, &z, false, &obs, &mut out).unwrap();
 ```
 
 # Development Roadmap
-* Recursive multilinear methods (for better extrapolation speed and timing determinism)
 * Methods for unstructured triangular and tetrahedral meshes
 
 # License
