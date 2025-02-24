@@ -91,6 +91,8 @@ pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 pub mod multicubic;
 pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
 
+pub mod one_dim;
+
 #[cfg(feature = "std")]
 pub mod utils;
 
