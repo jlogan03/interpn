@@ -59,7 +59,6 @@ pub trait Interp1D<'a, T: Float, G: Grid1D<'a, T>> {
     fn eval_alloc(&self, locs: &[T]) -> Result<Vec<T>, &'static str> {
         let mut out = vec![T::zero(); locs.len()];
         self.eval(locs, &mut out)?;
-
         Ok(out)
     }
 }

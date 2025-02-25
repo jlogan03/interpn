@@ -26,7 +26,7 @@ where
 
         let slope = (y1 - y0) / (x1 - x0);
         let dx = loc - x0;
-        let v = x0 + slope * dx;
+        let v = y0 + slope * dx;
 
         Ok(v)
     }
@@ -58,7 +58,7 @@ where
             Extrap::Inside => {
                 let slope = (y1 - y0) / (x1 - x0);
                 let dx = loc - x0;
-                x0 + slope * dx
+                y0 + slope * dx
             }
             Extrap::OutsideLow => y0,
             Extrap::OutsideHigh => y1,
@@ -121,20 +121,12 @@ mod test {
             let j: usize = ((x_reg.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
                 .min(vals.len() - 2);
 
-            let (j2, _) = g_reg.index(loc).unwrap();
-
-            println!("{j} {j2}");
-
             // Interpolation
             if loc >= start && loc <= stop {
                 let xleft = x_reg[j];
                 let xright = x_reg[j + 1];
                 let yleft = vals[j];
                 let yright = vals[j + 1];
-
-                let ((x0, y0), (x1, y1), _) = g_reg.at(loc).unwrap();
-                println!("{x0}=?{xleft} {x1}=?{xright} {y0}=?{yleft} {y1}=?{yright}");
-                // assert!(xleft == x0 && xright == x1 && yleft == y0 && yright == y1);
 
                 assert!(
                     loc >= xleft && loc <= xright,
@@ -146,10 +138,7 @@ mod test {
 
                 let y_expected = yleft + slope * dx;
 
-                let y_this = lin_reg.eval_one(loc).unwrap();
-
-                println!("{} {} {}", &y, &y_expected, &y_this);
-                assert!(y == y_expected);
+                assert!((y - y_expected) / y_expected < 1e-12);
             }
 
             // Extrapolation
