@@ -30,19 +30,6 @@ where
 
         Ok(v)
     }
-
-    #[inline]
-    fn eval(&self, locs: &[T], out: &mut [T]) -> Result<(), &'static str> {
-        if locs.len() != out.len() {
-            return Err("Length mismatch");
-        }
-
-        for i in 0..locs.len() {
-            out[i] = self.eval_one(locs[i])?;
-        }
-
-        Ok(())
-    }
 }
 
 /// Linear interpolation / extrapolation with hold-last extrapolation;
@@ -83,17 +70,13 @@ where
 
         Ok(v)
     }
+}
 
-    #[inline]
-    fn eval(&self, locs: &[T], out: &mut [T]) -> Result<(), &'static str> {
-        if locs.len() != out.len() {
-            return Err("Length mismatch");
-        }
 
-        for i in 0..locs.len() {
-            out[i] = self.eval_one(locs[i])?;
-        }
-
-        Ok(())
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_linear_1d() {
+        
     }
 }

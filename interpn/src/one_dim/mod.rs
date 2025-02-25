@@ -1,7 +1,9 @@
 //! Special-cases for one-dimensional interpolation, which can use
-//! a more lightweight evaluation pattern than the multidimensional methods.
+//! a more lightweight evaluation pattern than the multidimensional methods,
+//! and can support logical operations like hold-last that don't make sense
+//! in a multidimensional context.
 
-pub mod linear_1d;
+pub mod linear;
 
 use num_traits::{Float, NumCast};
 
@@ -35,18 +37,42 @@ pub trait Interp1D<'a, T: Float, G: Grid1D<'a, T>> {
     /// Evaluate the interpolant at a set of observation points.
     ///
     /// It is highly recommended to inline implementations of this function.
-    fn eval(&self, locs: &[T], out: &mut [T]) -> Result<(), &'static str>;
+    #[inline]
+    fn eval(&self, locs: &[T], out: &mut [T]) -> Result<(), &'static str> {
+        if locs.len() != out.len() {
+            return Err("Length mismatch");
+        }
+
+        for i in 0..locs.len() {
+            out[i] = self.eval_one(locs[i])?;
+        }
+
+        Ok(())
+    }
+
+    /// Evaluate the interpolant at a set of observation points, allocating
+    /// for the output values for convenience.
+    ///
+    /// It is highly recommended to inline implementations of this function.
+    #[cfg(feature="std")]
+    #[inline]
+    fn eval_alloc(&self, locs: &[T]) -> Result<Vec<T>, &'static str> {
+        let mut out = vec![T::zero(); locs.len()];
+        self.eval(locs, &mut out)?;
+
+        Ok(out)
+    }
 }
 
 /// A regular grid, which has the same spacing between each point.
-pub struct RegularGrid<'a, T: Float> {
+pub struct RegularGrid1D<'a, T: Float> {
     start: T,
     stop: T,
     step: T,
     vals: &'a [T],
 }
 
-impl<'a, T: Float> RegularGrid<'a, T> {
+impl<'a, T: Float> RegularGrid1D<'a, T> {
     pub fn new(start: T, step: T, vals: &'a [T]) -> Result<Self, &'static str> {
         let stop =
             start + step * <T as NumCast>::from(vals.len() - 1).ok_or("Unrepresentable number")?;
@@ -80,7 +106,7 @@ impl<'a, T: Float> RegularGrid<'a, T> {
     }
 }
 
-impl<'a, T: Float> Grid1D<'a, T> for RegularGrid<'a, T> {
+impl<'a, T: Float> Grid1D<'a, T> for RegularGrid1D<'a, T> {
     #[inline]
     fn at(&self, loc: T) -> Result<((T, T), (T, T), Extrap), &'static str> {
         let (i, extrap) = self.index(loc)?;
@@ -96,12 +122,12 @@ impl<'a, T: Float> Grid1D<'a, T> for RegularGrid<'a, T> {
 }
 
 /// A rectilinear grid, which may have uneven spacing.
-pub struct RectilinearGrid<'a, T: Float> {
+pub struct RectilinearGrid1D<'a, T: Float> {
     grid: &'a [T],
     vals: &'a [T],
 }
 
-impl<'a, T: Float> RectilinearGrid<'a, T> {
+impl<'a, T: Float> RectilinearGrid1D<'a, T> {
     pub fn new(grid: &'a [T], vals: &'a [T]) -> Result<Self, &'static str> {
         if grid.len() != vals.len() || grid.len() < 2 {
             return Err("Length mismatch");
@@ -128,7 +154,7 @@ impl<'a, T: Float> RectilinearGrid<'a, T> {
 }
 
 
-impl<'a, T: Float> Grid1D<'a, T> for RectilinearGrid<'a, T> {
+impl<'a, T: Float> Grid1D<'a, T> for RectilinearGrid1D<'a, T> {
     #[inline]
     fn at(&self, loc: T) -> Result<((T, T), (T, T), Extrap), &'static str> {
         let (i, extrap) = self.index(loc)?;
