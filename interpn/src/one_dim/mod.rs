@@ -65,6 +65,7 @@ pub trait Interp1D<'a, T: Float, G: Grid1D<'a, T>> {
 }
 
 /// A regular grid, which has the same spacing between each point.
+#[derive(Clone, Copy)]
 pub struct RegularGrid1D<'a, T: Float> {
     start: T,
     stop: T,
@@ -94,7 +95,7 @@ impl<'a, T: Float> RegularGrid1D<'a, T> {
         };
 
         // Nominal location may be outside the grid
-        let i = (loc - self.start) / self.step;
+        let i = T::floor((loc - self.start) / self.step);
 
         // Clip to inside of grid
         let i = <isize as NumCast>::from(i)
@@ -122,6 +123,7 @@ impl<'a, T: Float> Grid1D<'a, T> for RegularGrid1D<'a, T> {
 }
 
 /// A rectilinear grid, which may have uneven spacing.
+#[derive(Clone, Copy)]
 pub struct RectilinearGrid1D<'a, T: Float> {
     grid: &'a [T],
     vals: &'a [T],
