@@ -89,7 +89,7 @@ impl<'a, T: Float> RegularGrid1D<'a, T> {
     fn index(&self, loc: T) -> Result<(usize, Extrap), &'static str> {
         let extrap = match loc {
             x if x > self.stop => Extrap::OutsideHigh,
-            x if x < self.stop => Extrap::OutsideLow,
+            x if x < self.start => Extrap::OutsideLow,
             _ => Extrap::Inside,
         };
 
@@ -140,11 +140,11 @@ impl<'a, T: Float> RectilinearGrid1D<'a, T> {
     #[inline]
     pub fn index(&self, loc: T) -> Result<(usize, Extrap), &'static str> {
         let i = ((self.grid.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
-            .min(self.vals.len() - 2);
+            .min(self.grid.len() - 2);
 
         let extrap = match loc {
-            x if x < self.vals[0] => Extrap::OutsideLow,
-            x if x > self.vals[self.vals.len() - 1] => Extrap::OutsideHigh,
+            x if x < self.grid[0] => Extrap::OutsideLow,
+            x if x > self.grid[self.grid.len() - 1] => Extrap::OutsideHigh,
             _ => Extrap::Inside,
         };
 

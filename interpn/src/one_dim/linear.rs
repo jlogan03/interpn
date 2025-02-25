@@ -114,13 +114,18 @@ mod test {
         let y_linhl_reg = linhl_reg.eval_alloc(&locs).unwrap();
         let y_linhl_rect = linhl_rect.eval_alloc(&locs).unwrap();
 
-        // Check linear
-        for (xs, ys) in [(x_reg, y_lin_reg), (x_rect, y_lin_rect)] {
+        // Check
+        for (xs, ys, hold) in [
+            (&x_reg, y_lin_reg, false),
+            (&x_rect, y_lin_rect, false),
+            (&x_reg, y_linhl_reg, true),
+            (&x_rect, y_linhl_rect, true),
+        ] {
             for i in 0..locs.len() {
                 let loc = locs[i];
                 let y = ys[i];
                 let j: usize = ((xs.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
-                    .min(vals.len() - 2);
+                    .min(xs.len() - 2);
 
                 let xleft = xs[j];
                 let xright = xs[j + 1];
@@ -130,20 +135,35 @@ mod test {
                 let slope = (yright - yleft) / (xright - xleft);
                 let dx = loc - xleft;
 
+                let ymax = yleft.max(yright);
+                let ymin = yleft.min(yright);
+
+                println!("{j} {yleft} {y} {yright} -- {} {}", ys[0], ys[ys.len() - 1]);
+                println!("grid {} {} -- {xleft} {xright} {yleft} {yright}", xs[1] - xs[0], xs[2] - xs[1]);
+                println!("{hold}");
+                println!("{loc} {} {}", xs[0], xs[n-1]);
+
                 // Interpolation
-                if loc >= xs[0] && loc <= xs[n-1] {
-                    let ymax = yleft.max(yright);
-                    let ymin = yleft.min(yright);
-                    println!("{j} {ymin} {y} {ymax}");
+                if loc >= xs[0] && loc <= xs[n - 1] {
                     assert!(y <= ymax && y >= ymin);
                     assert!(
                         loc >= xleft && loc <= xright,
                         "Didn't find the correct cell"
                     );
+                } else if loc > xs[n - 1] && hold {
+                    let y_expected = ys[n - 1];
+                    assert!(((y - y_expected) / y_expected).abs() < 1e-12);
+                    continue;
+                } else if loc < xs[0] && hold {
+                    let y_expected = ys[0];
+                    assert!(((y - y_expected) / y_expected).abs() < 1e-12);
+                    continue;
                 }
 
+
                 let y_expected = yleft + slope * dx;
-                assert!((y - y_expected) / y_expected < 1e-12);
+                println!("{} {}", &y, &y_expected);
+                assert!(((y - y_expected) / y_expected).abs() < 1e-12);
             }
         }
     }
