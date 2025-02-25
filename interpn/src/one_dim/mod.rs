@@ -54,7 +54,7 @@ pub trait Interp1D<'a, T: Float, G: Grid1D<'a, T>> {
     /// for the output values for convenience.
     ///
     /// It is highly recommended to inline implementations of this function.
-    #[cfg(feature="std")]
+    #[cfg(feature = "std")]
     #[inline]
     fn eval_alloc(&self, locs: &[T]) -> Result<Vec<T>, &'static str> {
         let mut out = vec![T::zero(); locs.len()];
@@ -139,10 +139,8 @@ impl<'a, T: Float> RectilinearGrid1D<'a, T> {
 
     #[inline]
     pub fn index(&self, loc: T) -> Result<(usize, Extrap), &'static str> {
-        let i = self
-            .grid
-            .partition_point(|x| *x < loc)
-            .min(self.grid.len() - 2);
+        let i = ((self.grid.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
+            .min(self.vals.len() - 2);
 
         let extrap = match loc {
             x if x < self.vals[0] => Extrap::OutsideLow,
@@ -153,7 +151,6 @@ impl<'a, T: Float> RectilinearGrid1D<'a, T> {
         Ok((i, extrap))
     }
 }
-
 
 impl<'a, T: Float> Grid1D<'a, T> for RectilinearGrid1D<'a, T> {
     #[inline]

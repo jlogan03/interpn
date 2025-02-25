@@ -114,34 +114,37 @@ mod test {
         let y_linhl_reg = linhl_reg.eval_alloc(&locs).unwrap();
         let y_linhl_rect = linhl_rect.eval_alloc(&locs).unwrap();
 
-        // Check linear regular
-        for i in 0..locs.len() {
-            let loc = locs[i];
-            let y = y_lin_reg[i];
-            let j: usize = ((x_reg.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
-                .min(vals.len() - 2);
+        // Check linear
+        for (xs, ys) in [(x_reg, y_lin_reg), (x_rect, y_lin_rect)] {
+            for i in 0..locs.len() {
+                let loc = locs[i];
+                let y = ys[i];
+                let j: usize = ((xs.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
+                    .min(vals.len() - 2);
 
-            // Interpolation
-            if loc >= start && loc <= stop {
-                let xleft = x_reg[j];
-                let xright = x_reg[j + 1];
+                let xleft = xs[j];
+                let xright = xs[j + 1];
                 let yleft = vals[j];
                 let yright = vals[j + 1];
-
-                assert!(
-                    loc >= xleft && loc <= xright,
-                    "Didn't find the correct cell"
-                );
 
                 let slope = (yright - yleft) / (xright - xleft);
                 let dx = loc - xleft;
 
-                let y_expected = yleft + slope * dx;
+                // Interpolation
+                if loc >= xs[0] && loc <= xs[n-1] {
+                    let ymax = yleft.max(yright);
+                    let ymin = yleft.min(yright);
+                    println!("{j} {ymin} {y} {ymax}");
+                    assert!(y <= ymax && y >= ymin);
+                    assert!(
+                        loc >= xleft && loc <= xright,
+                        "Didn't find the correct cell"
+                    );
+                }
 
+                let y_expected = yleft + slope * dx;
                 assert!((y - y_expected) / y_expected < 1e-12);
             }
-
-            // Extrapolation
         }
     }
 }
