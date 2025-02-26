@@ -86,7 +86,7 @@ impl<'a, T: Float> RegularGrid1D<'a, T> {
 
     /// Get the index of the lower corner of the containing grid cell
     #[inline]
-    fn index(&self, loc: T) -> Result<(usize, Extrap), &'static str> {
+    pub fn index(&self, loc: T) -> Result<(usize, Extrap), &'static str> {
         let extrap = match loc {
             x if x > self.stop => Extrap::OutsideHigh,
             x if x < self.start => Extrap::OutsideLow,

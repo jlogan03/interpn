@@ -92,6 +92,7 @@ pub mod multicubic;
 pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
 
 pub mod one_dim;
+pub use one_dim::{RegularGrid1D, RectilinearGrid1D, linear::Linear1D, linear::LinearHoldLast1D};
 
 #[cfg(feature = "std")]
 pub mod utils;
