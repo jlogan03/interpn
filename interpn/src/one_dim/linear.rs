@@ -70,7 +70,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::one_dim::{Grid1D, Interp1D, RectilinearGrid1D, RegularGrid1D};
+    use crate::one_dim::{Interp1D, RectilinearGrid1D, RegularGrid1D};
     use crate::testing::{randn, rng_fixed_seed};
     use crate::utils::linspace;
 
@@ -138,11 +138,6 @@ mod test {
                 let ymax = yleft.max(yright);
                 let ymin = yleft.min(yright);
 
-                println!("{j} {yleft} {y} {yright} -- {} {}", ys[0], ys[ys.len() - 1]);
-                println!("grid {} {} -- {xleft} {xright} {yleft} {yright}", xs[1] - xs[0], xs[2] - xs[1]);
-                println!("{hold}");
-                println!("{loc} {} {}", xs[0], xs[n-1]);
-
                 // Interpolation
                 if loc >= xs[0] && loc <= xs[n - 1] {
                     assert!(y <= ymax && y >= ymin);
@@ -151,18 +146,17 @@ mod test {
                         "Didn't find the correct cell"
                     );
                 } else if loc > xs[n - 1] && hold {
-                    let y_expected = ys[n - 1];
+                    let y_expected = vals[n - 1];
                     assert!(((y - y_expected) / y_expected).abs() < 1e-12);
                     continue;
                 } else if loc < xs[0] && hold {
-                    let y_expected = ys[0];
+                    let y_expected = vals[0];
                     assert!(((y - y_expected) / y_expected).abs() < 1e-12);
                     continue;
                 }
 
 
                 let y_expected = yleft + slope * dx;
-                println!("{} {}", &y, &y_expected);
                 assert!(((y - y_expected) / y_expected).abs() < 1e-12);
             }
         }
