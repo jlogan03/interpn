@@ -4,6 +4,7 @@
 //! in a multidimensional context.
 
 pub mod linear;
+pub mod hold;
 
 use num_traits::{Float, NumCast};
 

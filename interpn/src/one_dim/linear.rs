@@ -1,4 +1,5 @@
-//! Special case of 1D linear interpolation
+//! Special case of 1D linear interpolation, which can be
+//! significantly faster than more general N-D interpolation.
 
 use num_traits::Float;
 
@@ -22,7 +23,7 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((x0, y0), (x1, y1), _extrap) = self.grid.at(loc)?;
+        let ((x0, y0), (x1, y1), _) = self.grid.at(loc)?;
 
         let slope = (y1 - y0) / (x1 - x0);
         let dx = loc - x0;
