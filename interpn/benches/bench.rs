@@ -2,7 +2,9 @@
 
 use criterion::*;
 use gridgen::*;
-use interpn::{multicubic, multilinear, MultilinearRegular};
+use interpn::{
+    multicubic, multilinear, one_dim::Interp1D, Linear1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D,
+};
 
 enum Kind {
     Interp,
@@ -207,6 +209,7 @@ fn bench_interp(c: &mut Criterion) {
     for gridsize in [100, 1000] {
         let mut group = c.benchmark_group(format!("Interp_1D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 1, gridsize, size, Kind::Interp);
         }
         group.finish();
@@ -215,6 +218,7 @@ fn bench_interp(c: &mut Criterion) {
     for gridsize in [100, 1000] {
         let mut group = c.benchmark_group(format!("Interp_2D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 2, gridsize, size, Kind::Interp);
         }
         group.finish();
@@ -223,7 +227,85 @@ fn bench_interp(c: &mut Criterion) {
     for gridsize in [10, 100] {
         let mut group = c.benchmark_group(format!("Interp_3D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 3, gridsize, size, Kind::Interp);
+        }
+        group.finish();
+    }
+
+    // 1D specialized methods
+    for gridsize in [10, 1000] {
+        let kind = Kind::Interp;
+        let ndims = 1;
+        let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
+        for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("Linear1D Rect. {}-grid", gridsize), size),
+                size,
+                |b, &size| {
+                    // Interpolation grid with noise
+                    let (grids, z) = gen_grid(ndims, gridsize, 1e-3);
+                    let grid = RectilinearGrid1D::new(&grids[0], &z).unwrap();
+
+                    // Observation grid
+                    let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
+                    let gridobs_t = match kind {
+                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                    };
+                    let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                    let mut out = vec![0.0; size];
+
+                    // Interpolator inputs
+                    // let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+
+                    b.iter(|| {
+                        black_box({
+                            let interp = Linear1D::new(grid);
+                            interp.eval(&obs[0], &mut out).unwrap()
+                        })
+                    });
+                },
+            );
+        }
+        group.finish();
+    }
+
+    for gridsize in [10, 1000] {
+        let kind = Kind::Interp;
+        let ndims = 1;
+        let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
+        for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("Linear1D Reg. {}-grid", gridsize), size),
+                size,
+                |b, &size| {
+                    // Interpolation grid with noise
+                    let (grids, z) = gen_grid(ndims, gridsize, 0.0);
+                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+
+                    // Observation grid
+                    let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
+                    let gridobs_t = match kind {
+                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                    };
+                    let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                    let mut out = vec![0.0; size];
+
+                    // Interpolator inputs
+                    // let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+
+                    b.iter(|| {
+                        black_box({
+                            let interp = Linear1D::new(grid);
+                            interp.eval(&obs[0], &mut out).unwrap()
+                        })
+                    });
+                },
+            );
         }
         group.finish();
     }
@@ -236,6 +318,7 @@ fn bench_extrap(c: &mut Criterion) {
     for gridsize in [10] {
         let mut group = c.benchmark_group(format!("Extrap_1D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 1, gridsize, size, Kind::Extrap);
         }
         group.finish();
@@ -244,6 +327,7 @@ fn bench_extrap(c: &mut Criterion) {
     for gridsize in [10] {
         let mut group = c.benchmark_group(format!("Extrap_2D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 2, gridsize, size, Kind::Extrap);
         }
         group.finish();
@@ -252,6 +336,7 @@ fn bench_extrap(c: &mut Criterion) {
     for gridsize in [10] {
         let mut group = c.benchmark_group(format!("Extrap_3D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
             bench_interp_specific!(group, 3, gridsize, size, Kind::Extrap);
         }
         group.finish();
