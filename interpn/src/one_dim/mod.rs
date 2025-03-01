@@ -15,6 +15,15 @@ pub enum Extrap {
     OutsideHigh,
 }
 
+/// A point in a grid
+pub struct GridSample<T> {
+    pub x0: T,
+    pub y0: T,
+    pub x1: T,
+    pub y1: T,
+    pub extrap: Extrap,
+}
+
 /// A regular or rectilinear 1D grid
 pub trait Grid1D<'a, T: Float> {
     /// Get the left and right values and their locations
@@ -25,7 +34,7 @@ pub trait Grid1D<'a, T: Float> {
     /// locations may not bracket the observation point.
     ///
     /// It is highly recommended to inline implementations of this function.
-    fn at(&self, loc: T) -> Result<((T, T), (T, T), Extrap), &'static str>;
+    fn at(&self, loc: T) -> Result<GridSample<T>, &'static str>;
 }
 
 /// A one-dimensional interpolator.
@@ -109,7 +118,7 @@ impl<'a, T: Float> RegularGrid1D<'a, T> {
 
 impl<'a, T: Float> Grid1D<'a, T> for RegularGrid1D<'a, T> {
     #[inline]
-    fn at(&self, loc: T) -> Result<((T, T), (T, T), Extrap), &'static str> {
+    fn at(&self, loc: T) -> Result<GridSample<T>, &'static str> {
         let (i, extrap) = self.index(loc)?;
 
         let x0 =
@@ -118,7 +127,13 @@ impl<'a, T: Float> Grid1D<'a, T> for RegularGrid1D<'a, T> {
 
         let (y0, y1) = (self.vals[i], self.vals[i + 1]);
 
-        Ok(((x0, y0), (x1, y1), extrap))
+        Ok(GridSample {
+            x0,
+            y0,
+            x1,
+            y1,
+            extrap,
+        })
     }
 }
 
@@ -155,12 +170,18 @@ impl<'a, T: Float> RectilinearGrid1D<'a, T> {
 
 impl<'a, T: Float> Grid1D<'a, T> for RectilinearGrid1D<'a, T> {
     #[inline]
-    fn at(&self, loc: T) -> Result<((T, T), (T, T), Extrap), &'static str> {
+    fn at(&self, loc: T) -> Result<GridSample<T>, &'static str> {
         let (i, extrap) = self.index(loc)?;
 
         let (x0, x1) = (self.grid[i], self.grid[i + 1]);
         let (y0, y1) = (self.vals[i], self.vals[i + 1]);
 
-        Ok(((x0, y0), (x1, y1), extrap))
+        Ok(GridSample {
+            x0,
+            y0,
+            x1,
+            y1,
+            extrap,
+        })
     }
 }

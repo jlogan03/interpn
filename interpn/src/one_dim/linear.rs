@@ -3,7 +3,7 @@
 
 use num_traits::Float;
 
-use super::{Extrap, Grid1D, Interp1D};
+use super::{Extrap, Grid1D, GridSample, Interp1D};
 
 /// Simple linear interpolation / extrapolation.
 pub struct Linear1D<G> {
@@ -23,7 +23,7 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((x0, y0), (x1, y1), _) = self.grid.at(loc)?;
+        let GridSample { x0, y0, x1, y1, .. } = self.grid.at(loc)?;
 
         let slope = (y1 - y0) / (x1 - x0);
         let dx = loc - x0;
@@ -53,7 +53,13 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((x0, y0), (x1, y1), extrap) = self.grid.at(loc)?;
+        let GridSample {
+            x0,
+            y0,
+            x1,
+            y1,
+            extrap,
+        } = self.grid.at(loc)?;
 
         let v = match extrap {
             Extrap::Inside => {

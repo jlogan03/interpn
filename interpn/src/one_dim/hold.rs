@@ -2,7 +2,7 @@
 
 use num_traits::Float;
 
-use super::{Extrap, Grid1D, Interp1D};
+use super::{Extrap, Grid1D, GridSample, Interp1D};
 
 /// Hold-last piecewise constant interpolation
 pub struct Left1D<G> {
@@ -22,7 +22,13 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((_, y0), (_, y1), extrap) = self.grid.at(loc)?;
+        let GridSample {
+            x0: _,
+            y0,
+            x1: _,
+            y1,
+            extrap,
+        } = self.grid.at(loc)?;
 
         let v = match extrap {
             Extrap::OutsideHigh => y1,
@@ -51,7 +57,13 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((_, y0), (_, y1), extrap) = self.grid.at(loc)?;
+        let GridSample {
+            x0: _,
+            y0,
+            x1: _,
+            y1,
+            extrap,
+        } = self.grid.at(loc)?;
 
         let v = match extrap {
             Extrap::OutsideLow => y0,
@@ -81,7 +93,7 @@ where
 {
     #[inline]
     fn eval_one(&self, loc: T) -> Result<T, &'static str> {
-        let ((x0, y0), (x1, y1), _) = self.grid.at(loc)?;
+        let GridSample { x0, y0, x1, y1, .. } = self.grid.at(loc)?;
 
         let dx0 = (loc - x0).abs();
         let dx1 = (loc - x1).abs();
