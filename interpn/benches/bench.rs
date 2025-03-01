@@ -3,7 +3,7 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    multicubic, multilinear, one_dim::{hold::{Left1D, Nearest1D}, Interp1D}, Linear1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D,
+    multicubic, multilinear, one_dim::{hold::{Left1D, Nearest1D}, Interp1D}, Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D
 };
 
 enum Kind {
@@ -296,6 +296,42 @@ fn bench_interp(c: &mut Criterion) {
                     b.iter(|| {
                         black_box({
                             let interp = Linear1D::new(grid);
+                            interp.eval(&obs[0], &mut out).unwrap()
+                        })
+                    });
+                },
+            );
+        }
+        group.finish();
+    }
+
+    // 1D specialized linear hold-last regular
+    for gridsize in [10, 1000] {
+        let kind = Kind::Interp;
+        let ndims = 1;
+        let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
+        for size in [1, 100, 1_000_000].iter() {
+            group.throughput(Throughput::Elements(*size as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("LinearHoldLast1D Reg. {}-grid", gridsize), size),
+                size,
+                |b, &size| {
+                    // Interpolation grid with noise
+                    let (grids, z) = gen_grid(ndims, gridsize, 0.0);
+                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+
+                    // Observation grid
+                    let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
+                    let gridobs_t = match kind {
+                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                    };
+                    let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                    let mut out = vec![0.0; size];
+
+                    b.iter(|| {
+                        black_box({
+                            let interp = LinearHoldLast1D::new(grid);
                             interp.eval(&obs[0], &mut out).unwrap()
                         })
                     });
