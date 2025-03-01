@@ -3,8 +3,8 @@
 //! and can support logical operations like hold-last that don't make sense
 //! in a multidimensional context.
 
-pub mod linear;
 pub mod hold;
+pub mod linear;
 
 use num_traits::{Float, NumCast};
 

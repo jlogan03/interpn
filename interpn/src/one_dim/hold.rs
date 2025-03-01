@@ -133,8 +133,8 @@ mod test {
         // Check
         for i in 0..locs.len() {
             let loc = locs[i];
-            let j: usize =
-                ((x_reg.partition_point(|v| v < &loc) as isize - 1).max(0) as usize).min(x_reg.len() - 2);
+            let j: usize = ((x_reg.partition_point(|v| v < &loc) as isize - 1).max(0) as usize)
+                .min(x_reg.len() - 2);
 
             let xleft = x_reg[j];
             let xright = x_reg[j + 1];
@@ -150,7 +150,6 @@ mod test {
 
                 assert_eq!(y_lreg[i], yleft);
                 assert_eq!(y_rreg[i], yright);
-                
             } else if loc > x_reg[n - 1] {
                 assert_eq!(y_lreg[i], yright);
                 assert_eq!(y_rreg[i], yright);
@@ -161,7 +160,7 @@ mod test {
 
             let y_nearest = match (loc - xleft) <= (xright - loc) {
                 true => yleft,
-                false => yright
+                false => yright,
             };
             assert_eq!(y_nreg[i], y_nearest);
         }

@@ -156,7 +156,6 @@ mod test {
                     continue;
                 }
 
-
                 let y_expected = yleft + slope * dx;
                 assert!(((y - y_expected) / y_expected).abs() < 1e-12);
             }

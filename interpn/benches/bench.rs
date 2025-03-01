@@ -3,7 +3,12 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    multicubic, multilinear, one_dim::{hold::{Left1D, Nearest1D}, Interp1D}, Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D
+    multicubic, multilinear,
+    one_dim::{
+        hold::{Left1D, Nearest1D},
+        Interp1D,
+    },
+    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D,
 };
 
 enum Kind {
@@ -282,7 +287,8 @@ fn bench_interp(c: &mut Criterion) {
                 |b, &size| {
                     // Interpolation grid with noise
                     let (grids, z) = gen_grid(ndims, gridsize, 0.0);
-                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+                    let grid =
+                        RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
@@ -318,7 +324,8 @@ fn bench_interp(c: &mut Criterion) {
                 |b, &size| {
                     // Interpolation grid with noise
                     let (grids, z) = gen_grid(ndims, gridsize, 0.0);
-                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+                    let grid =
+                        RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
@@ -354,7 +361,8 @@ fn bench_interp(c: &mut Criterion) {
                 |b, &size| {
                     // Interpolation grid with noise
                     let (grids, z) = gen_grid(ndims, gridsize, 0.0);
-                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+                    let grid =
+                        RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
@@ -390,7 +398,8 @@ fn bench_interp(c: &mut Criterion) {
                 |b, &size| {
                     // Interpolation grid with noise
                     let (grids, z) = gen_grid(ndims, gridsize, 0.0);
-                    let grid = RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
+                    let grid =
+                        RegularGrid1D::new(grids[0][0], grids[0][1] - grids[0][0], &z).unwrap();
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
@@ -412,7 +421,6 @@ fn bench_interp(c: &mut Criterion) {
         }
         group.finish();
     }
-
 }
 
 fn bench_extrap(c: &mut Criterion) {
