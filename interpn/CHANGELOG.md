@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.4 - 2025-02-28
+
+### Added
+
+* `one_dim` module with specialized methods for 1D interpolation
+  * Linear
+  * Linear with hold-last extrapolation
+  * Left, Right, and Nearest variants of piecewise-constant interpolation
+
 ## 0.4.3 - 2024-08-03
 
 ### Added
