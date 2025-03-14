@@ -84,6 +84,7 @@ pub fn interpn<T: Float>(
         _ => MulticubicRectilinear::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
             .interp(obs, out),
     }?;
+
     Ok(())
 }
 
