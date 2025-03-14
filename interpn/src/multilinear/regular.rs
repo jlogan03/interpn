@@ -49,7 +49,35 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out)?;
+    // Expanding out and using the specialized version for each size
+    // gives a substantial speedup for lower dimensionalities
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
+    let ndims = dims.len();
+    match ndims {
+        x if x == 1 => {
+            MultilinearRegular::<'_, T, 1>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 2 => {
+            MultilinearRegular::<'_, T, 2>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 3 => {
+            MultilinearRegular::<'_, T, 3>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 4 => {
+            MultilinearRegular::<'_, T, 4>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 5 => {
+            MultilinearRegular::<'_, T, 5>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 6 => {
+            MultilinearRegular::<'_, T, 6>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        x if x == 7 => {
+            MultilinearRegular::<'_, T, 7>::new(dims, starts, steps, vals)?.interp(obs, out)
+        }
+        _ => MultilinearRegular::<'_, T, 8>::new(dims, starts, steps, vals)?.interp(obs, out),
+    }?;
+
     Ok(())
 }
 

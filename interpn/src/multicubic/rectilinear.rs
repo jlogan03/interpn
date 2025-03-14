@@ -48,8 +48,42 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    MulticubicRectilinear::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
-        .interp(obs, out)?;
+    // Expanding out and using the specialized version for each size
+    // gives a substantial speedup for lower dimensionalities
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
+    let ndims = grids.len();
+    match ndims {
+        x if x == 1 => {
+            MulticubicRectilinear::<'_, T, 1>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 2 => {
+            MulticubicRectilinear::<'_, T, 2>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 3 => {
+            MulticubicRectilinear::<'_, T, 3>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 4 => {
+            MulticubicRectilinear::<'_, T, 4>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 5 => {
+            MulticubicRectilinear::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 6 => {
+            MulticubicRectilinear::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 7 => {
+            MulticubicRectilinear::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        _ => MulticubicRectilinear::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+    }?;
     Ok(())
 }
 

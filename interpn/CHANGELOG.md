@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.5 - 2025-03-14
+
+### Changed
+
+* Update `interpn` functions to select specialized generic version of interpolation calc based on number of dimensions in inputs
+  * ~2-6x speedup for lower-dimensional inputs
+  * Slight slowdown (~10%) for cases with one observation point, due to match statement overhead
+
 ## 0.4.4 - 2025-02-28
 
 ### Added
