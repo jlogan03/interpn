@@ -45,7 +45,21 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    MultilinearRectilinear::<'_, T, 8>::new(grids, vals)?.interp(obs, out)?;
+    // Expanding out and using the specialized version for each size
+    // gives a substantial speedup for lower dimensionalities
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
+    let ndims = grids.len();
+    match ndims {
+        x if x == 1 => MultilinearRectilinear::<'_, T, 1>::new(grids, vals)?.interp(obs, out),
+        x if x == 2 => MultilinearRectilinear::<'_, T, 2>::new(grids, vals)?.interp(obs, out),
+        x if x == 3 => MultilinearRectilinear::<'_, T, 3>::new(grids, vals)?.interp(obs, out),
+        x if x == 4 => MultilinearRectilinear::<'_, T, 4>::new(grids, vals)?.interp(obs, out),
+        x if x == 5 => MultilinearRectilinear::<'_, T, 5>::new(grids, vals)?.interp(obs, out),
+        x if x == 6 => MultilinearRectilinear::<'_, T, 6>::new(grids, vals)?.interp(obs, out),
+        x if x == 7 => MultilinearRectilinear::<'_, T, 7>::new(grids, vals)?.interp(obs, out),
+        _ => MultilinearRectilinear::<'_, T, 8>::new(grids, vals)?.interp(obs, out),
+    }?;
+
     Ok(())
 }
 

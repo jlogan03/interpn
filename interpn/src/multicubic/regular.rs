@@ -51,8 +51,45 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
-        .interp(obs, out)?;
+    // Expanding out and using the specialized version for each size
+    // gives a substantial speedup for lower dimensionalities
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
+    let ndims = dims.len();
+    match ndims {
+        x if x == 1 => {
+            MulticubicRegular::<'_, T, 1>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 2 => {
+            MulticubicRegular::<'_, T, 2>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 3 => {
+            MulticubicRegular::<'_, T, 3>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 4 => {
+            MulticubicRegular::<'_, T, 4>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 5 => {
+            MulticubicRegular::<'_, T, 5>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 6 => {
+            MulticubicRegular::<'_, T, 6>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 7 => {
+            MulticubicRegular::<'_, T, 7>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        _ => {
+            MulticubicRegular::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+    }?;
+
     Ok(())
 }
 
