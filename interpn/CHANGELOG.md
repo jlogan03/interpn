@@ -7,6 +7,8 @@
 * Update `interpn` functions to select specialized generic version of interpolation calc based on number of dimensions in inputs
   * ~2-6x speedup for lower-dimensional inputs
   * Slight slowdown (~10%) for cases with one observation point, due to match statement overhead
+* Add .cargo/config.toml with configuration to enable modern vector instructions on x86 targets
+  * Additional 20-30% speedup for regular grid methods on top of monomorphization speedups
 
 ## 0.4.4 - 2025-02-28
 
