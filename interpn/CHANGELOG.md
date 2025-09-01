@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.6 - 2025-09-01
+
+### Changed
+
+* Defer to const-unrolled bounded loop for small number of dimensions for multilinear method
+  * This provides a >2x speedup and makes the call-stack analyzable by removing true recursion
+
 ## 0.4.5 - 2025-03-14
 
 ### Changed

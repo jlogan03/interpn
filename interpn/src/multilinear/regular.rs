@@ -29,6 +29,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
+use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
 /// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
@@ -273,6 +274,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
+    #[inline]
     pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
         let ndims = self.ndims;
@@ -316,12 +318,57 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         }
 
         // Recursive interpolation of one dependency tree at a time
-        let dim = ndims; // Start from the end and recurse back to zero
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
-        let interped = self.populate(dim, origin, loc, dimprod, dts);
 
-        Ok(interped)
+        if MAXDIMS <= 4 {
+            let mut store = [[T::zero(); 2]; MAXDIMS];
+            let nverts = 2_usize.pow(ndims as u32); // Total number of vertices
+
+            unroll! {
+                for i < 16 in 0..nverts {
+
+                    // Index, interpolate, or pass on each level of the tree
+                    unroll!{
+                        for j < 5 in 0..ndims {
+
+                            // Most of these iterations will get optimized out
+                            if j == 0 {
+                                // At leaves, index values
+                                for k in 0..ndims {
+                                    loc[k] = origin[k] + (i & (1 << k)) >> k;
+                                }
+                                store[0][i % 2] = index_arr(loc, dimprod, self.vals);
+                            }
+                            else {
+                                // For other nodes, interpolate on child values
+                                let k = 2_usize.pow(j as u32);
+                                if (i + 1) % k == 0 {
+                                    let y0 = store[j - 1][0];
+                                    let dy = store[j - 1][1] - store[j - 1][0];
+                                    let t = dts[j - 1];
+                                    let interped = y0 + t * dy;
+
+                                    let p = (i + 1) / k - 1;
+                                    store[j][p % 2] = interped;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Interpolate the final value
+            let y0 = store[MAXDIMS - 1][0];
+            let dy = store[MAXDIMS - 1][1] - store[MAXDIMS - 1][0];
+            let t = dts[MAXDIMS - 1];
+            let interped = y0 + t * dy;
+            return Ok(interped);
+        } else {
+            let dim = ndims; // Start from the end and recurse back to zero
+            let interped = self.populate(dim, origin, loc, dimprod, dts);
+            return Ok(interped);
+        }
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
