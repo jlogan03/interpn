@@ -323,16 +323,16 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
 
         const FP: usize = 2;
 
-        if MAXDIMS < 9 {
+        if MAXDIMS < 7 {
             let mut store = [[T::zero(); FP]; MAXDIMS];
             let nverts = FP.pow(ndims as u32); // Total number of vertices
 
             
             unroll! {
-                for i < 256 in 0..nverts {
+                for i < 64 in 0..nverts {
                     // Index, interpolate, or pass on each level of the tree
                     unroll!{
-                        for j < 9 in 0..ndims {
+                        for j < 7 in 0..ndims {
 
                             // Most of these iterations will get optimized out
                             if j == 0 {
