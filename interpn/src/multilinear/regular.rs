@@ -321,36 +321,40 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
 
+        const FP: usize = 2;
+
         if MAXDIMS <= 4 {
-            let mut store = [[T::zero(); 2]; MAXDIMS];
-            let nverts = 2_usize.pow(ndims as u32); // Total number of vertices
+            let mut store = [[T::zero(); FP]; MAXDIMS];
+            let nverts = FP.pow(ndims as u32); // Total number of vertices
 
+            
             unroll! {
-                for i < 16 in 0..nverts {
-
+                for i < 65 in 0..nverts {
+                    println!("{i}");
                     // Index, interpolate, or pass on each level of the tree
                     unroll!{
-                        for j < 5 in 0..ndims {
+                        for j < 7 in 0..ndims {
 
                             // Most of these iterations will get optimized out
                             if j == 0 {
                                 // At leaves, index values
                                 for k in 0..ndims {
-                                    loc[k] = origin[k] + (i & (1 << k)) >> k;
+                                    let offset = (i & (1 << k)) >> k;
+                                    loc[k] = origin[k] + offset;
                                 }
-                                store[0][i % 2] = index_arr(loc, dimprod, self.vals);
+                                store[0][i % FP] = index_arr(loc, dimprod, self.vals);
                             }
                             else {
                                 // For other nodes, interpolate on child values
-                                let k = 2_usize.pow(j as u32);
-                                if (i + 1) % k == 0 {
+                                let q = FP.pow(j as u32);
+                                if (i + 1) % q == 0 {
                                     let y0 = store[j - 1][0];
                                     let dy = store[j - 1][1] - store[j - 1][0];
                                     let t = dts[j - 1];
                                     let interped = y0 + t * dy;
 
-                                    let p = (i + 1) / k - 1;
-                                    store[j][p % 2] = interped;
+                                    let p = ((i + 1) / q) - 1;
+                                    store[j][p % FP] = interped;
                                 }
                             }
                         }
@@ -359,9 +363,9 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
             }
 
             // Interpolate the final value
-            let y0 = store[MAXDIMS - 1][0];
-            let dy = store[MAXDIMS - 1][1] - store[MAXDIMS - 1][0];
-            let t = dts[MAXDIMS - 1];
+            let y0 = store[ndims - 1][0];
+            let dy = store[ndims - 1][1] - store[ndims - 1][0];
+            let t = dts[ndims - 1];
             let interped = y0 + t * dy;
             return Ok(interped);
         } else {
