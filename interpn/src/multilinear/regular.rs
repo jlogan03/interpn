@@ -334,8 +334,9 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
                         for j < 7 in 0..ndims {
 
                             // Most of these iterations will get optimized out
-                            if j == 0 { // const branch
+                            if const{j == 0} { // const branch
                                 // At leaves, index values
+
                                 unroll!{
                                     for k < 7 in 0..ndims {
                                         // Bit pattern in an integer matches C-ordered array indexing
@@ -350,18 +351,19 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
                             }
                             else { // const branch
                                 // For other nodes, interpolate on child values
+                                
                                 const Q: usize = const{FP.pow(j as u32)};
                                 const LEVEL: bool = const {(i + 1) % Q == 0};
+                                const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
+                                const IND: usize = const{j.saturating_sub(1)};    
 
                                 if LEVEL { // const branch
-                                    const IND: usize = const{j.saturating_sub(1)};
                                     let y0 = store[IND][0];  // const indices
                                     let dy = store[IND][1] - store[IND][0];
                                     let t = dts[IND];
                                     let interped = y0 + t * dy;
 
-                                    let p = const{((i + 1) / Q).saturating_sub(1) % FP};
-                                    store[j][p] = interped;  // const indices
+                                    store[j][P] = interped;  // const indices
                                 }
                             }
                         }
@@ -370,6 +372,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
             }
 
             // Interpolate the final value
+            // This could use a const index as well, if we were using a fixed number of dims
             let y0 = store[ndims - 1][0];
             let dy = store[ndims - 1][1] - store[ndims - 1][0];
             let t = dts[ndims - 1];
