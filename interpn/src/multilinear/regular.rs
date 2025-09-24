@@ -327,7 +327,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
             let mut store = [[T::zero(); FP]; MAXDIMS];
             let nverts = FP.pow(ndims as u32); // Total number of vertices
 
-            
             unroll! {
                 for i < 64 in 0..nverts {
                     // Index, interpolate, or pass on each level of the tree
@@ -337,15 +336,17 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
                             // Most of these iterations will get optimized out
                             if j == 0 {
                                 // At leaves, index values
-                                for k in 0..ndims {
-                                    let offset = (i & (1 << k)) >> k;
-                                    loc[k] = origin[k] + offset;
+                                unroll!{
+                                    for k < 7 in 0..ndims {
+                                        let offset = const{(i & (1 << k)) >> k};
+                                        loc[k] = origin[k] + offset;
+                                    }
                                 }
                                 store[0][i % FP] = index_arr(loc, dimprod, self.vals);
                             }
                             else {
                                 // For other nodes, interpolate on child values
-                                let q = FP.pow(j as u32);
+                                let q = const{FP.pow(j as u32)};
                                 if (i + 1) % q == 0 {
                                     let y0 = store[j - 1][0];
                                     let dy = store[j - 1][1] - store[j - 1][0];
