@@ -334,27 +334,34 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegular<'a, T, MAXDIMS> {
                         for j < 7 in 0..ndims {
 
                             // Most of these iterations will get optimized out
-                            if j == 0 {
+                            if j == 0 { // const branch
                                 // At leaves, index values
                                 unroll!{
                                     for k < 7 in 0..ndims {
-                                        let offset = const{(i & (1 << k)) >> k};
-                                        loc[k] = origin[k] + offset;
+                                        // Bit pattern in an integer matches C-ordered array indexing
+                                        // so we can just use the vertex index to index into the array
+                                        // by selecting the appropriate bit from the index.
+                                        const OFFSET: usize = const{(i & (1 << k)) >> k};
+                                        loc[k] = origin[k] + OFFSET;
                                     }
                                 }
-                                store[0][i % FP] = index_arr(loc, dimprod, self.vals);
+                                const STORE_IND: usize = i % FP;
+                                store[0][STORE_IND] = index_arr(loc, dimprod, self.vals);
                             }
-                            else {
+                            else { // const branch
                                 // For other nodes, interpolate on child values
-                                let q = const{FP.pow(j as u32)};
-                                if (i + 1) % q == 0 {
-                                    let y0 = store[j - 1][0];
-                                    let dy = store[j - 1][1] - store[j - 1][0];
-                                    let t = dts[j - 1];
+                                const Q: usize = const{FP.pow(j as u32)};
+                                const LEVEL: bool = const {(i + 1) % Q == 0};
+
+                                if LEVEL { // const branch
+                                    const IND: usize = const{j.saturating_sub(1)};
+                                    let y0 = store[IND][0];  // const indices
+                                    let dy = store[IND][1] - store[IND][0];
+                                    let t = dts[IND];
                                     let interped = y0 + t * dy;
 
-                                    let p = ((i + 1) / q) - 1;
-                                    store[j][p % FP] = interped;
+                                    let p = const{((i + 1) / Q).saturating_sub(1) % FP};
+                                    store[j][p] = interped;  // const indices
                                 }
                             }
                         }
