@@ -364,7 +364,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
                                         // so we can just use the vertex index to index into the array
                                         // by selecting the appropriate bit from the index.
                                         const OFFSET: usize = const{(i & (3 << (2*k))) >> (2*k)};
-                                        loc[k] = (origin[k] + OFFSET).saturating_sub(1);
+                                        loc[k] = origin[k] + OFFSET;
                                     }
                                 }
                                 const STORE_IND: usize = i % FP;
