@@ -232,7 +232,12 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
             return Err("All grids must be monotonically increasing");
         }
 
-        Ok(Self {dims, starts, steps, vals})
+        Ok(Self {
+            dims,
+            starts,
+            steps,
+            vals,
+        })
     }
 
     /// Interpolate on a contiguous list of observation points.
@@ -401,7 +406,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     fn index_arr(&self, loc: [usize; N], dimprod: [usize; N]) -> T {
         let mut i = 0;
 
-        unroll!{
+        unroll! {
             for j < 7 in 0..N {
                 i += loc[j] * dimprod[j];
             }
@@ -410,8 +415,6 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         self.vals[i]
     }
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -482,10 +485,7 @@ mod test {
             MultilinearRegular::new([3], [0.0], [1.0], &y).unwrap();
 
         (0..obs.len()).for_each(|i| {
-            assert_eq!(
-                hat_func(obs[i]),
-                interpolator.interp_one([obs[i]]).unwrap()
-            );
+            assert_eq!(hat_func(obs[i]), interpolator.interp_one([obs[i]]).unwrap());
         })
     }
 }

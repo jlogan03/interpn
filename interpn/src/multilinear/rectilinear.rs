@@ -50,20 +50,23 @@ pub fn interpn<T: Float>(
     // gives a substantial speedup for lower dimensionalities
     // (4-5x speedup for 1-dim compared to using N=8)
     let ndims = grids.len();
+    if grids.len() != ndims || obs.len() != ndims {
+        return Err("Dimension mismatch");
+    }
     match ndims {
         x if x == 1 => MultilinearRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
+            .interp(obs.try_into().unwrap(), out),
         x if x == 2 => MultilinearRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
+            .interp(obs.try_into().unwrap(), out),
         x if x == 3 => MultilinearRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
+            .interp(obs.try_into().unwrap(), out),
         x if x == 4 => MultilinearRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
+            .interp(obs.try_into().unwrap(), out),
         x if x == 5 => MultilinearRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
+            .interp(obs.try_into().unwrap(), out),
         x if x == 6 => MultilinearRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs, out),
-        _ => Err("Dimension exceeds maximum (4)"),
+            .interp(obs.try_into().unwrap(), out),
+        _ => Err("Dimension exceeds maximum (6)"),
     }?;
 
     Ok(())
@@ -188,7 +191,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
+    pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
 
         // Make sure there are enough coordinate inputs for each dimension
