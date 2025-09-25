@@ -44,6 +44,7 @@ macro_rules! bench_interp_specific {
                     Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
                 };
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];
@@ -55,8 +56,8 @@ macro_rules! bench_interp_specific {
                 b.iter(|| {
                     black_box({
                         let interpolator: MultilinearRegular<'_, _, $ndims> =
-                            MultilinearRegular::new(&dims, &starts, &steps, &z).unwrap();
-                        interpolator.interp(&obs, &mut out).unwrap()
+                            MultilinearRegular::new(dims, starts, steps, &z).unwrap();
+                        interpolator.interp(obs, &mut out).unwrap()
                     })
                 });
             },
