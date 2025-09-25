@@ -30,6 +30,7 @@
 //! let linearize_extrapolation = false;
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
+use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
@@ -338,13 +339,76 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
         }
 
         // Recursive interpolation of one dependency tree at a time
-        // let loc = &origin; // Starting location in the tree is the origin
-        let dim = ndims; // Start from the end and recurse back to zero
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
-        let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
 
-        Ok(interped)
+        const FP: usize = 4;
+
+        if MAXDIMS < 5 {
+            let mut store = [[T::zero(); FP]; MAXDIMS];
+            let nverts = FP.pow(ndims as u32); // Total number of vertices
+
+            unroll! {
+                for i < 256 in 0..nverts {  // const loop
+                    // Index, interpolate, or pass on each level of the tree
+                    unroll!{
+                        for j < 5 in 0..ndims {  // const loop
+
+                            // Most of these iterations will get optimized out
+                            if const{j == 0} { // const branch
+                                // At leaves, index values
+
+                                unroll!{
+                                    for k < 5 in 0..ndims {  // const loop
+                                        // Bit pattern in an integer matches C-ordered array indexing
+                                        // so we can just use the vertex index to index into the array
+                                        // by selecting the appropriate bit from the index.
+                                        const OFFSET: usize = const{(i & (3 << (2*k))) >> (2*k)};
+                                        loc[k] = (origin[k] + OFFSET).saturating_sub(1);
+                                    }
+                                }
+                                const STORE_IND: usize = i % FP;
+                                store[0][STORE_IND] = index_arr(loc, dimprod, self.vals);
+                            }
+                            else { // const branch
+                                // For other nodes, interpolate on child values
+
+                                const Q: usize = const{FP.pow(j as u32)};
+                                const LEVEL: bool = const {(i + 1) % Q == 0};
+                                const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
+                                const IND: usize = const{j.saturating_sub(1)};
+
+                                if LEVEL { // const branch
+                                    let interped = interp_inner::<T, MAXDIMS>(
+                                        &store[IND],
+                                        dts[IND],
+                                        sat[IND],
+                                        self.linearize_extrapolation
+                                    );
+
+                                    store[j][P] = interped;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Interpolate the final value
+            // This could use a const index as well, if we were using a fixed number of dims
+            let interped = interp_inner::<T, MAXDIMS>(
+                &store[ndims - 1],
+                dts[ndims - 1],
+                sat[ndims - 1],
+                self.linearize_extrapolation
+            );
+            return Ok(interped);
+        } else {
+            // Fall back on bounded recursion for larger number of dimensions
+            let dim = ndims; // Start from the end and recurse back to zero
+            let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
+            return Ok(interped);
+        }
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -427,7 +491,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 
                 // Interpolate on next dim's values to populate an entry in this dim
                 interp_inner::<T, MAXDIMS>(
-                    vals,
+                    &vals,
                     dts[next_dim],
                     sat[next_dim],
                     self.linearize_extrapolation,
@@ -440,7 +504,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
 fn interp_inner<T: Float, const MAXDIMS: usize>(
-    vals: [T; 4],
+    vals: &[T; 4],
     t: T,
     sat: Saturation,
     linearize_extrapolation: bool,
