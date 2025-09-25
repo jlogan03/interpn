@@ -65,7 +65,7 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
-                    "Linear Regular {}x{}D MAXDIMS=auto, {}",
+                    "Linear Regular {}x{}D MAXDIMS=8, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
                 $size,
@@ -102,7 +102,7 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
-                    "Linear Rectilinear {}x{}D MAXDIMS=auto, {}",
+                    "Linear Rectilinear {}x{}D MAXDIMS=8, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
                 $size,
@@ -135,7 +135,7 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
-                    "Cubic Regular {}x{}D MAXDIMS=auto, {}",
+                    "Cubic Regular {}x{}D MAXDIMS=8, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
                 $size,
@@ -174,7 +174,7 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
-                    "Cubic Rectilinear {}x{}D MAXDIMS=auto, {}",
+                    "Cubic Rectilinear {}x{}D MAXDIMS=8, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
                 $size,

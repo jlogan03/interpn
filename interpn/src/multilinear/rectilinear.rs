@@ -253,7 +253,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
 
         // Recursive interpolation of one dependency tree at a time
         let loc = &mut [0_usize; MAXDIMS][..ndims];
-        loc.copy_from_slice(origin);
 
         const FP: usize = 2;
 
@@ -324,6 +323,8 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
             let interped = y0 + t * dy;
             return Ok(interped);
         } else {
+            // Fall back on bounded recursion for larger number of dimensions
+            loc.copy_from_slice(origin);
             let dim = ndims; // Start from the end and recurse back to zero
             let interped = self.populate(dim, origin, loc, dimprod, x);
             return Ok(interped);

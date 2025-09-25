@@ -340,7 +340,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
 
         // Recursive interpolation of one dependency tree at a time
         let loc = &mut [0_usize; MAXDIMS][..ndims];
-        loc.copy_from_slice(origin);
 
         const FP: usize = 4;
 
@@ -405,6 +404,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegular<'a, T, MAXDIMS> {
             return Ok(interped);
         } else {
             // Fall back on bounded recursion for larger number of dimensions
+            loc.copy_from_slice(origin);
             let dim = ndims; // Start from the end and recurse back to zero
             let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
             return Ok(interped);
