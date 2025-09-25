@@ -258,21 +258,22 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         const FP: usize = 2;
 
         if MAXDIMS < 7 {
+            // const branch
             let mut store = [[T::zero(); FP]; MAXDIMS];
             let nverts = FP.pow(ndims as u32); // Total number of vertices
 
             unroll! {
-                for i < 64 in 0..nverts {
+                for i < 64 in 0..nverts { // const loop
                     // Index, interpolate, or pass on each level of the tree
                     unroll!{
-                        for j < 7 in 0..ndims {
+                        for j < 7 in 0..ndims { // const loop
 
                             // Most of these iterations will get optimized out
                             if const{j == 0} { // const branch
                                 // At leaves, index values
 
                                 unroll!{
-                                    for k < 7 in 0..ndims {
+                                    for k < 7 in 0..ndims { // const loop
                                         // Bit pattern in an integer matches C-ordered array indexing
                                         // so we can just use the vertex index to index into the array
                                         // by selecting the appropriate bit from the index.
@@ -285,11 +286,11 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
                             }
                             else { // const branch
                                 // For other nodes, interpolate on child values
-                                
+
                                 const Q: usize = const{FP.pow(j as u32)};
                                 const LEVEL: bool = const {(i + 1) % Q == 0};
                                 const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
-                                const IND: usize = const{j.saturating_sub(1)};    
+                                const IND: usize = const{j.saturating_sub(1)};
 
                                 if LEVEL { // const branch
                                     let x0 = self.grids[IND][origin[IND]];
@@ -297,12 +298,12 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
                                     let step = x1 - x0;
                                     let t = (x[IND] - x0) / step;
 
-                                    let y0 = store[IND][0];  // const indices
+                                    let y0 = store[IND][0];
                                     let dy = store[IND][1] - y0;
 
                                     let interped = y0 + t * dy;
 
-                                    store[j][P] = interped;  // const indices
+                                    store[j][P] = interped;
                                 }
                             }
                         }
