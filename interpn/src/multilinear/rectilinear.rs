@@ -27,6 +27,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
+use crunchy::unroll;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
@@ -251,13 +252,81 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinear<'a, T, MAXDIMS> 
         }
 
         // Recursive interpolation of one dependency tree at a time
-        // let loc = &origin; // Starting location in the tree is the origin
-        let dim = ndims; // Start from the end and recurse back to zero
         let loc = &mut [0_usize; MAXDIMS][..ndims];
         loc.copy_from_slice(origin);
-        let interped = self.populate(dim, origin, loc, dimprod, x);
 
-        Ok(interped)
+        const FP: usize = 2;
+
+        if MAXDIMS < 7 {
+            let mut store = [[T::zero(); FP]; MAXDIMS];
+            let nverts = FP.pow(ndims as u32); // Total number of vertices
+
+            unroll! {
+                for i < 64 in 0..nverts {
+                    // Index, interpolate, or pass on each level of the tree
+                    unroll!{
+                        for j < 7 in 0..ndims {
+
+                            // Most of these iterations will get optimized out
+                            if const{j == 0} { // const branch
+                                // At leaves, index values
+
+                                unroll!{
+                                    for k < 7 in 0..ndims {
+                                        // Bit pattern in an integer matches C-ordered array indexing
+                                        // so we can just use the vertex index to index into the array
+                                        // by selecting the appropriate bit from the index.
+                                        const OFFSET: usize = const{(i & (1 << k)) >> k};
+                                        loc[k] = origin[k] + OFFSET;
+                                    }
+                                }
+                                const STORE_IND: usize = i % FP;
+                                store[0][STORE_IND] = index_arr(loc, dimprod, self.vals);
+                            }
+                            else { // const branch
+                                // For other nodes, interpolate on child values
+                                
+                                const Q: usize = const{FP.pow(j as u32)};
+                                const LEVEL: bool = const {(i + 1) % Q == 0};
+                                const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
+                                const IND: usize = const{j.saturating_sub(1)};    
+
+                                if LEVEL { // const branch
+                                    let x0 = self.grids[IND][origin[IND]];
+                                    let x1 = self.grids[IND][origin[IND] + 1];
+                                    let step = x1 - x0;
+                                    let t = (x[IND] - x0) / step;
+
+                                    let y0 = store[IND][0];  // const indices
+                                    let dy = store[IND][1] - y0;
+
+                                    let interped = y0 + t * dy;
+
+                                    store[j][P] = interped;  // const indices
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Interpolate the final value
+            // This could use a const index as well, if we were using a fixed number of dims
+            let ind = ndims - 1;
+            let x0 = self.grids[ind][origin[ind]];
+            let x1 = self.grids[ind][origin[ind] + 1];
+            let step = x1 - x0;
+            let t = (x[ind] - x0) / step;
+
+            let y0 = store[ind][0];
+            let dy = store[ind][1] - y0;
+            let interped = y0 + t * dy;
+            return Ok(interped);
+        } else {
+            let dim = ndims; // Start from the end and recurse back to zero
+            let interped = self.populate(dim, origin, loc, dimprod, x);
+            return Ok(interped);
+        }
     }
 
     /// Get the lower-corner index along this dimension where `x` is found,
