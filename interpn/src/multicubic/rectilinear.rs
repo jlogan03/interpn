@@ -193,7 +193,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
             return Err("Dimension mismatch");
         };
         // Check if any grids are degenerate
-        let degenerate = dims[..N].iter().any(|&x| x < 4);
+        let degenerate = dims.iter().any(|&x| x < 4);
         if degenerate {
             return Err("All grids must have at least 4 entries");
         };
@@ -268,20 +268,20 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
         let mut dimprod = [1_usize; N];
 
-        // Populate cumulative product of higher dimensions for indexing.
-        //
-        // Each entry is the cumulative product of the size of dimensions
-        // higher than this one, which is the stride between blocks
-        // relating to a given index along each dimension.
         let mut acc = 1;
-        for i in 0..N {
-            dimprod[N - i - 1] = acc;
-            acc *= self.dims[N - i - 1];
-        }
+        unroll!{
+            for i < 5 in 0..N {
+                // Populate cumulative product of higher dimensions for indexing.
+                //
+                // Each entry is the cumulative product of the size of dimensions
+                // higher than this one, which is the stride between blocks
+                // relating to a given index along each dimension.
+                dimprod[N - i - 1] = acc;
+                acc *= self.dims[N - i - 1];
 
-        // Populate lower corner and saturation flag for each dimension
-        for i in 0..N {
-            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+                // Populate lower corner and saturation flag for each dimension
+                (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+            }
         }
 
         // Recursive interpolation of one dependency tree at a time
