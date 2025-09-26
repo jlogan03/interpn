@@ -236,21 +236,22 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         let mut origin = [0_usize; N]; // Indices of lower corner of hypercub
         let mut dimprod = [1_usize; N];
 
-        // Populate cumulative product of higher dimensions for indexing.
-        //
-        // Each entry is the cumulative product of the size of dimensions
-        // higher than this one, which is the stride between blocks
-        // relating to a given index along each dimension.
         let mut acc = 1;
-        for i in 0..N {
-            dimprod[N - i - 1] = acc;
-            acc *= self.dims[N - i - 1];
+        unroll!{
+            for i < 7 in 0..N {
+                // Populate cumulative product of higher dimensions for indexing.
+                //
+                // Each entry is the cumulative product of the size of dimensions
+                // higher than this one, which is the stride between blocks
+                // relating to a given index along each dimension.
+                dimprod[N - i - 1] = acc;
+                acc *= self.dims[N - i - 1];
+            
+                // Populate lower corner and saturation flag for each dimension
+                origin[i] = self.get_loc(x[i], i)?;
+            }
         }
 
-        // Populate lower corner and saturation flag for each dimension
-        for i in 0..N {
-            origin[i] = self.get_loc(x[i], i)?;
-        }
 
         // Recursive interpolation of one dependency tree at a time
         let mut loc = [0_usize; N];

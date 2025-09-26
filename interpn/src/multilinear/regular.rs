@@ -296,29 +296,30 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let mut dts = [T::zero(); N]; // Normalized coordinate storage
         let mut dimprod = [1_usize; N];
 
-        // Populate cumulative product of higher dimensions for indexing.
-        //
-        // Each entry is the cumulative product of the size of dimensions
-        // higher than this one, which is the stride between blocks
-        // relating to a given index along each dimension.
+
         let mut acc = 1;
-        for i in 0..N {
-            dimprod[N - i - 1] = acc;
-            acc *= self.dims[N - i - 1];
-        }
+        unroll!{
+            for i < 7 in 0..N {
+                // Populate cumulative product of higher dimensions for indexing.
+                //
+                // Each entry is the cumulative product of the size of dimensions
+                // higher than this one, which is the stride between blocks
+                // relating to a given index along each dimension.
+                dimprod[N - i - 1] = acc;
+                acc *= self.dims[N - i - 1];
+                
+                // Populate lower corner and saturation flag for each dimension
+                origin[i] = self.get_loc(x[i], i)?;
+                
 
-        // Populate lower corner and saturation flag for each dimension
-        for i in 0..N {
-            origin[i] = self.get_loc(x[i], i)?;
+                // Calculate normalized delta locations
+                let index_zero_loc = self.starts[i]
+                    + self.steps[i]
+                        * <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
+                dts[i] = (x[i] - index_zero_loc) / self.steps[i];
+            }
         }
-
-        // Calculate normalized delta locations
-        for i in 0..N {
-            let index_zero_loc = self.starts[i]
-                + self.steps[i]
-                    * <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
-            dts[i] = (x[i] - index_zero_loc) / self.steps[i];
-        }
+        
 
         // Recursive interpolation of one dependency tree at a time
         let mut loc = [0_usize; N];
