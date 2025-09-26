@@ -57,23 +57,39 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using N=8)
     let ndims = dims.len();
     match ndims {
-        x if x == 1 => {
-            MulticubicRegular::<'_, T, 1>::new(dims.try_into().unwrap(), starts.try_into().unwrap(), steps.try_into().unwrap(), vals, linearize_extrapolation)?
-                .interp(obs.try_into().unwrap(), out)
-        }
-        x if x == 2 => {
-            MulticubicRegular::<'_, T, 2>::new(dims.try_into().unwrap(), starts.try_into().unwrap(), steps.try_into().unwrap(), vals, linearize_extrapolation)?
-                .interp(obs.try_into().unwrap(), out)
-        }
-        x if x == 3 => {
-            MulticubicRegular::<'_, T, 3>::new(dims.try_into().unwrap(), starts.try_into().unwrap(), steps.try_into().unwrap(), vals, linearize_extrapolation)?
-                .interp(obs.try_into().unwrap(), out)
-        }
-        x if x == 4 => {
-            MulticubicRegular::<'_, T, 4>::new(dims.try_into().unwrap(), starts.try_into().unwrap(), steps.try_into().unwrap(), vals, linearize_extrapolation)?
-                .interp(obs.try_into().unwrap(), out)
-        },
-        _ => Err("Dimension exceeds maximum (4)")
+        x if x == 1 => MulticubicRegular::<'_, T, 1>::new(
+            dims.try_into().unwrap(),
+            starts.try_into().unwrap(),
+            steps.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        x if x == 2 => MulticubicRegular::<'_, T, 2>::new(
+            dims.try_into().unwrap(),
+            starts.try_into().unwrap(),
+            steps.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        x if x == 3 => MulticubicRegular::<'_, T, 3>::new(
+            dims.try_into().unwrap(),
+            starts.try_into().unwrap(),
+            steps.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        x if x == 4 => MulticubicRegular::<'_, T, 4>::new(
+            dims.try_into().unwrap(),
+            starts.try_into().unwrap(),
+            steps.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        _ => Err("Dimension exceeds maximum (4)"),
     }?;
 
     Ok(())
@@ -321,7 +337,6 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
 
         const FP: usize = 4;
 
-
         let mut store = [[T::zero(); FP]; N];
         let nverts = FP.pow(N as u32); // Total number of vertices
 
@@ -377,7 +392,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
             &store[N - 1],
             dts[N - 1],
             sat[N - 1],
-            self.linearize_extrapolation
+            self.linearize_extrapolation,
         );
         return Ok(interped);
     }
@@ -435,7 +450,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         let mut i = 0;
 
         unroll! {
-            for j < 7 in 0..N {
+            for j < 5 in 0..N {
                 i += loc[j] * dimprod[j];
             }
         }
@@ -586,7 +601,6 @@ fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
 
     y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
 }
-
 
 #[cfg(test)]
 mod test {
