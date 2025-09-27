@@ -30,19 +30,13 @@
 //! let linearize_extrapolation = false;
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
-use super::{MulticubicRegularRecursive, Saturation, normalized_hermite_spline};
-use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
-/// For 1-4 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
-///
 /// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the N parameter, as this will slightly reduce compute and storage overhead,
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 8 dimensions.
 /// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
 ///
@@ -59,76 +53,41 @@ pub fn interpn<T: Float>(
 ) -> Result<(), &'static str> {
     // Expanding out and using the specialized version for each size
     // gives a substantial speedup for lower dimensionalities
-    // (4-5x speedup for 1-dim compared to using N=8)
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
     let ndims = dims.len();
     match ndims {
-        x if x == 1 => MulticubicRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        x if x == 2 => MulticubicRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        x if x == 3 => MulticubicRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        x if x == 4 => MulticubicRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        x if x == 5 => MulticubicRegularRecursive::<'_, T, 5>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        x if x == 6 => MulticubicRegularRecursive::<'_, T, 6>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        x if x == 7 => MulticubicRegularRecursive::<'_, T, 7>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        x if x == 8 => MulticubicRegularRecursive::<'_, T, 8>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
+        x if x == 1 => {
+            MulticubicRegularRecursive::<'_, T, 1>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 2 => {
+            MulticubicRegularRecursive::<'_, T, 2>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 3 => {
+            MulticubicRegularRecursive::<'_, T, 3>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 4 => {
+            MulticubicRegularRecursive::<'_, T, 4>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 5 => {
+            MulticubicRegularRecursive::<'_, T, 5>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 6 => {
+            MulticubicRegularRecursive::<'_, T, 6>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 7 => {
+            MulticubicRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        _ => {
+            MulticubicRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
     }?;
 
     Ok(())
@@ -163,8 +122,16 @@ pub fn interpn_alloc<T: Float>(
 // We can use the same regular-grid method again
 pub use crate::multilinear::regular::check_bounds;
 
-/// An N-dimensional multicubic interpolator / extrapolator on a regular grid.
-/// Available for up to 6D; for higher dimensions, use
+#[derive(Clone, Copy, PartialEq)]
+enum Saturation {
+    None,
+    InsideLow,
+    OutsideLow,
+    InsideHigh,
+    OutsideHigh,
+}
+
+/// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 ///
 /// On interior points, a hermite spline is used, with the derivative at each
 /// grid point matched to a second-order central difference. This allows the
@@ -195,9 +162,9 @@ pub use crate::multilinear::regular::check_bounds;
 /// * O(4^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
+/// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
 /// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
+///   max depth of MAXDIMS, which provides a guarantee on peak
 ///   memory usage.
 ///
 /// Timing
@@ -207,15 +174,18 @@ pub use crate::multilinear::regular::check_bounds;
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
 ///   when evaluated at off-grid points.
-pub struct MulticubicRegular<'a, T: Float, const N: usize> {
+pub struct MulticubicRegularRecursive<'a, T: Float, const MAXDIMS: usize> {
+    /// Number of dimensions
+    ndims: usize,
+
     /// Size of each dimension
-    dims: [usize; N],
+    dims: [usize; MAXDIMS],
 
     /// Starting point of each dimension, size dims.len()
-    starts: [T; N],
+    starts: [T; MAXDIMS],
 
     /// Step size for each dimension, size dims.len()
-    steps: [T; N],
+    steps: [T; MAXDIMS],
 
     /// Values at each point, size prod(dims)
     vals: &'a [T],
@@ -224,8 +194,8 @@ pub struct MulticubicRegular<'a, T: Float, const N: usize> {
     linearize_extrapolation: bool,
 }
 
-impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
-    /// Build a new interpolator, using O(N) calculations and storage.
+impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegularRecursive<'a, T, MAXDIMS> {
+    /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions; all grids must have at least 4 entries.
     ///
@@ -236,20 +206,21 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
     pub fn new(
-        dims: [usize; N],
-        starts: [T; N],
-        steps: [T; N],
+        dims: &[usize],
+        starts: &[T],
+        steps: &[T],
         vals: &'a [T],
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
+        let ndims = dims.len();
         let nvals: usize = dims.iter().product();
-        if !(starts.len() == N && steps.len() == N && vals.len() == nvals && N > 0) {
+        if !(starts.len() == ndims && steps.len() == ndims && vals.len() == nvals && ndims > 0) {
             return Err("Dimension mismatch");
         }
 
         // Make sure all dimensions have at least four entries
-        let degenerate = dims.iter().any(|&x| x < 4);
+        let degenerate = dims[..ndims].iter().any(|&x| x < 4);
         if degenerate {
             return Err("All grids must have at least four entries");
         }
@@ -264,14 +235,15 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         // if the grid info is defined somewhere not local to where the struct
         // is defined and used, the & references to it cost more than the entire
         // rest of the interpolation operation.
-        let mut steps_local = [T::zero(); N];
-        let mut starts_local = [T::zero(); N];
-        let mut dims_local = [0_usize; N];
-        steps_local[..N].copy_from_slice(&steps[..N]);
-        starts_local[..N].copy_from_slice(&starts[..N]);
-        dims_local[..N].copy_from_slice(&dims[..N]);
+        let mut steps_local = [T::zero(); MAXDIMS];
+        let mut starts_local = [T::zero(); MAXDIMS];
+        let mut dims_local = [0_usize; MAXDIMS];
+        steps_local[..ndims].copy_from_slice(&steps[..ndims]);
+        starts_local[..ndims].copy_from_slice(&starts[..ndims]);
+        dims_local[..ndims].copy_from_slice(&dims[..ndims]);
 
         Ok(Self {
+            ndims,
             dims: dims_local,
             starts: starts_local,
             steps: steps_local,
@@ -287,10 +259,11 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
+    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
+        let ndims = self.ndims;
         // Make sure there are enough coordinate inputs for each dimension
-        if x.len() != N {
+        if x.len() != ndims {
             return Err("Dimension mismatch");
         }
         // Make sure the size of inputs and output match
@@ -299,9 +272,9 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
             return Err("Dimension mismatch");
         }
 
-        let mut tmp = [T::zero(); N];
+        let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         for i in 0..n {
-            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            (0..ndims).for_each(|j| tmp[j] = x[j][i]);
             out[i] = self.interp_one(tmp)?;
         }
 
@@ -318,9 +291,10 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
-    pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
+    pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
-        if !(x.len() == N) {
+        let ndims = self.ndims;
+        if !(x.len() == ndims && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
         }
 
@@ -331,99 +305,46 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let mut origin = [0_usize; N]; // Indices of lower corner of hypercube
-        let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
-        let mut dts = [T::zero(); N]; // Normalized coordinate storage
-        let mut dimprod = [1_usize; N];
-        let mut loc = [0_usize; N];
-        let mut store = [[T::zero(); FP]; N];
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
+        let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
+        let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
+        let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
+        // Populate cumulative product of higher dimensions for indexing.
+        //
+        // Each entry is the cumulative product of the size of dimensions
+        // higher than this one, which is the stride between blocks
+        // relating to a given index along each dimension.
         let mut acc = 1;
-        unroll! {
-            for i < 5 in 0..N {
-                // Populate cumulative product of higher dimensions for indexing.
-                //
-                // Each entry is the cumulative product of the size of dimensions
-                // higher than this one, which is the stride between blocks
-                // relating to a given index along each dimension.
-                if const { i > 0 } {
-                    acc *= self.dims[N - i];
-                }
-                dimprod[N - i - 1] = acc;
+        for i in 0..ndims {
+            dimprod[ndims - i - 1] = acc;
+            acc *= self.dims[ndims - i - 1];
+        }
 
-                // Populate lower corner and saturation flag for each dimension
-                (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+        // Populate lower corner and saturation flag for each dimension
+        for i in 0..ndims {
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+        }
 
-                // Calculate normalized delta locations
-                // For the cubic method, the normalized coordinate `t` is always relative
-                // to cube index 1 (out of 0-3)
-                let index_one_loc = self.starts[i]
-                    + self.steps[i]
-                        * <T as NumCast>::from(origin[i] + 1)
-                            .ok_or("Unrepresentable coordinate value")?;
-                dts[i] = (x[i] - index_one_loc) / self.steps[i];
-            }
+        // Calculate normalized delta locations
+        // For the cubic method, the normalized coordinate `t` is always relative
+        // to cube index 1 (out of 0-3)
+        for i in 0..ndims {
+            let index_one_loc = self.starts[i]
+                + self.steps[i]
+                    * <T as NumCast>::from(origin[i] + 1)
+                        .ok_or("Unrepresentable coordinate value")?;
+            dts[i] = (x[i] - index_one_loc) / self.steps[i];
         }
 
         // Recursive interpolation of one dependency tree at a time
-        const FP: usize = 4; // Footprint size      
-        let nverts = const { FP.pow(N as u32) }; // Total number of vertices
+        // let loc = &origin; // Starting location in the tree is the origin
+        let dim = ndims; // Start from the end and recurse back to zero
+        let loc = &mut [0_usize; MAXDIMS][..ndims];
+        loc.copy_from_slice(origin);
+        let interped = self.populate(dim, sat, origin, loc, dimprod, dts);
 
-        unroll! {
-            for i < 256 in 0..nverts {  // const loop
-                // Index, interpolate, or pass on each level of the tree
-                unroll!{
-                    for j < 5 in 0..N {  // const loop
-
-                        // Most of these iterations will get optimized out
-                        if const{j == 0} { // const branch
-                            // At leaves, index values
-
-                            unroll!{
-                                for k < 5 in 0..N {  // const loop
-                                    // Bit pattern in an integer matches C-ordered array indexing
-                                    // so we can just use the vertex index to index into the array
-                                    // by selecting the appropriate bit from the index.
-                                    const OFFSET: usize = const{(i & (3 << (2*k))) >> (2*k)};
-                                    loc[k] = origin[k] + OFFSET;
-                                }
-                            }
-                            const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = self.index_arr(loc, dimprod);
-                        }
-                        else { // const branch
-                            // For other nodes, interpolate on child values
-
-                            const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1) % Q == 0};
-                            const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
-                            const IND: usize = const{j.saturating_sub(1)};
-
-                            if LEVEL { // const branch
-                                let interped = interp_inner::<T, N>(
-                                    &store[IND],
-                                    dts[IND],
-                                    sat[IND],
-                                    self.linearize_extrapolation
-                                );
-
-                                store[j][P] = interped;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Interpolate the final value
-        // This could use a const index as well, if we were using a fixed number of dims
-        let interped = interp_inner::<T, N>(
-            &store[N - 1],
-            dts[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        );
-        return Ok(interped);
+        Ok(interped)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -438,8 +359,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        // Signed integer loc, with the bottom of the cell aligned to place the normalized
-        // coordinate t=0 at cell index 1
+                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
+                                                                       // coordinate t=0 at cell index 1
         let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
@@ -473,25 +394,53 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         Ok((loc, saturation))
     }
 
-    /// Index a single value from an array
+    /// Recursive evaluation of interpolant on each dimension
     #[inline]
-    fn index_arr(&self, loc: [usize; N], dimprod: [usize; N]) -> T {
-        let mut i = 0;
+    fn populate(
+        &self,
+        dim: usize,
+        sat: &[Saturation],
+        origin: &[usize],
+        loc: &mut [usize],
+        dimprod: &[usize],
+        dts: &[T],
+    ) -> T {
+        // Do the calc for this entry
+        match dim {
+            // If we have arrived at a leaf, index into data
+            0 => index_arr(loc, dimprod, self.vals),
 
-        unroll! {
-            for j < 5 in 0..N {
-                i += loc[j] * dimprod[j];
+            // Otherwise, continue recursion
+            _ => {
+                // Keep track of where we are in the tree
+                // so that we can index into the value array properly
+                // when we reach the leaves
+                let next_dim = dim - 1;
+
+                // Populate next dim's values
+                let mut vals = [T::zero(); 4];
+                for i in 0..4 {
+                    loc[next_dim] = origin[next_dim] + i;
+                    vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, dts);
+                }
+                loc[next_dim] = origin[next_dim]; // Reset for next usage
+
+                // Interpolate on next dim's values to populate an entry in this dim
+                interp_inner::<T, MAXDIMS>(
+                    vals,
+                    dts[next_dim],
+                    sat[next_dim],
+                    self.linearize_extrapolation,
+                )
             }
         }
-
-        self.vals[i]
     }
 }
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const N: usize>(
-    vals: &[T; 4],
+fn interp_inner<T: Float, const MAXDIMS: usize>(
+    vals: [T; 4],
     t: T,
     sat: Saturation,
     linearize_extrapolation: bool,
@@ -611,6 +560,37 @@ fn interp_inner<T: Float, const N: usize>(
     }
 }
 
+/// Evaluate a hermite spline function on an interval from x0 to x1,
+/// with imposed slopes k0 and k1 at the endpoints, and normalized
+/// coordinate t = (x - x0) / (x1 - x0).
+#[inline]
+fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
+    // `a` and `b` are the difference between this function and a linear one going
+    // forward or backward with the imposed slopes.
+    let a = k0 - dy;
+    let b = -k1 + dy;
+
+    let t2 = t * t;
+    let t3 = t.powi(3);
+
+    let c1 = dy + a;
+    let c2 = b - (a + a);
+    let c3 = a - b;
+
+    y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
+}
+
+/// Index a single value from an array
+#[inline]
+fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
+    let mut i = 0;
+    for j in 0..dimprod.len() {
+        i += loc[j] * dimprod[j];
+    }
+
+    data[i]
+}
+
 #[cfg(test)]
 mod test {
     use super::interpn;
@@ -621,8 +601,8 @@ mod test {
     /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow above ndims=6.
     #[test]
-    fn test_interp_extrap_1d_to_4d_linear() {
-        for ndims in 1..=4 {
+    fn test_interp_extrap_1d_to_6d_linear() {
+        for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
@@ -667,8 +647,8 @@ mod test {
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_extrap_1d_to_4d_quadratic() {
-        for ndims in 1..=4 {
+    fn test_interp_extrap_1d_to_6d_quadratic() {
+        for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];

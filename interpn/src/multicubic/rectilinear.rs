@@ -29,12 +29,16 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-use super::{Saturation, normalized_hermite_spline};
+use super::{Saturation, normalized_hermite_spline, MulticubicRectilinearRecursive};
 use crunchy::unroll;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+/// 
+/// For 1-4 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
+/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
+/// recursion.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -79,7 +83,25 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        _ => Err("Dimension exceeds maximum (4)"),
+        x if x == 5 => {
+            MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 6 => {
+            MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 7 => {
+            MulticubicRectilinearRecursive::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        x if x == 8 => {
+            MulticubicRectilinearRecursive::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
+                .interp(obs, out)
+        }
+        _ => Err(
+            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        ),
     }?;
 
     Ok(())
