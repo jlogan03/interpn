@@ -228,6 +228,12 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         vals: &'a [T],
     ) -> Result<Self, &'static str> {
         // Check dimensions
+        const {
+            assert!(
+                N > 0 && N < 7,
+                "Flattened method defined for 1-6 dimensions. For higher dimensions, use recursive method."
+            );
+        }
         let nvals: usize = dims.iter().product();
         if !(vals.len() == nvals) {
             return Err("Dimension mismatch");

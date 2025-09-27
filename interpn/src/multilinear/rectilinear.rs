@@ -177,6 +177,12 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
     /// * If any step sizes have zero or negative magnitude
     pub fn new(grids: &'a [&'a [T]; N], vals: &'a [T]) -> Result<Self, &'static str> {
         // Check dimensions
+        const {
+            assert!(
+                N > 0 && N < 7,
+                "Flattened method defined for 1-6 dimensions. For higher dimensions, use recursive method."
+            );
+        }
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims[..N].iter().product();

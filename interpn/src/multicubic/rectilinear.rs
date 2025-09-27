@@ -200,6 +200,12 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
+        const {
+            assert!(
+                N > 0 && N < 5,
+                "Flattened method defined for 1-5 dimensions. For higher dimensions, use recursive method."
+            );
+        }
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims[..N].iter().product();

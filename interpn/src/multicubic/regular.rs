@@ -243,6 +243,12 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
+        const {
+            assert!(
+                N > 0 && N < 5,
+                "Flattened method defined for 1-5 dimensions. For higher dimensions, use recursive method."
+            );
+        }
         let nvals: usize = dims.iter().product();
         if !(starts.len() == N && steps.len() == N && vals.len() == nvals && N > 0) {
             return Err("Dimension mismatch");
