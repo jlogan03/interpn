@@ -29,6 +29,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
+use crate::index_arr;
 use num_traits::{Float, NumCast};
 
 /// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
@@ -380,17 +381,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegularRecursive<'a, T, MAXD
             }
         }
     }
-}
-
-/// Index a single value from an array
-#[inline]
-fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
 }
 
 #[cfg(test)]

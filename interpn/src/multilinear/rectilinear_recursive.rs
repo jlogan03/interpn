@@ -27,6 +27,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
+use crate::index_arr;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
@@ -342,17 +343,6 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinearRecursive<'a, T, 
             }
         }
     }
-}
-
-/// Index a single value from an array
-#[inline]
-fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
 }
 
 #[cfg(test)]

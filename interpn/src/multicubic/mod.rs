@@ -103,14 +103,3 @@ pub(crate) fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01:
 
     a * b + c * d
 }
-
-/// Index a single value from an array
-#[inline]
-pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
-}
