@@ -29,13 +29,13 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-use super::{Saturation, normalized_hermite_spline, MulticubicRectilinearRecursive};
+use super::{MulticubicRectilinearRecursive, Saturation, normalized_hermite_spline};
 use crunchy::unroll;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-/// 
+///
 /// For 1-4 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
 /// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
 /// recursion.

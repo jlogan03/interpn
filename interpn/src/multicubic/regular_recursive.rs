@@ -56,38 +56,70 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
     let ndims = dims.len();
     match ndims {
-        x if x == 1 => {
-            MulticubicRegularRecursive::<'_, T, 1>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 2 => {
-            MulticubicRegularRecursive::<'_, T, 2>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 3 => {
-            MulticubicRegularRecursive::<'_, T, 3>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 4 => {
-            MulticubicRegularRecursive::<'_, T, 4>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 5 => {
-            MulticubicRegularRecursive::<'_, T, 5>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 6 => {
-            MulticubicRegularRecursive::<'_, T, 6>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 7 => {
-            MulticubicRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        _ => {
-            MulticubicRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
+        x if x == 1 => MulticubicRegularRecursive::<'_, T, 1>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 2 => MulticubicRegularRecursive::<'_, T, 2>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 3 => MulticubicRegularRecursive::<'_, T, 3>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 4 => MulticubicRegularRecursive::<'_, T, 4>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 5 => MulticubicRegularRecursive::<'_, T, 5>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 6 => MulticubicRegularRecursive::<'_, T, 6>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        x if x == 7 => MulticubicRegularRecursive::<'_, T, 7>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
+        _ => MulticubicRegularRecursive::<'_, T, 8>::new(
+            dims,
+            starts,
+            steps,
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs, out),
     }?;
 
     Ok(())
@@ -359,8 +391,8 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegularRecursive<'a, T, MAXDI
         let saturation: Saturation; // What part of the grid cell are we in?
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
-                                                                       // coordinate t=0 at cell index 1
+        // Signed integer loc, with the bottom of the cell aligned to place the normalized
+        // coordinate t=0 at cell index 1
         let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension

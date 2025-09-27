@@ -47,13 +47,13 @@
 use num_traits::Float;
 
 pub mod rectilinear;
-pub mod regular;
 pub mod rectilinear_recursive;
+pub mod regular;
 pub mod regular_recursive;
 
 pub use rectilinear::MulticubicRectilinear;
-pub use regular::MulticubicRegular;
 pub use rectilinear_recursive::MulticubicRectilinearRecursive;
+pub use regular::MulticubicRegular;
 pub use regular_recursive::MulticubicRegularRecursive;
 
 /// Evaluate a hermite spline function on an interval from x0 to x1,
