@@ -306,15 +306,17 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         let mut dimprod = [1_usize; N];
 
         let mut acc = 1;
-        unroll!{
+        unroll! {
             for i < 5 in 0..N {
                 // Populate cumulative product of higher dimensions for indexing.
                 //
                 // Each entry is the cumulative product of the size of dimensions
                 // higher than this one, which is the stride between blocks
                 // relating to a given index along each dimension.
+                if const { i > 0 } {
+                    acc *= self.dims[N - i];
+                }
                 dimprod[N - i - 1] = acc;
-                acc *= self.dims[N - i - 1];
 
                 // Populate lower corner and saturation flag for each dimension
                 (origin[i], sat[i]) = self.get_loc(x[i], i)?;
@@ -407,8 +409,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         let saturation: Saturation; // What part of the grid cell are we in?
 
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
-                                                                       // coordinate t=0 at cell index 1
+        // Signed integer loc, with the bottom of the cell aligned to place the normalized
+        // coordinate t=0 at cell index 1
         let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension

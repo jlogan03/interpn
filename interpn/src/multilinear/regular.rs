@@ -296,21 +296,22 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let mut dts = [T::zero(); N]; // Normalized coordinate storage
         let mut dimprod = [1_usize; N];
 
-
         let mut acc = 1;
-        unroll!{
+        unroll! {
             for i < 7 in 0..N {
                 // Populate cumulative product of higher dimensions for indexing.
                 //
                 // Each entry is the cumulative product of the size of dimensions
                 // higher than this one, which is the stride between blocks
                 // relating to a given index along each dimension.
+                if const { i > 0 } {
+                    acc *= self.dims[N - i];
+                }
                 dimprod[N - i - 1] = acc;
-                acc *= self.dims[N - i - 1];
-                
+
                 // Populate lower corner and saturation flag for each dimension
                 origin[i] = self.get_loc(x[i], i)?;
-                
+
 
                 // Calculate normalized delta locations
                 let index_zero_loc = self.starts[i]
@@ -319,7 +320,6 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                 dts[i] = (x[i] - index_zero_loc) / self.steps[i];
             }
         }
-        
 
         // Recursive interpolation of one dependency tree at a time
         let mut loc = [0_usize; N];
@@ -391,8 +391,8 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<usize, &'static str> {
         let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-                                                                       // Signed integer loc, with the bottom of the cell aligned to place the normalized
-                                                                       // coordinate t=0 at cell index 1
+        // Signed integer loc, with the bottom of the cell aligned to place the normalized
+        // coordinate t=0 at cell index 1
         let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")?;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
@@ -420,7 +420,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
 #[cfg(test)]
 mod test {
     use super::interpn;
-    use crate::{utils::*, MultilinearRegular};
+    use crate::{MultilinearRegular, utils::*};
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -472,11 +472,7 @@ mod test {
     #[test]
     fn test_interp_hat_func() {
         fn hat_func(x: f64) -> f64 {
-            if x <= 1.0 {
-                x
-            } else {
-                2.0 - x
-            }
+            if x <= 1.0 { x } else { 2.0 - x }
         }
 
         let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();

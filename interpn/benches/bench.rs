@@ -3,12 +3,12 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    multicubic, multilinear,
+    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D, multicubic,
+    multilinear,
     one_dim::{
-        hold::{Left1D, Nearest1D},
         Interp1D,
+        hold::{Left1D, Nearest1D},
     },
-    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D,
 };
 
 enum Kind {
@@ -461,10 +461,10 @@ criterion_group!(benches_extrap, bench_extrap);
 criterion_main!(benches_interp, benches_extrap,);
 
 mod randn {
-    use rand::distr::StandardUniform;
-    use rand::rngs::StdRng;
     use rand::Rng;
     use rand::SeedableRng;
+    use rand::distr::StandardUniform;
+    use rand::rngs::StdRng;
 
     /// Fixed random seed to support repeatable testing
     const SEED: [u8; 32] = [

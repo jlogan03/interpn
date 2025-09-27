@@ -1,7 +1,7 @@
-use rand::distr::StandardUniform;
-use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
+use rand::distr::StandardUniform;
+use rand::rngs::StdRng;
 
 /// Fixed random seed to support repeatable testing
 const SEED: [u8; 32] = [

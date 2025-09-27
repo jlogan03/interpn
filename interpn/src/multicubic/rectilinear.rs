@@ -78,7 +78,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        _ => Err("Dimension exceeds maximum (4)")
+        _ => Err("Dimension exceeds maximum (4)"),
     }?;
 
     Ok(())
@@ -269,15 +269,17 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         let mut dimprod = [1_usize; N];
 
         let mut acc = 1;
-        unroll!{
+        unroll! {
             for i < 5 in 0..N {
                 // Populate cumulative product of higher dimensions for indexing.
                 //
                 // Each entry is the cumulative product of the size of dimensions
                 // higher than this one, which is the stride between blocks
                 // relating to a given index along each dimension.
+                if const { i > 0 } {
+                    acc *= self.dims[N - i];
+                }
                 dimprod[N - i - 1] = acc;
-                acc *= self.dims[N - i - 1];
 
                 // Populate lower corner and saturation flag for each dimension
                 (origin[i], sat[i]) = self.get_loc(x[i], i)?;
