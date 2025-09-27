@@ -32,6 +32,7 @@
 //! ```
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
+use super::{normalized_hermite_spline, Saturation};
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
@@ -124,14 +125,6 @@ pub fn interpn_alloc<T: Float>(
 // We can use the same regular-grid method again
 pub use crate::multilinear::regular::check_bounds;
 
-#[derive(Clone, Copy, PartialEq)]
-enum Saturation {
-    None,
-    InsideLow,
-    OutsideLow,
-    InsideHigh,
-    OutsideHigh,
-}
 
 /// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 ///
@@ -582,25 +575,6 @@ fn interp_inner<T: Float, const N: usize>(
     }
 }
 
-/// Evaluate a hermite spline function on an interval from x0 to x1,
-/// with imposed slopes k0 and k1 at the endpoints, and normalized
-/// coordinate t = (x - x0) / (x1 - x0).
-#[inline]
-fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
-    // `a` and `b` are the difference between this function and a linear one going
-    // forward or backward with the imposed slopes.
-    let a = k0 - dy;
-    let b = -k1 + dy;
-
-    let t2 = t * t;
-    let t3 = t.powi(3);
-
-    let c1 = dy + a;
-    let c2 = b - (a + a);
-    let c3 = a - b;
-
-    y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
-}
 
 #[cfg(test)]
 mod test {

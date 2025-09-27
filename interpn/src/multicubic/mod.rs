@@ -44,9 +44,40 @@
 //!     algorithms such as quadratic programming, which depend
 //!     on the correctness and continuity of the first derivative,
 //!     but can tolerate some discontinuity in the second derivative
+use num_traits::Float;
 
 pub mod rectilinear;
 pub mod regular;
 
 pub use rectilinear::MulticubicRectilinear;
 pub use regular::MulticubicRegular;
+
+
+/// Evaluate a hermite spline function on an interval from x0 to x1,
+/// with imposed slopes k0 and k1 at the endpoints, and normalized
+/// coordinate t = (x - x0) / (x1 - x0).
+#[inline]
+pub(crate) fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
+    // `a` and `b` are the difference between this function and a linear one going
+    // forward or backward with the imposed slopes.
+    let a = k0 - dy;
+    let b = -k1 + dy;
+
+    let t2 = t * t;
+    let t3 = t.powi(3);
+
+    let c1 = dy + a;
+    let c2 = b - (a + a);
+    let c3 = a - b;
+
+    y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Saturation {
+    None,
+    InsideLow,
+    OutsideLow,
+    InsideHigh,
+    OutsideHigh,
+}
