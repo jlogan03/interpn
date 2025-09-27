@@ -30,9 +30,9 @@
 //! let linearize_extrapolation = false;
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
+use super::{Saturation, normalized_hermite_spline};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
-use super::{normalized_hermite_spline, Saturation};
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
@@ -124,7 +124,6 @@ pub fn interpn_alloc<T: Float>(
 
 // We can use the same regular-grid method again
 pub use crate::multilinear::regular::check_bounds;
-
 
 /// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 ///
@@ -297,6 +296,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
         let mut dts = [T::zero(); N]; // Normalized coordinate storage
         let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
 
         let mut acc = 1;
         unroll! {
@@ -326,12 +327,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
 
         // Recursive interpolation of one dependency tree at a time
-        let mut loc = [0_usize; N];
-
-        const FP: usize = 4;
-
-        let mut store = [[T::zero(); FP]; N];
-        let nverts = FP.pow(N as u32); // Total number of vertices
+        const FP: usize = 4; // Footprint size      
+        let nverts = const { FP.pow(N as u32) }; // Total number of vertices
 
         unroll! {
             for i < 256 in 0..nverts {  // const loop
@@ -574,7 +571,6 @@ fn interp_inner<T: Float, const N: usize>(
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

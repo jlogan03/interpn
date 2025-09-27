@@ -52,7 +52,6 @@ pub mod regular;
 pub use rectilinear::MulticubicRectilinear;
 pub use regular::MulticubicRegular;
 
-
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).

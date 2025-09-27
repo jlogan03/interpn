@@ -235,6 +235,8 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         // reduces memory overhead, but has not effect on throughput rate.
         let mut origin = [0_usize; N]; // Indices of lower corner of hypercub
         let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
 
         let mut acc = 1;
         unroll! {
@@ -255,13 +257,8 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         }
 
         // Recursive interpolation of one dependency tree at a time
-        let mut loc = [0_usize; N];
-
-        const FP: usize = 2;
-
-        // const branch
-        let mut store = [[T::zero(); FP]; N];
-        let nverts = FP.pow(N as u32); // Total number of vertices
+        const FP: usize = 2; // Footprint size
+        let nverts = const { FP.pow(N as u32) }; // Total number of vertices
 
         unroll! {
             for i < 64 in 0..nverts { // const loop
