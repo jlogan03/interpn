@@ -461,7 +461,7 @@ criterion_group!(benches_extrap, bench_extrap);
 criterion_main!(benches_interp, benches_extrap,);
 
 mod randn {
-    use rand::distributions::{Distribution, Standard};
+    use rand::distr::StandardUniform;
     use rand::rngs::StdRng;
     use rand::Rng;
     use rand::SeedableRng;
@@ -480,10 +480,11 @@ mod randn {
     /// Generate `n` random numbers using provided generator
     pub fn randn<T>(rng: &mut StdRng, n: usize) -> Vec<T>
     where
-        Standard: Distribution<T>,
+        StandardUniform: rand::distr::Distribution<T>,
     {
-        let out: Vec<T> = (0..n).map(|_| rng.gen::<T>()).collect();
-        out
+        std::iter::repeat_with(|| rng.random::<T>())
+            .take(n)
+            .collect()
     }
 }
 

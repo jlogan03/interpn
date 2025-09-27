@@ -1,4 +1,4 @@
-use rand::distributions::{Distribution, Standard};
+use rand::distr::StandardUniform;
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
@@ -17,8 +17,9 @@ pub fn rng_fixed_seed() -> StdRng {
 /// Generate `n` random numbers using provided generator
 pub fn randn<T>(rng: &mut StdRng, n: usize) -> Vec<T>
 where
-    Standard: Distribution<T>,
+    StandardUniform: rand::distr::Distribution<T>,
 {
-    let out: Vec<T> = (0..n).map(|_| rng.gen::<T>()).collect();
-    out
+    std::iter::repeat_with(|| rng.random::<T>())
+        .take(n)
+        .collect()
 }
