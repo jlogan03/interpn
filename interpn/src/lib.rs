@@ -102,3 +102,14 @@ pub mod utils;
 
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod testing;
+
+/// Index a single value from an array
+#[inline]
+pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
+    let mut i = 0;
+    for j in 0..dimprod.len() {
+        i += loc[j] * dimprod[j];
+    }
+
+    data[i]
+}

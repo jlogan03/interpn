@@ -29,7 +29,10 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-use super::{MulticubicRectilinearRecursive, Saturation, normalized_hermite_spline};
+use super::{
+    MulticubicRectilinearRecursive, Saturation, centered_difference_nonuniform,
+    normalized_hermite_spline,
+};
 use crunchy::unroll;
 use num_traits::Float;
 
@@ -574,25 +577,6 @@ fn interp_inner<T: Float, const N: usize>(
             }
         }
     }
-}
-
-/// Second-order central difference on non-uniform grid per
-///
-/// A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
-/// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-///
-/// Method B,
-/// which is essentially a distance-weighted average of the forward and backward
-/// differences s.t. the closer points have more influence on the estimate
-/// of the derivative.
-#[inline]
-fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T) -> T {
-    let a = h01 / (h01 + h12);
-    let b = (y2 - y1) / h12;
-    let c = h12 / (h12 + h01);
-    let d = (y1 - y0) / h01;
-
-    a * b + c * d
 }
 
 #[cfg(test)]

@@ -29,6 +29,8 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
+use super::{Saturation, centered_difference_nonuniform, normalized_hermite_spline};
+use crate::index_arr;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
@@ -111,15 +113,6 @@ pub fn interpn_alloc<T: Float>(
 
 // We can use the same rectilinear-grid method again
 pub use crate::multilinear::rectilinear::check_bounds;
-
-#[derive(Clone, Copy, PartialEq)]
-enum Saturation {
-    None,
-    InsideLow,
-    OutsideLow,
-    InsideHigh,
-    OutsideHigh,
-}
 
 /// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 ///
@@ -537,56 +530,6 @@ fn interp_inner<T: Float, const MAXDIMS: usize>(
             }
         }
     }
-}
-
-/// Evaluate a hermite spline function on an interval from x0 to x1,
-/// with imposed slopes k0 and k1 at the endpoints, and normalized
-/// coordinate t = (x - x0) / (x1 - x0).
-#[inline]
-fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
-    // `a` and `b` are the difference between this function and a linear one going
-    // forward or backward with the imposed slopes.
-    let a = k0 - dy;
-    let b = -k1 + dy;
-
-    let t2 = t * t;
-    let t3 = t.powi(3);
-
-    let c1 = dy + a;
-    let c2 = b - (a + a);
-    let c3 = a - b;
-
-    y0 + (c1 * t) + (c2 * t2) + (c3 * t3)
-}
-
-/// Second-order central difference on non-uniform grid per
-///
-/// A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
-/// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-///
-/// Method B,
-/// which is essentially a distance-weighted average of the forward and backward
-/// differences s.t. the closer points have more influence on the estimate
-/// of the derivative.
-#[inline]
-fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T) -> T {
-    let a = h01 / (h01 + h12);
-    let b = (y2 - y1) / h12;
-    let c = h12 / (h12 + h01);
-    let d = (y1 - y0) / h01;
-
-    a * b + c * d
-}
-
-/// Index a single value from an array
-#[inline]
-fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
 }
 
 #[cfg(test)]
