@@ -276,7 +276,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     ///     integer value within the value type `T`
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         // Check sizes
-        if (x.len() != N) {
+        if x.len() != N {
             return Err("Dimension mismatch");
         }
 

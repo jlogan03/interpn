@@ -235,7 +235,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
             );
         }
         let nvals: usize = dims.iter().product();
-        if (vals.len() != nvals) {
+        if vals.len() != nvals {
             return Err("Dimension mismatch");
         }
         // Make sure all dimensions have at least four entries
@@ -298,7 +298,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     #[inline]
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         // Check sizes
-        if (x.len() != N) {
+        if x.len() != N {
             return Err("Dimension mismatch");
         }
 

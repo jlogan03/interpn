@@ -186,7 +186,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims[..N].iter().product();
-        if (vals.len() != nvals) {
+        if vals.len() != nvals {
             return Err("Dimension mismatch");
         };
         // Check if any grids are degenerate
