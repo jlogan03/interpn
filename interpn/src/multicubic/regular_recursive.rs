@@ -58,7 +58,7 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
     let ndims = dims.len();
     match ndims {
-        x if x == 1 => MulticubicRegularRecursive::<'_, T, 1>::new(
+        1 => MulticubicRegularRecursive::<'_, T, 1>::new(
             dims,
             starts,
             steps,
@@ -66,7 +66,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 2 => MulticubicRegularRecursive::<'_, T, 2>::new(
+        2 => MulticubicRegularRecursive::<'_, T, 2>::new(
             dims,
             starts,
             steps,
@@ -74,7 +74,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 3 => MulticubicRegularRecursive::<'_, T, 3>::new(
+        3 => MulticubicRegularRecursive::<'_, T, 3>::new(
             dims,
             starts,
             steps,
@@ -82,7 +82,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 4 => MulticubicRegularRecursive::<'_, T, 4>::new(
+        4 => MulticubicRegularRecursive::<'_, T, 4>::new(
             dims,
             starts,
             steps,
@@ -90,7 +90,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 5 => MulticubicRegularRecursive::<'_, T, 5>::new(
+        5 => MulticubicRegularRecursive::<'_, T, 5>::new(
             dims,
             starts,
             steps,
@@ -98,7 +98,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 6 => MulticubicRegularRecursive::<'_, T, 6>::new(
+        6 => MulticubicRegularRecursive::<'_, T, 6>::new(
             dims,
             starts,
             steps,
@@ -106,7 +106,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        x if x == 7 => MulticubicRegularRecursive::<'_, T, 7>::new(
+        7 => MulticubicRegularRecursive::<'_, T, 7>::new(
             dims,
             starts,
             steps,
@@ -114,7 +114,7 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
-        _ => MulticubicRegularRecursive::<'_, T, 8>::new(
+        8 => MulticubicRegularRecursive::<'_, T, 8>::new(
             dims,
             starts,
             steps,
@@ -122,6 +122,9 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs, out),
+        _ => Err(
+            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        ),
     }?;
 
     Ok(())

@@ -51,30 +51,14 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
     let ndims = grids.len();
     match ndims {
-        x if x == 1 => {
-            MultilinearRectilinearRecursive::<'_, T, 1>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 2 => {
-            MultilinearRectilinearRecursive::<'_, T, 2>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 3 => {
-            MultilinearRectilinearRecursive::<'_, T, 3>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 4 => {
-            MultilinearRectilinearRecursive::<'_, T, 4>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 5 => {
-            MultilinearRectilinearRecursive::<'_, T, 5>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 6 => {
-            MultilinearRectilinearRecursive::<'_, T, 6>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 7 => {
-            MultilinearRectilinearRecursive::<'_, T, 7>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 8 => {
-            MultilinearRectilinearRecursive::<'_, T, 8>::new(grids, vals)?.interp(obs, out)
-        }
+        1 => MultilinearRectilinearRecursive::<'_, T, 1>::new(grids, vals)?.interp(obs, out),
+        2 => MultilinearRectilinearRecursive::<'_, T, 2>::new(grids, vals)?.interp(obs, out),
+        3 => MultilinearRectilinearRecursive::<'_, T, 3>::new(grids, vals)?.interp(obs, out),
+        4 => MultilinearRectilinearRecursive::<'_, T, 4>::new(grids, vals)?.interp(obs, out),
+        5 => MultilinearRectilinearRecursive::<'_, T, 5>::new(grids, vals)?.interp(obs, out),
+        6 => MultilinearRectilinearRecursive::<'_, T, 6>::new(grids, vals)?.interp(obs, out),
+        7 => MultilinearRectilinearRecursive::<'_, T, 7>::new(grids, vals)?.interp(obs, out),
+        8 => MultilinearRectilinearRecursive::<'_, T, 8>::new(grids, vals)?.interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),

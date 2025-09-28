@@ -62,46 +62,38 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using N=8)
     let ndims = grids.len();
     match ndims {
-        x if x == 1 => MulticubicRectilinear::<'_, T, 1>::new(
+        1 => MulticubicRectilinear::<'_, T, 1>::new(
             grids.try_into().unwrap(),
             vals,
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 2 => MulticubicRectilinear::<'_, T, 2>::new(
+        2 => MulticubicRectilinear::<'_, T, 2>::new(
             grids.try_into().unwrap(),
             vals,
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 3 => MulticubicRectilinear::<'_, T, 3>::new(
+        3 => MulticubicRectilinear::<'_, T, 3>::new(
             grids.try_into().unwrap(),
             vals,
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 4 => MulticubicRectilinear::<'_, T, 4>::new(
+        4 => MulticubicRectilinear::<'_, T, 4>::new(
             grids.try_into().unwrap(),
             vals,
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 5 => {
-            MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 6 => {
-            MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 7 => {
-            MulticubicRectilinearRecursive::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
-        x if x == 8 => {
-            MulticubicRectilinearRecursive::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
-                .interp(obs, out)
-        }
+        5 => MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        6 => MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        7 => MulticubicRectilinearRecursive::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        8 => MulticubicRectilinearRecursive::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),

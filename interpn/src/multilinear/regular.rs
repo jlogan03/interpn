@@ -61,51 +61,51 @@ pub fn interpn<T: Float>(
     }
 
     match ndims {
-        x if x == 1 => MultilinearRegular::<'_, T, 1>::new(
+        1 => MultilinearRegular::<'_, T, 1>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 2 => MultilinearRegular::<'_, T, 2>::new(
+        2 => MultilinearRegular::<'_, T, 2>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 3 => MultilinearRegular::<'_, T, 3>::new(
+        3 => MultilinearRegular::<'_, T, 3>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 4 => MultilinearRegular::<'_, T, 4>::new(
+        4 => MultilinearRegular::<'_, T, 4>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 5 => MultilinearRegular::<'_, T, 5>::new(
+        5 => MultilinearRegular::<'_, T, 5>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 6 => MultilinearRegular::<'_, T, 6>::new(
+        6 => MultilinearRegular::<'_, T, 6>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        x if x == 7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
+        7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
+        8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
             .interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",

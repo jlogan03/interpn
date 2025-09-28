@@ -59,24 +59,20 @@ pub fn interpn<T: Float>(
         return Err("Dimension mismatch");
     }
     match ndims {
-        x if x == 1 => MultilinearRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
+        1 => MultilinearRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 2 => MultilinearRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
+        2 => MultilinearRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 3 => MultilinearRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
+        3 => MultilinearRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 4 => MultilinearRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
+        4 => MultilinearRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 5 => MultilinearRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
+        5 => MultilinearRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 6 => MultilinearRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
+        6 => MultilinearRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        x if x == 7 => {
-            MultilinearRectilinearRecursive::<'_, T, 7>::new(grids, vals)?.interp(obs, out)
-        }
-        x if x == 8 => {
-            MultilinearRectilinearRecursive::<'_, T, 8>::new(grids, vals)?.interp(obs, out)
-        }
+        7 => MultilinearRectilinearRecursive::<'_, T, 7>::new(grids, vals)?.interp(obs, out),
+        8 => MultilinearRectilinearRecursive::<'_, T, 8>::new(grids, vals)?.interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),

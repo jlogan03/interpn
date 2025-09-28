@@ -55,21 +55,21 @@ pub fn interpn<T: Float>(
     // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
     let ndims = dims.len();
     match ndims {
-        x if x == 1 => MultilinearRegularRecursive::<'_, T, 1>::new(dims, starts, steps, vals)?
+        1 => MultilinearRegularRecursive::<'_, T, 1>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 2 => MultilinearRegularRecursive::<'_, T, 2>::new(dims, starts, steps, vals)?
+        2 => MultilinearRegularRecursive::<'_, T, 2>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 3 => MultilinearRegularRecursive::<'_, T, 3>::new(dims, starts, steps, vals)?
+        3 => MultilinearRegularRecursive::<'_, T, 3>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 4 => MultilinearRegularRecursive::<'_, T, 4>::new(dims, starts, steps, vals)?
+        4 => MultilinearRegularRecursive::<'_, T, 4>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 5 => MultilinearRegularRecursive::<'_, T, 5>::new(dims, starts, steps, vals)?
+        5 => MultilinearRegularRecursive::<'_, T, 5>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 6 => MultilinearRegularRecursive::<'_, T, 6>::new(dims, starts, steps, vals)?
+        6 => MultilinearRegularRecursive::<'_, T, 6>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
+        7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
             .interp(obs, out),
-        x if x == 8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
+        8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
             .interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
