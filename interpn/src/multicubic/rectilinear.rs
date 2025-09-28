@@ -203,8 +203,8 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         }
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
-        let nvals: usize = dims[..N].iter().product();
-        if !(vals.len() == nvals && N > 0 && N <= N) {
+        let nvals: usize = dims.iter().product();
+        if vals.len() != nvals {
             return Err("Dimension mismatch");
         };
         // Check if any grids are degenerate
@@ -233,7 +233,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
+    pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
 
         // Make sure there are enough coordinate inputs for each dimension

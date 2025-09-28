@@ -84,6 +84,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]
+// Some const loops produce flattened code with unresolvable lints on
+// expanded code that is entirely in const.
+#![allow(clippy::absurd_extreme_comparisons)]
 
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
