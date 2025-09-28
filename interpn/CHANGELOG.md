@@ -1,11 +1,21 @@
 # Changelog
 
-## 0.4.6 - 2025-09-01
+## 0.5.0 - 2025-09-27
+
+2-5x speedup and fully-analyzable call stack (no recursion) for lower dimensions
+(1D-6D linear, 1D-4D cubic). Recursive methods still available for higher dimensions.
 
 ### Changed
 
-* Defer to const-unrolled bounded loop for small number of dimensions for multilinear method
-  * This provides a >2x speedup and makes the call-stack analyzable by removing true recursion
+* Use const-unrolling to flatten evaluation of interpolators for lower dimensionality
+    * `::interpn` functions defer to recursive method for higher dimensions s.t. that interface is unchanged
+* !Use exact number of dimensions instead of maximum number to enable more const evaluation
+* Reduce code duplication between interpolator variants
+* Update deps & roll forward to 2024 edition
+
+### Added
+
+* Add `_recursive` modules with original recursive implementations of interpolation functions
 
 ## 0.4.5 - 2025-03-14
 
