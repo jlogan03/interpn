@@ -3,12 +3,12 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    multicubic, multilinear,
+    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D, multicubic,
+    multilinear,
     one_dim::{
-        hold::{Left1D, Nearest1D},
         Interp1D,
+        hold::{Left1D, Nearest1D},
     },
-    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D,
 };
 
 enum Kind {
@@ -44,6 +44,7 @@ macro_rules! bench_interp_specific {
                     Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
                 };
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];
@@ -55,8 +56,8 @@ macro_rules! bench_interp_specific {
                 b.iter(|| {
                     black_box({
                         let interpolator: MultilinearRegular<'_, _, $ndims> =
-                            MultilinearRegular::new(&dims, &starts, &steps, &z).unwrap();
-                        interpolator.interp(&obs, &mut out).unwrap()
+                            MultilinearRegular::new(dims, starts, steps, &z).unwrap();
+                        interpolator.interp(obs, &mut out).unwrap()
                     })
                 });
             },
@@ -460,10 +461,10 @@ criterion_group!(benches_extrap, bench_extrap);
 criterion_main!(benches_interp, benches_extrap,);
 
 mod randn {
-    use rand::distributions::{Distribution, Standard};
-    use rand::rngs::StdRng;
     use rand::Rng;
     use rand::SeedableRng;
+    use rand::distr::StandardUniform;
+    use rand::rngs::StdRng;
 
     /// Fixed random seed to support repeatable testing
     const SEED: [u8; 32] = [
@@ -479,10 +480,11 @@ mod randn {
     /// Generate `n` random numbers using provided generator
     pub fn randn<T>(rng: &mut StdRng, n: usize) -> Vec<T>
     where
-        Standard: Distribution<T>,
+        StandardUniform: rand::distr::Distribution<T>,
     {
-        let out: Vec<T> = (0..n).map(|_| rng.gen::<T>()).collect();
-        out
+        std::iter::repeat_with(|| rng.random::<T>())
+            .take(n)
+            .collect()
     }
 }
 

@@ -1,7 +1,7 @@
-//! An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
+//! An arbitrary-dimensional multicubic interpolator / extrapolator on a rectilinear grid.
 //!
 //! ```rust
-//! use interpn::multicubic::regular;
+//! use interpn::multicubic::rectilinear;
 //!
 //! // Define a grid
 //! let x = [1.0_f64, 2.0, 3.0, 4.0];
@@ -10,15 +10,10 @@
 //! // Grid input for rectilinear method
 //! let grids = &[&x[..], &y[..]];
 //!
-//! // Grid input for regular grid method
-//! let dims = [x.len(), y.len()];
-//! let starts = [x[0], y[0]];
-//! let steps = [x[1] - x[0], y[1] - y[0]];
-//!
 //! // Values at grid points
 //! let z = [2.0; 16];
 //!
-//! // Observation points to interpolate/extrapolate
+//! // Points to interpolate/extrapolate
 //! let xobs = [0.0_f64, 5.0];
 //! let yobs = [-1.0, 3.0];
 //! let obs = [&xobs[..], &yobs[..]];
@@ -28,30 +23,28 @@
 //!
 //! // Do interpolation, allocating for the output for convenience
 //! let linearize_extrapolation = false;
-//! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
+//! rectilinear::interpn_alloc(grids, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
-use super::{MulticubicRegularRecursive, Saturation, normalized_hermite_spline};
-use crunchy::unroll;
-use num_traits::{Float, NumCast};
+//!
+//! References
+//! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
+//!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
+use super::{Saturation, centered_difference_nonuniform, normalized_hermite_spline};
+use crate::index_arr;
+use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
-/// For 1-4 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
-///
 /// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the N parameter, as this will slightly reduce compute and storage overhead,
+/// number for the MAXDIMS parameter, as this will slightly reduce compute and storage overhead,
 /// and the underlying method can be extended to more than this function's limit of 8 dimensions.
 /// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
 ///
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
 pub fn interpn<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
+    grids: &[&[T]],
     vals: &[T],
     linearize_extrapolation: bool,
     obs: &[&[T]],
@@ -59,73 +52,25 @@ pub fn interpn<T: Float>(
 ) -> Result<(), &'static str> {
     // Expanding out and using the specialized version for each size
     // gives a substantial speedup for lower dimensionalities
-    // (4-5x speedup for 1-dim compared to using N=8)
-    let ndims = dims.len();
+    // (4-5x speedup for 1-dim compared to using MAXDIMS=8)
+    let ndims = grids.len();
     match ndims {
-        1 => MulticubicRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => MulticubicRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => MulticubicRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => MulticubicRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        5 => MulticubicRegularRecursive::<'_, T, 5>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        6 => MulticubicRegularRecursive::<'_, T, 6>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        7 => MulticubicRegularRecursive::<'_, T, 7>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        8 => MulticubicRegularRecursive::<'_, T, 8>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
+        1 => MulticubicRectilinearRecursive::<'_, T, 1>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        2 => MulticubicRectilinearRecursive::<'_, T, 2>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        3 => MulticubicRectilinearRecursive::<'_, T, 3>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        4 => MulticubicRectilinearRecursive::<'_, T, 4>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        5 => MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        6 => MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        7 => MulticubicRectilinearRecursive::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
+        8 => MulticubicRectilinearRecursive::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
+            .interp(obs, out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),
@@ -140,31 +85,20 @@ pub fn interpn<T: Float>(
 /// allocation has a significant performance cost, and should be used sparingly.
 #[cfg(feature = "std")]
 pub fn interpn_alloc<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
+    grids: &[&[T]],
     vals: &[T],
     linearize_extrapolation: bool,
     obs: &[&[T]],
 ) -> Result<Vec<T>, &'static str> {
     let mut out = vec![T::zero(); obs[0].len()];
-    interpn(
-        dims,
-        starts,
-        steps,
-        vals,
-        linearize_extrapolation,
-        obs,
-        &mut out,
-    )?;
+    interpn(grids, vals, linearize_extrapolation, obs, &mut out)?;
     Ok(out)
 }
 
-// We can use the same regular-grid method again
-pub use crate::multilinear::regular::check_bounds;
+// We can use the same rectilinear-grid method again
+pub use crate::multilinear::rectilinear::check_bounds;
 
-/// An N-dimensional multicubic interpolator / extrapolator on a regular grid.
-/// Available for up to 6D; for higher dimensions, use
+/// An arbitrary-dimensional multicubic interpolator / extrapolator on a regular grid.
 ///
 /// On interior points, a hermite spline is used, with the derivative at each
 /// grid point matched to a second-order central difference. This allows the
@@ -195,9 +129,9 @@ pub use crate::multilinear::regular::check_bounds;
 /// * O(4^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
+/// * Peak stack usage is O(MAXDIMS), which is minimally O(ndims).
 /// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
+///   max depth of MAXDIMS, which provides a guarantee on peak
 ///   memory usage.
 ///
 /// Timing
@@ -207,15 +141,12 @@ pub use crate::multilinear::regular::check_bounds;
 /// * An interpolation-only variant of this algorithm could achieve
 ///   near-deterministic timing, but would produce incorrect results
 ///   when evaluated at off-grid points.
-pub struct MulticubicRegular<'a, T: Float, const N: usize> {
+pub struct MulticubicRectilinearRecursive<'a, T: Float, const MAXDIMS: usize> {
+    /// x, y, ... coordinate grids, each entry of size dims[i]
+    grids: &'a [&'a [T]],
+
     /// Size of each dimension
-    dims: [usize; N],
-
-    /// Starting point of each dimension, size dims.len()
-    starts: [T; N],
-
-    /// Step size for each dimension, size dims.len()
-    steps: [T; N],
+    dims: [usize; MAXDIMS],
 
     /// Values at each point, size prod(dims)
     vals: &'a [T],
@@ -224,8 +155,8 @@ pub struct MulticubicRegular<'a, T: Float, const N: usize> {
     linearize_extrapolation: bool,
 }
 
-impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
-    /// Build a new interpolator, using O(N) calculations and storage.
+impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinearRecursive<'a, T, MAXDIMS> {
+    /// Build a new interpolator, using O(MAXDIMS) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions; all grids must have at least 4 entries.
     ///
@@ -236,51 +167,32 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     /// * If any dimensions have size < 4
     /// * If any step sizes have zero or negative magnitude
     pub fn new(
-        dims: [usize; N],
-        starts: [T; N],
-        steps: [T; N],
+        grids: &'a [&'a [T]],
         vals: &'a [T],
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
-        const {
-            assert!(
-                N > 0 && N < 5,
-                "Flattened method defined for 1-5 dimensions. For higher dimensions, use recursive method."
-            );
-        }
-        let nvals: usize = dims.iter().product();
-        if !(starts.len() == N && steps.len() == N && vals.len() == nvals && N > 0) {
+        let ndims = grids.len();
+        let mut dims = [1_usize; MAXDIMS];
+        (0..ndims).for_each(|i| dims[i] = grids[i].len());
+        let nvals: usize = dims[..ndims].iter().product();
+        if !(vals.len() == nvals && ndims > 0 && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
-        }
-
-        // Make sure all dimensions have at least four entries
-        let degenerate = dims.iter().any(|&x| x < 4);
+        };
+        // Check if any grids are degenerate
+        let degenerate = dims[..ndims].iter().any(|&x| x < 4);
         if degenerate {
-            return Err("All grids must have at least four entries");
-        }
-        // Check if any dimensions have zero or negative step size
-        let steps_are_positive = steps.iter().all(|&x| x > T::zero());
-        if !steps_are_positive {
+            return Err("All grids must have at least 4 entries");
+        };
+        // Check that at least the first two entries in each grid are monotonic
+        let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
+        if !monotonic_maybe {
             return Err("All grids must be monotonically increasing");
-        }
-
-        // Copy grid info into struct.
-        // Keeping this data local to the struct eliminates an issue where,
-        // if the grid info is defined somewhere not local to where the struct
-        // is defined and used, the & references to it cost more than the entire
-        // rest of the interpolation operation.
-        let mut steps_local = [T::zero(); N];
-        let mut starts_local = [T::zero(); N];
-        let mut dims_local = [0_usize; N];
-        steps_local[..N].copy_from_slice(&steps[..N]);
-        starts_local[..N].copy_from_slice(&starts[..N]);
-        dims_local[..N].copy_from_slice(&dims[..N]);
+        };
 
         Ok(Self {
-            dims: dims_local,
-            starts: starts_local,
-            steps: steps_local,
+            grids,
+            dims,
             vals,
             linearize_extrapolation,
         })
@@ -293,21 +205,24 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     /// # Errors
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
-    pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
+    pub fn interp(&self, x: &[&[T]], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
+        let ndims = self.grids.len();
+
         // Make sure there are enough coordinate inputs for each dimension
-        if x.len() != N {
+        if x.len() != ndims {
             return Err("Dimension mismatch");
         }
+
         // Make sure the size of inputs and output match
         let size_matches = x.iter().all(|&xx| xx.len() == out.len());
         if !size_matches {
             return Err("Dimension mismatch");
         }
 
-        let mut tmp = [T::zero(); N];
+        let tmp = &mut [T::zero(); MAXDIMS][..ndims];
         for i in 0..n {
-            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            (0..ndims).for_each(|j| tmp[j] = x[j][i]);
             out[i] = self.interp_one(tmp)?;
         }
 
@@ -324,9 +239,10 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     ///   * If the dimensionality of either one exceeds the fixed maximum
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
-    pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
+    pub fn interp_one(&self, x: &[T]) -> Result<T, &'static str> {
         // Check sizes
-        if x.len() != N {
+        let ndims = self.grids.len();
+        if !(x.len() == ndims && ndims <= MAXDIMS) {
             return Err("Dimension mismatch");
         }
 
@@ -337,98 +253,33 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let mut origin = [0_usize; N]; // Indices of lower corner of hypercube
-        let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
-        let mut dts = [T::zero(); N]; // Normalized coordinate storage
-        let mut dimprod = [1_usize; N];
-        let mut loc = [0_usize; N];
-        let mut store = [[T::zero(); FP]; N];
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
+        let sat = &mut [Saturation::None; MAXDIMS][..ndims]; // Saturation none/high/low flags for each dim
+        let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
+        // Populate cumulative product of higher dimensions for indexing.
+        //
+        // Each entry is the cumulative product of the size of dimensions
+        // higher than this one, which is the stride between blocks
+        // relating to a given index along each dimension.
         let mut acc = 1;
-        unroll! {
-            for i < 5 in 0..N {
-                // Populate cumulative product of higher dimensions for indexing.
-                //
-                // Each entry is the cumulative product of the size of dimensions
-                // higher than this one, which is the stride between blocks
-                // relating to a given index along each dimension.
-                if const { i > 0 } {
-                    acc *= self.dims[N - i];
-                }
-                dimprod[N - i - 1] = acc;
+        for i in 0..ndims {
+            dimprod[ndims - i - 1] = acc;
+            acc *= self.dims[ndims - i - 1];
+        }
 
-                // Populate lower corner and saturation flag for each dimension
-                (origin[i], sat[i]) = self.get_loc(x[i], i)?;
-
-                // Calculate normalized delta locations
-                // For the cubic method, the normalized coordinate `t` is always relative
-                // to cube index 1 (out of 0-3)
-                let index_one_loc = self.starts[i]
-                    + self.steps[i]
-                        * <T as NumCast>::from(origin[i] + 1)
-                            .ok_or("Unrepresentable coordinate value")?;
-                dts[i] = (x[i] - index_one_loc) / self.steps[i];
-            }
+        // Populate lower corner and saturation flag for each dimension
+        for i in 0..ndims {
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
         }
 
         // Recursive interpolation of one dependency tree at a time
-        const FP: usize = 4; // Footprint size      
-        let nverts = const { FP.pow(N as u32) }; // Total number of vertices
+        // let loc = &origin; // Starting location in the tree is the origin
+        let dim = ndims; // Start from the end and recurse back to zero
+        let loc = &mut [0_usize; MAXDIMS][..ndims];
+        loc.copy_from_slice(origin);
+        let interped = self.populate(dim, sat, origin, loc, dimprod, x);
 
-        unroll! {
-            for i < 256 in 0..nverts {  // const loop
-                // Index, interpolate, or pass on each level of the tree
-                unroll!{
-                    for j < 5 in 0..N {  // const loop
-
-                        // Most of these iterations will get optimized out
-                        if const{j == 0} { // const branch
-                            // At leaves, index values
-
-                            unroll!{
-                                for k < 5 in 0..N {  // const loop
-                                    // Bit pattern in an integer matches C-ordered array indexing
-                                    // so we can just use the vertex index to index into the array
-                                    // by selecting the appropriate bit from the index.
-                                    const OFFSET: usize = const{(i & (3 << (2*k))) >> (2*k)};
-                                    loc[k] = origin[k] + OFFSET;
-                                }
-                            }
-                            const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = self.index_arr(loc, dimprod);
-                        }
-                        else { // const branch
-                            // For other nodes, interpolate on child values
-
-                            const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
-                            const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
-                            const IND: usize = const{j.saturating_sub(1)};
-
-                            if LEVEL { // const branch
-                                let interped = interp_inner::<T, N>(
-                                    &store[IND],
-                                    dts[IND],
-                                    sat[IND],
-                                    self.linearize_extrapolation
-                                );
-
-                                store[j][P] = interped;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Interpolate the final value
-        // This could use a const index as well, if we were using a fixed number of dims
-        let interped = interp_inner::<T, N>(
-            &store[N - 1],
-            dts[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        );
         Ok(interped)
     }
 
@@ -442,18 +293,23 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     #[inline]
     fn get_loc(&self, v: T, dim: usize) -> Result<(usize, Saturation), &'static str> {
         let saturation: Saturation; // What part of the grid cell are we in?
+        let grid = self.grids[dim];
 
-        let floc = ((v - self.starts[dim]) / self.steps[dim]).floor(); // float loc
-        // Signed integer loc, with the bottom of the cell aligned to place the normalized
-        // coordinate t=0 at cell index 1
-        let iloc = <isize as NumCast>::from(floc).ok_or("Unrepresentable coordinate value")? - 1;
+        // Bisection search to find location on the grid.
+        //
+        // The search will return `0` if the point is outside-low,
+        // and will return `self.dims[dim]` if outside-high.
+        //
+        // This process accounts for essentially the entire difference in
+        // performance between this method and the regular-grid method.
+        let iloc: isize = grid.partition_point(|x| *x < v) as isize - 2;
 
         let n = self.dims[dim] as isize; // Number of grid points on this dimension
         let dimmax = n.saturating_sub(4).max(0); // maximum index for lower corner
         let loc: usize = iloc.max(0).min(dimmax) as usize; // unsigned integer loc clipped to interior
 
         // Observation point is outside the grid on the low side
-        if iloc < -1 {
+        if iloc == -2 {
             saturation = Saturation::OutsideLow;
         }
         // Observation point is in the lower part of the cell
@@ -463,12 +319,12 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
         // Observation point is in the upper part of the cell
         // but not outside the grid
-        else if iloc > (n - 3) {
+        else if iloc == n - 2 {
             saturation = Saturation::OutsideHigh;
         }
         // Observation point is in the upper part of the cell
         // but not outside the grid
-        else if iloc == (n - 3) {
+        else if iloc == n - 3 {
             saturation = Saturation::InsideHigh;
         }
         // Observation point is on the interior
@@ -479,26 +335,57 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         Ok((loc, saturation))
     }
 
-    /// Index a single value from an array
+    /// Recursive evaluation of interpolant on each dimension
     #[inline]
-    fn index_arr(&self, loc: [usize; N], dimprod: [usize; N]) -> T {
-        let mut i = 0;
+    fn populate(
+        &self,
+        dim: usize,
+        sat: &[Saturation],
+        origin: &[usize],
+        loc: &mut [usize],
+        dimprod: &[usize],
+        x: &[T],
+    ) -> T {
+        // Do the calc for this entry
+        match dim {
+            // If we have arrived at a leaf, index into data
+            0 => index_arr(loc, dimprod, self.vals),
 
-        unroll! {
-            for j < 5 in 0..N {
-                i += loc[j] * dimprod[j];
+            // Otherwise, continue recursion
+            _ => {
+                // Keep track of where we are in the tree
+                // so that we can index into the value array properly
+                // when we reach the leaves
+                let next_dim = dim - 1;
+
+                // Populate next dim's values
+                let mut vals = [T::zero(); 4];
+                for i in 0..4 {
+                    loc[next_dim] = origin[next_dim] + i;
+                    vals[i] = self.populate(next_dim, sat, origin, loc, dimprod, x);
+                }
+                loc[next_dim] = origin[next_dim]; // Reset for next usage
+
+                // Interpolate on next dim's values to populate an entry in this dim
+                let grid_cell = &self.grids[next_dim][origin[next_dim]..origin[next_dim] + 4];
+                interp_inner::<T, MAXDIMS>(
+                    vals,
+                    grid_cell,
+                    x[next_dim],
+                    sat[next_dim],
+                    self.linearize_extrapolation,
+                )
             }
         }
-
-        self.vals[i]
     }
 }
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const N: usize>(
-    vals: &[T; 4],
-    t: T,
+fn interp_inner<T: Float, const MAXDIMS: usize>(
+    vals: [T; 4],
+    grid_cell: &[T],
+    x: T,
     sat: Saturation,
     linearize_extrapolation: bool,
 ) -> T {
@@ -528,9 +415,13 @@ fn interp_inner<T: Float, const N: usize>(
             let y0 = vals[1];
             let dy = vals[2] - vals[1];
 
-            // Take slopes from centered difference
-            let k0 = (vals[2] - vals[0]) / two;
-            let k1 = (vals[3] - vals[1]) / two;
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let k0 = centered_difference_nonuniform(vals[0], vals[1], vals[2], h01 / h12, T::one());
+            let k1 = centered_difference_nonuniform(vals[1], vals[2], vals[3], T::one(), h23 / h12);
+
+            let t = (x - grid_cell[1]) / h12;
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -540,13 +431,18 @@ fn interp_inner<T: Float, const N: usize>(
             //     x
             //
             // Flip direction to maintain symmetry
-            // with the InsideHigh case
-            let t = -t; // `t` always w.r.t. index 1 of cube
+            // with the InsideHigh case.
+
             let y0 = vals[1]; // Same starting point, opposite direction
             let dy = vals[0] - vals[1];
 
-            let k0 = -(vals[2] - vals[0]) / two;
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let k0 =
+                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
+
+            let t = -(x - grid_cell[1]) / h01;
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -556,14 +452,19 @@ fn interp_inner<T: Float, const N: usize>(
             // x
             //
             // Flip direction to maintain symmetry
-            // with the InsideHigh case
-            let t = -t; // `t` always w.r.t. index 1 of cube
-            let y0 = vals[1]; // Same starting point, opposite direction
+            // with the InsideHigh case.
+
+            let y0 = vals[1];
             let y1 = vals[0];
             let dy = vals[0] - vals[1];
 
-            let k0 = -(vals[2] - vals[0]) / two;
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let k0 =
+                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
             let k1 = two * dy - k0; // Natural spline boundary condition
+
+            let t = -(x - grid_cell[1]) / h01;
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
@@ -577,16 +478,15 @@ fn interp_inner<T: Float, const N: usize>(
             //           |-> t
             // --|---|---|---|--
             //             x
-            //
-            // Shift cell up an index
-            // and offset `t`, which has value between 1 and 2
-            // because it is calculated w.r.t. index 1
-            let t = t - one;
             let y0 = vals[2];
             let dy = vals[3] - vals[2];
 
-            let k0 = (vals[3] - vals[1]) / two;
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
             let k1 = two * dy - k0; // Natural spline boundary condition
+
+            let t = (x - grid_cell[2]) / h23;
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -594,17 +494,16 @@ fn interp_inner<T: Float, const N: usize>(
             //           |-> t
             // --|---|---|---|--
             //                 x
-            //
-            // Shift cell up an index
-            // and offset `t`, which has value between 1 and 2
-            // because it is calculated w.r.t. index 1
-            let t = t - one;
             let y0 = vals[2];
             let y1 = vals[3];
             let dy = vals[3] - vals[2];
 
-            let k0 = (vals[3] - vals[1]) / two;
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
             let k1 = two * dy - k0; // Natural spline boundary condition
+
+            let t = (x - grid_cell[2]) / h23;
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
@@ -620,25 +519,35 @@ fn interp_inner<T: Float, const N: usize>(
 #[cfg(test)]
 mod test {
     use super::interpn;
+    use crate::testing::*;
     use crate::utils::*;
 
-    /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
+    /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
     /// Each test evaluates at 5^ndims locations, largely extrapolated in corner regions, so it
-    /// rapidly becomes prohibitively slow above ndims=6.
+    /// rapidly becomes prohibitively slow in higher dimensions.
     #[test]
-    fn test_interp_extrap_1d_to_4d_linear() {
-        for ndims in 1..=4 {
+    fn test_interp_extrap_1d_to_6d_linear() {
+        let mut rng = rng_fixed_seed();
+
+        for ndims in 1..=6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
             let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .map(|i| {
+                    // Make a linear grid and add noise
+                    let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
+                    let dx = randn::<f64>(&mut rng, x.len());
+                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+                    (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                    x
+                })
                 .collect();
+
+            let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
             let u: Vec<f64> = grid.iter().map(|x| x.iter().sum()).collect(); // sum is linear in every direction, good for testing
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
@@ -652,35 +561,42 @@ mod test {
             let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
             let mut out = vec![0.0; uobs.len()];
 
-            // Evaluate with spline extrapolation, which should collapse to linear
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+            // Evaluate with linearized extrapolation
+            interpn(&grids, &u, true, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
 
-            // Evaluate with linear extrapolation
-            interpn(&dims, &starts, &steps, &u, true, &xobsslice, &mut out[..]).unwrap();
-
-            // Check that interpolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
+            // Evaluate and check without linearized extrapolation
+            interpn(&grids, &u, false, &xobsslice, &mut out[..]).unwrap();
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
         }
     }
 
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_extrap_1d_to_4d_quadratic() {
-        for ndims in 1..=4 {
+    fn test_interp_extrap_1d_to_6d_quadratic() {
+        let mut rng = rng_fixed_seed();
+
+        for ndims in 1..6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
             let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .map(|i| {
+                    // Make a linear grid and add noise
+                    let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
+                    let dx = randn::<f64>(&mut rng, x.len());
+                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+                    (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                    x
+                })
                 .collect();
+
+            let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
             let u: Vec<f64> = (0..grid.len())
                 .map(|i| {
@@ -690,9 +606,7 @@ mod test {
                     }
                     v
                 })
-                .collect(); // Quadratic in every direction
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
+                .collect(); // Quadratic in every directio
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
@@ -715,7 +629,7 @@ mod test {
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+            interpn(&grids, &u, false, &xobsslice, &mut out[..]).unwrap();
 
             // Check that interpolated and extrapolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
@@ -730,13 +644,24 @@ mod test {
     /// to keep test run times low.
     #[test]
     fn test_interp_1d_to_3d_sine() {
+        let mut rng = rng_fixed_seed();
+
         for ndims in 1..3 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![10; ndims];
             let xs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]))
+                .map(|i| {
+                    // Make a linear grid and add noise
+                    let mut x = linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i]);
+                    let dx = randn::<f64>(&mut rng, x.len());
+                    (0..x.len()).for_each(|i| x[i] += (dx[i] - 0.5) / 10.0);
+                    (0..x.len() - 1).for_each(|i| assert!(x[i + 1] > x[i]));
+                    x
+                })
                 .collect();
+
+            let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
             let grid = meshgrid((0..ndims).map(|i| &xs[i]).collect());
             let u: Vec<f64> = (0..grid.len())
                 .map(|i| {
@@ -747,12 +672,10 @@ mod test {
                     v
                 })
                 .collect(); // Quadratic in every direction
-            let starts: Vec<f64> = xs.iter().map(|x| x[0]).collect();
-            let steps: Vec<f64> = xs.iter().map(|x| x[1] - x[0]).collect();
 
             // Observation points
             let xobs: Vec<Vec<f64>> = (0..ndims)
-                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 2))
+                .map(|i| linspace(-5.0 * (i as f64), 5.0 * ((i + 1) as f64), dims[i] + 1))
                 .collect();
             let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
             let gridobs_t: Vec<Vec<f64>> = (0..ndims)
@@ -771,16 +694,14 @@ mod test {
             let mut out = vec![0.0; uobs.len()];
 
             // Evaluate
-            interpn(&dims, &starts, &steps, &u, false, &xobsslice, &mut out[..]).unwrap();
+            interpn(&grids, &u, false, &xobsslice, &mut out[..]).unwrap();
 
-            // Check that interpolated and extrapolated values match expectation,
-            // using an absolute difference because some points are very close to or exactly at zero,
-            // and do not do well under a check on relative difference.
+            // Use a tolerance that increases with the number of dimensions, since
+            // we are effectively summing ndims times the error from each dimension
             let tol = 2e-2 * f64::from(ndims as u32);
 
             (0..uobs.len()).for_each(|i| {
                 let err = out[i] - uobs[i];
-                // println!("{err}");
                 assert!(err.abs() < tol);
             });
         }

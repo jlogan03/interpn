@@ -84,6 +84,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // These "needless" range loops are a significant speedup
 #![allow(clippy::needless_range_loop)]
+// Some const loops produce flattened code with unresolvable lints on
+// expanded code that is entirely in const.
+#![allow(clippy::absurd_extreme_comparisons)]
 
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
@@ -93,8 +96,8 @@ pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
 
 pub mod one_dim;
 pub use one_dim::{
-    hold::Left1D, hold::Nearest1D, hold::Right1D, linear::Linear1D, linear::LinearHoldLast1D,
-    RectilinearGrid1D, RegularGrid1D,
+    RectilinearGrid1D, RegularGrid1D, hold::Left1D, hold::Nearest1D, hold::Right1D,
+    linear::Linear1D, linear::LinearHoldLast1D,
 };
 
 #[cfg(feature = "std")]
@@ -102,3 +105,14 @@ pub mod utils;
 
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod testing;
+
+/// Index a single value from an array
+#[inline]
+pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
+    let mut i = 0;
+    for j in 0..dimprod.len() {
+        i += loc[j] * dimprod[j];
+    }
+
+    data[i]
+}

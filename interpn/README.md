@@ -14,12 +14,15 @@ as can the RAM usage.
 Rectilinear methods perform a bisection search to find the relevant grid cell, which takes
 a worst-case number of iterations of log2(number of grid elements).
 
+Recursive and flattened methods differ in constant terms but do not differ in asymptotic scalings.
+Flattened methods are faster and available for lower dimensions.
+
 | Method                        | RAM       | Interp. / Extrap. Cost       |
 |-------------------------------|-----------|------------------------------|
-| multilinear::regular          | O(ndims)  | O(2^ndims)                   |
-| multilinear::rectilinear      | O(ndims)  | O(2^ndims) + log2(gridsize)  |
-| multicubic::regular           | O(ndims)  | O(4^ndims)                   |
-| multicubic::rectilinear       | O(ndims)  | O(4^ndims) + log2(gridsize)  |
+| multilinear::regular\[_recursive\]          | O(ndims)  | O(2^ndims)                   |
+| multilinear::rectilinear\[_recursive\]      | O(ndims)  | O(2^ndims) + log2(gridsize)  |
+| multicubic::regular\[_recursive\]           | O(ndims)  | O(4^ndims)                   |
+| multicubic::rectilinear\[_recursive\]       | O(ndims)  | O(4^ndims) + log2(gridsize)  |
 
 # Example: Multilinear and Multicubic w/ Regular Grid
 ```rust
