@@ -235,7 +235,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
             );
         }
         let nvals: usize = dims.iter().product();
-        if !(vals.len() == nvals) {
+        if (vals.len() != nvals) {
             return Err("Dimension mismatch");
         }
         // Make sure all dimensions have at least four entries
@@ -298,7 +298,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     #[inline]
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         // Check sizes
-        if !(x.len() == N) {
+        if (x.len() != N) {
             return Err("Dimension mismatch");
         }
 
@@ -370,7 +370,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                             // For other nodes, interpolate on child values
 
                             const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1) % Q == 0};
+                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
                             const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
                             const IND: usize = const{j.saturating_sub(1)};
 
@@ -393,7 +393,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let dy = store[N - 1][1] - y0;
         let t = dts[N - 1];
         let interped = y0 + t * dy;
-        return Ok(interped);
+        Ok(interped)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,

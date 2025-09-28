@@ -186,7 +186,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims[..N].iter().product();
-        if !(vals.len() == nvals) {
+        if (vals.len() != nvals) {
             return Err("Dimension mismatch");
         };
         // Check if any grids are degenerate
@@ -305,7 +305,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
                             // For other nodes, interpolate on child values
 
                             const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1) % Q == 0};
+                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
                             const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
                             const IND: usize = const{j.saturating_sub(1)};
 
@@ -339,7 +339,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         let y0 = store[ind][0];
         let dy = store[ind][1] - y0;
         let interped = y0 + t * dy;
-        return Ok(interped);
+        Ok(interped)
     }
 
     /// Get the lower-corner index along this dimension where `x` is found,

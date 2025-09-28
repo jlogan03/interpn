@@ -326,7 +326,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     ///     integer value within the value type `T`
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         // Check sizes
-        if !(x.len() == N) {
+        if (x.len() != N) {
             return Err("Dimension mismatch");
         }
 
@@ -401,7 +401,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
                             // For other nodes, interpolate on child values
 
                             const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1) % Q == 0};
+                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
                             const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
                             const IND: usize = const{j.saturating_sub(1)};
 
@@ -429,7 +429,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
             sat[N - 1],
             self.linearize_extrapolation,
         );
-        return Ok(interped);
+        Ok(interped)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
