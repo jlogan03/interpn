@@ -12,6 +12,7 @@
 * !Use exact number of dimensions instead of maximum number to enable more const evaluation
 * Reduce code duplication between interpolator variants
 * Update deps & roll forward to 2024 edition
+* Build test_no_std on stable
 
 ### Added
 

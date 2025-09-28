@@ -14,7 +14,7 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn _start() -> ! {
     // Define a grid
     let x = [1.0_f64, 2.0, 3.0, 4.0];
