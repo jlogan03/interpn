@@ -24,7 +24,7 @@ jobs:
         uv pip install -e .[test,bench]
       
     - name: Format
-      run: uv run ruff check .
+      run: uv run ruff check; uv run ruff format --check
 
     - name: Static typing
       run: uv run pyright ./src
