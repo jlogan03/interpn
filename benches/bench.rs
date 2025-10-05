@@ -11,6 +11,8 @@ use interpn::{
     },
 };
 
+use std::hint::black_box;
+
 enum Kind {
     Interp,
     Extrap,

@@ -1,15 +1,50 @@
-[workspace]
-members = [
-    "interpn",
-]
-exclude = [ "test_no_std" ]
-resolver = "2"
+[package]
+name = "interpn"
+version = "0.6.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "interpn"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Rust lib deps
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+crunchy = { version = "0.2.4", default-features = false, features = ["limit_256"] }
+
+# Python bindings
+pyo3 = { version = "0.26.0", features = ["extension-module", "abi3-py39", "generate-import-lib"], optional = true }
+numpy = { version = "0.26.0", optional = true }
+
+# Test-only utils
+itertools = { version = "0.14.0", optional = true }
+
+[dev-dependencies]
+rand = "0.9.2"
+criterion = "0.7.0"
+ndarray = "0.16.1"
+
+[features]
+default = ["std"]
+python = ["numpy", "pyo3", "std"]
+std = ["itertools"]
 
 [profile.release]
 opt-level = 3
 codegen-units = 1
 lto = true
+strip = true
 overflow-checks = true
 
 [profile.dev]
 opt-level = 2
+codegen-units = 16
+lto = false
+
+[[bench]]
+name = "bench"
+harness = false
+
+[lints.rust]
+unsafe_code = "forbid"

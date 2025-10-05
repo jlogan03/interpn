@@ -17,16 +17,23 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
     - name: Format
-      run: cd interpn; cargo fmt --check
+      run: cargo fmt --check
+
     - name: Lint
-      run: cd interpn; cargo clippy
+      run: cargo clippy
+
     - name: Build
-      run: cd interpn; cargo build
+      run: cargo build
+
     - name: Run tests
-      run: cd interpn; cargo test
+      run: cargo test
+
     - name: Test no-std
       run: |
-        cd test_no_std
         rustup target add thumbv7em-none-eabihf
-        cargo build
+        cargo build --target thumbv7em-none-eabihf --no-default-features

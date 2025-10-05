@@ -106,6 +106,9 @@ pub mod utils;
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod testing;
 
+#[cfg(feature="python")]
+pub mod python;
+
 /// Index a single value from an array
 #[inline]
 pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {

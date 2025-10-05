@@ -1,14 +1,18 @@
-# interpn
-
-Python bindings to the `interpn` Rust library for N-dimensional interpolation and extrapolation. 
+# Quickstart
 
 [Docs](https://interpnpy.readthedocs.io/en/latest/) |
 [Repo](https://github.com/jlogan03/interpnpy) |
-[Rust Library (github)](https://github.com/jlogan03/interpn) | 
+[Rust Library (github)](https://github.com/jlogan03/interpn) |
 [Rust Docs (docs.rs)](https://docs.rs/interpn/latest/interpn/)
 
-## Features
+This library provides serializable N-dimensional interpolators
+backed by compute-heavy code written in Rust.
 
+These methods perform zero allocation when evaluated (except, optionally, for the output).
+Because of this, they have minimal per-call overhead, and are particularly
+effective when examining small numbers of observation points. See the [performance](/perf) page for detailed benchmarks.
+
+## Features
 | Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization |
 |-----------------------------------|-----------------|---------------------|-----------------------|
 | Linear                            |   ✅            |     ✅              | ✅                    |
@@ -23,7 +27,7 @@ The methods provided here, while more limited in scope than scipy's,
 * can also be used easily in web and embedded applications via the Rust library
 * are permissively licensed
 
-![ND throughput 1000 obs](./docs/throughput_vs_dims_1000_obs.svg)
+![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
@@ -32,16 +36,6 @@ See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about
 ```bash
 pip install interpn
 ```
-
-## Profile-Guided Optimisation
-
-To build the extension with profile-guided optimisation, using the lightweight `scripts/profile_workload.py` workload (1 and 1000 observation points across 1–8 dimensions for every InterpN method) by default:
-
-1. Ensure the cargo subcommand is installed: `cargo install cargo-pgo`
-2. Install the optional benchmarking dependencies if you plan to run the full SciPy benchmarks: `uv pip install '.[bench]'`
-3. Run the automation script: `python scripts/run_pgo.py`
-
-The helper uses `cargo-pgo` to build an instrumented extension, executes `scripts/profile_workload.py` to generate LLVM `.profraw` files, and then rebuilds the module with the merged profile data before copying the optimised library into `interpn/_interpn*.so`. Pass `--bench test/bench_cpu.py` to reuse the original comprehensive workload. Using `--skip-final-build` leaves the instrumented library in place alongside the collected profiles.
 
 ## Example: Available Methods
 
@@ -92,7 +86,7 @@ steps = np.array([x[1] - x[0], y[1] - y[0]])
 obs = [xgrid.flatten(), ygrid.flatten()]
 
 # Initialize
-interpolator = interpn.MultilinearRegular.new(dims, starts, steps, zgrid.flatten())
+interpolator = interpn.MultilinearRegular.new(dims, starts, steps, zgrid)
 
 # Interpolate
 out = interpolator.eval(obs)
@@ -109,7 +103,6 @@ out2 = roundtrip_interpolator.eval(obs)
 # Check result from roundtrip serialized/deserialized interpolator
 assert np.all(out == out2)
 ```
-
 
 # License
 

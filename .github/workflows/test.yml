@@ -1,0 +1,46 @@
+name: test
+on:
+  pull_request:
+    branches: [ "*" ]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+    # Rust
+    - name: Format
+      run: cargo fmt --check --verbose
+    - name: Lint
+      run: cargo clippy
+    - name: Build
+      run: cargo build --verbose
+    # Python
+    - name: Install - python
+      run: |
+        python -m venv ../env
+        source ../env/bin/activate
+        pip install maturin
+        maturin develop
+        pip install -e .[test]
+    - name: Format - python
+      run: source ../env/bin/activate; ruff check ./interpn
+    - name: Static typing - python
+      run: source ../env/bin/activate; pyright ./interpn
+    - name: Test - python (without PGO)
+      run: |
+        source ../env/bin/activate; pytest .
+        python ./examples/cubic_comparison.py test
+    - name: Profile-Guided Optimization (PGO)
+      run: |
+        source ../env/bin/activate; python ./scripts/run_pgo.py --build-wheel
+    - name: Test - python (with PGO)
+      run: |
+        source ../env/bin/activate; pytest .
