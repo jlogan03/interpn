@@ -22,7 +22,8 @@ if __name__ == "__main__":
         _fig, axes = plt.subplots(2, 3, sharex=True, figsize=(14, 6))
         axes = axes.flatten()
         plt.suptitle(
-            f"Comparison\nInterpN Multicubic{kind} vs. Scipy RegularGridInterpolator Cubic"
+            f"Comparison\nInterpN Multicubic{kind} vs."
+            " Scipy RegularGridInterpolator Cubic"
         )
         for i, (fnname, fn, data_res) in enumerate(
             [

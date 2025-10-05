@@ -80,7 +80,8 @@ def main() -> None:
                     _evaluate(interpolator, points)
 
                     print(
-                        f"Completed {type(interpolator).__name__} dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
+                        f"Completed {type(interpolator).__name__} "
+                        "dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
                     )
 
 

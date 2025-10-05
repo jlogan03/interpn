@@ -13,7 +13,7 @@ import sys
 import tempfile
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -65,7 +65,8 @@ def ensure_bench_dependencies(bench_script: Path) -> None:
         else:
             hint = "uv pip install <dependency>"
         raise SystemExit(
-            f"Missing Python dependencies ({deps}). Install them via `{hint}` before running PGO."
+            f"Missing Python dependencies ({deps}). "
+            f"Install them via `{hint}` before running PGO."
         )
 
 
@@ -81,7 +82,8 @@ def ensure_cargo_pgo() -> None:
         ) from exc
     except subprocess.CalledProcessError as exc:  # pragma: no cover - environment issue
         raise SystemExit(
-            "Failed to execute `cargo pgo`. Ensure the tool is installed and functional."
+            "Failed to execute `cargo pgo`. "
+            "Ensure the tool is installed and functional."
         ) from exc
 
 
@@ -138,7 +140,8 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
 
         if target_rel is None:
             raise SystemExit(
-                f"Could not find {optimized_lib.name} inside wheel {wheel_path.name}; unable to swap binary."
+                f"Could not find {optimized_lib.name}"
+                f" inside wheel {wheel_path.name}; unable to swap binary."
             )
 
         target_path = tmp_root / target_rel
@@ -147,7 +150,8 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
         dist_info_dirs = list(tmp_root.glob("*.dist-info"))
         if len(dist_info_dirs) != 1:
             raise SystemExit(
-                f"Expected a single dist-info directory in wheel {wheel_path.name}, found {len(dist_info_dirs)}"
+                "Expected a single dist-info directory in wheel"
+                f" {wheel_path.name}, found {len(dist_info_dirs)}"
             )
         record_path = dist_info_dirs[0] / "RECORD"
         if not record_path.exists():
@@ -174,7 +178,8 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
                 updated_lines.append(line)
         if not replaced_record:
             raise SystemExit(
-                f"RECORD entry for {target_rel_posix} not found in wheel {wheel_path.name}"
+                f"RECORD entry for {target_rel_posix} "
+                f"not found in wheel {wheel_path.name}"
             )
         record_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
@@ -268,7 +273,8 @@ def main() -> None:
 
     if args.skip_final_build:
         print(
-            f"Skipping final build. Profiles available in {profiles_dir}; the instrumented library remains installed.",
+            f"Skipping final build. Profiles available in {profiles_dir};"
+            " the instrumented library remains installed.",
             flush=True,
         )
         return

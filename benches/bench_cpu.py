@@ -1,3 +1,5 @@
+# ruff: noqa B023
+
 import gc
 import os
 from pathlib import Path
@@ -48,7 +50,7 @@ def bench_4_dims_1_obs():
     preallocate = False  # Whether to preallocate output array for InterpN
     ndims = 4  # Number of grid dimensions
     ngrid = 20  # Size of grid on each dimension
-    nobs = int(1)  # Number of observation points
+    nobs = 1  # Number of observation points
     m = max(int(float(nobs) ** (1.0 / ndims) + 2), 2)
 
     grids = [np.linspace(-1.0, 1.0, ngrid) for _ in range(ndims)]
@@ -564,12 +566,10 @@ def bench_throughput_vs_dims():
             interps = {
                 "Scipy RegularGridInterpolator Linear": rectilinear_sp,
                 "Scipy RegularGridInterpolator Cubic": cubic_rectilinear_sp,
-                "InterpN MultilinearRegular": lambda p: regular_interpn.eval(p),
-                "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p),
-                "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p),
-                "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
-                    p
-                ),
+                "InterpN MultilinearRegular": regular_interpn.eval,
+                "InterpN MultilinearRectilinear": rectilinear_interpn.eval,
+                "InterpN MulticubicRegular": cubic_regular_interpn.eval,
+                "InterpN MulticubicRectilinear": cubic_rectilinear_interpn.eval,
             }
 
             if ndims == 1:

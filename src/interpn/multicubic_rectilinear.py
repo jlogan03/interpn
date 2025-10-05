@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from functools import reduce
 
 import numpy as np
@@ -112,7 +111,7 @@ class MulticubicRectilinear(BaseModel):
     def dims(self) -> list[int]:
         return [x.data.size for x in self.grids]
 
-    def eval(self, obs: list[NDArray], out: Optional[NDArray] = None) -> NDArray:
+    def eval(self, obs: list[NDArray], out: NDArray | None = None) -> NDArray:
         """Evaluate the interpolator at a set of observation points,
         optionally writing the output into a preallocated array.
 
@@ -137,9 +136,7 @@ class MulticubicRectilinear(BaseModel):
 
         return out_inner
 
-    def eval_unchecked(
-        self, obs: list[NDArray], out: Optional[NDArray] = None
-    ) -> NDArray:
+    def eval_unchecked(self, obs: list[NDArray], out: NDArray | None = None) -> NDArray:
         """Evaluate the interpolator at a set of observation points,
         optionally writing the output into a preallocated array,
         and skipping checks on the dimensionality and contiguousness

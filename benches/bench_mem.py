@@ -1,5 +1,6 @@
 """Benchmarks examining memory usage"""
 
+# ruff: noqa B023
 import gc
 import time
 from pathlib import Path
@@ -70,12 +71,10 @@ def bench_eval_mem_vs_dims():
         interps = {
             "Scipy RegularGridInterpolator Linear": rectilinear_sp,
             "Scipy RegularGridInterpolator Cubic": cubic_rectilinear_sp,
-            "InterpN MultilinearRegular": lambda p: regular_interpn.eval(p),
-            "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p),
-            "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p),
-            "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
-                p
-            ),
+            "InterpN MultilinearRegular": lambda p: regular_interpn.eval,
+            "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval,
+            "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval,
+            "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval,
         }
 
         # Interpolation in random order
