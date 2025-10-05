@@ -12,9 +12,9 @@ from interpn import (
     MultilinearRegular,
 )
 
-_OBSERVATION_COUNTS = (1, 3)
+_OBSERVATION_COUNTS = (1, 2)
 _MAX_DIMS = 4
-_GRID_SIZE = 20
+_GRID_SIZE = 4
 
 
 def _observation_points(
@@ -81,7 +81,7 @@ def main() -> None:
 
                     print(
                         f"Completed {type(interpolator).__name__} "
-                        "dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
+                        f"dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
                     )
 
 
