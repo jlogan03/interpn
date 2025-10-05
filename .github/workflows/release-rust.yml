@@ -1,4 +1,4 @@
-name: Release-plz
+name: release-rust
 
 permissions:
   pull-requests: write
@@ -8,11 +8,14 @@ on:
   push:
     branches:
       - main
+  workflow_call:
 
 jobs:
 
   test:
-    uses: ./.github/workflows/rust.yml
+    uses: ./.github/workflows/test-rust.yml
+    # Don't release a rust crate version that breaks the python bindings
+    uses: ./.github/workflows/test-python.yml
 
   release-plz:
     name: Release-plz

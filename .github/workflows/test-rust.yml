@@ -1,10 +1,8 @@
-name: Rust
+name: test-rust
 
 on:
   pull_request:
     branches: [ "*" ]
-  push:
-    branches: [ "main" ]
   workflow_call:
 
 env:
@@ -29,6 +27,9 @@ jobs:
 
     - name: Build
       run: cargo build
+
+    - name: Check semver
+      uses: obi1kenobi/cargo-semver-checks-action@v2
 
     - name: Run tests
       run: cargo test
