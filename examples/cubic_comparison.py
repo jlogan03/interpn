@@ -144,13 +144,17 @@ if __name__ == "__main__":
             starts = np.asarray([-3.0, -3.0])
             steps = np.asarray([xmesh[1, 0] - xmesh[0, 0], ymesh[0, 1] - ymesh[0, 0]])
             z_interpn = (
-                MulticubicRegular.new(dims, starts, steps, zmesh)
+                MulticubicRegular.new(
+                    dims, starts, steps, zmesh, linearize_extrapolation=False
+                )
                 .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
                 .reshape(xinterpmesh.shape)
             )
         else:
             z_interpn = (
-                MulticubicRectilinear.new([xdata, ydata], zmesh)
+                MulticubicRectilinear.new(
+                    [xdata, ydata], zmesh, linearize_extrapolation=False
+                )
                 .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
                 .reshape(xinterpmesh.shape)
             )
