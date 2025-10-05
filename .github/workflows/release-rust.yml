@@ -5,9 +5,6 @@ permissions:
   contents: write
 
 on:
-  push:
-    branches:
-      - main
   workflow_call:
 
 jobs:
@@ -28,8 +25,7 @@ jobs:
           fetch-depth: 0
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
+      - name: Publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
