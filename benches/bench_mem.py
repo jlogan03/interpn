@@ -1,4 +1,5 @@
 """Benchmarks examining memory usage"""
+
 import gc
 import time
 from pathlib import Path

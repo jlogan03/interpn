@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 2025-10-05
+
+Combine python bindings project into rust crate to streamline development process.
+Implement PGO (profile-guided optimization) for python releases.
+
+### Changed
+
+* Python
+  * Port python project from `interpnpy` repo
+  * Implement PGO with hand-tuned profile workload
+  * !Set `linearize_extrapolation=True` as default for cubic interpolators
+  * Use pytest-cov for coverage testing
+  * Update test deps & add linter/formatter configuration
+  * Add uv lock and uv cache configuration
+  * Use uv for actions
+* Rust
+  * Eliminate some length check error handling that is no longer necessary for const-generic flattened methods
+  * Add PyO3 bindings from python project as `python.rs` module behind `python` feature gate
+
 ## 0.2.6 2025-09-27
 
 2-5x speedup and fully-analyzable call stack (no recursion) for lower dimensions

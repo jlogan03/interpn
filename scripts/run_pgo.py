@@ -26,13 +26,17 @@ class CommandError(RuntimeError):
     """Raised when a subprocess exits with a non-zero status."""
 
 
-def run(cmd: Sequence[str], *, env: dict[str, str] | None = None, cwd: Path | None = None) -> None:
+def run(
+    cmd: Sequence[str], *, env: dict[str, str] | None = None, cwd: Path | None = None
+) -> None:
     """Execute a command, echoing it before running."""
     print("+", " ".join(cmd), flush=True)
     try:
         subprocess.run(cmd, check=True, env=env, cwd=cwd)
     except subprocess.CalledProcessError as exc:  # pragma: no cover - aids debugging
-        raise CommandError(f"command failed with exit code {exc.returncode}: {' '.join(cmd)}") from exc
+        raise CommandError(
+            f"command failed with exit code {exc.returncode}: {' '.join(cmd)}"
+        ) from exc
 
 
 def ensure_bench_dependencies(bench_script: Path) -> None:
@@ -60,17 +64,25 @@ def ensure_bench_dependencies(bench_script: Path) -> None:
             hint = f"uv pip install '.[{hint_extras}]'"
         else:
             hint = "uv pip install <dependency>"
-        raise SystemExit(f"Missing Python dependencies ({deps}). Install them via `{hint}` before running PGO.")
+        raise SystemExit(
+            f"Missing Python dependencies ({deps}). Install them via `{hint}` before running PGO."
+        )
 
 
 def ensure_cargo_pgo() -> None:
     """Verify that cargo-pgo is available."""
     try:
-        subprocess.run(["cargo", "pgo", "--version"], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["cargo", "pgo", "--version"], check=True, capture_output=True, text=True
+        )
     except FileNotFoundError as exc:  # pragma: no cover - trivial guard
-        raise SystemExit("`cargo-pgo` is required. Install it via `cargo install cargo-pgo`.") from exc
+        raise SystemExit(
+            "`cargo-pgo` is required. Install it via `cargo install cargo-pgo`."
+        ) from exc
     except subprocess.CalledProcessError as exc:  # pragma: no cover - environment issue
-        raise SystemExit("Failed to execute `cargo pgo`. Ensure the tool is installed and functional.") from exc
+        raise SystemExit(
+            "Failed to execute `cargo pgo`. Ensure the tool is installed and functional."
+        ) from exc
 
 
 def cargo_pgo(args: Sequence[str], *, env: dict[str, str] | None = None) -> None:
@@ -114,7 +126,9 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
 
         package_dir = tmp_root / "interpn"
         if not package_dir.exists():
-            raise SystemExit("Wheel is missing the expected 'interpn' package directory")
+            raise SystemExit(
+                "Wheel is missing the expected 'interpn' package directory"
+            )
 
         target_rel = None
         for candidate in package_dir.rglob(optimized_lib.name):
@@ -137,10 +151,16 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
             )
         record_path = dist_info_dirs[0] / "RECORD"
         if not record_path.exists():
-            raise SystemExit("Wheel RECORD file missing; cannot update hash for swapped binary")
+            raise SystemExit(
+                "Wheel RECORD file missing; cannot update hash for swapped binary"
+            )
 
         data = optimized_lib.read_bytes()
-        digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).decode("ascii").rstrip("=")
+        digest = (
+            base64.urlsafe_b64encode(hashlib.sha256(data).digest())
+            .decode("ascii")
+            .rstrip("=")
+        )
         size = len(data)
         target_rel_posix = target_rel.as_posix()
 
@@ -153,7 +173,9 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
             else:
                 updated_lines.append(line)
         if not replaced_record:
-            raise SystemExit(f"RECORD entry for {target_rel_posix} not found in wheel {wheel_path.name}")
+            raise SystemExit(
+                f"RECORD entry for {target_rel_posix} not found in wheel {wheel_path.name}"
+            )
         record_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
         backup = wheel_path.with_suffix(wheel_path.suffix + ".bak")
@@ -167,6 +189,7 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
         finally:
             backup.unlink(missing_ok=True)
 
+
 def run_benchmark(bench_script: Path, profiles_dir: Path) -> None:
     """Execute the Python workload while directing LLVM profiles to profiles_dir."""
     env = os.environ.copy()
@@ -178,8 +201,15 @@ def run_benchmark(bench_script: Path, profiles_dir: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run profile-guided optimisation for interpn.")
-    parser.add_argument("--bench", type=Path, default=DEFAULT_BENCH, help="Path to the benchmark workload to execute")
+    parser = argparse.ArgumentParser(
+        description="Run profile-guided optimisation for interpn."
+    )
+    parser.add_argument(
+        "--bench",
+        type=Path,
+        default=DEFAULT_BENCH,
+        help="Path to the benchmark workload to execute",
+    )
     parser.add_argument(
         "--workdir",
         type=Path,
@@ -247,17 +277,27 @@ def main() -> None:
     cargo_pgo(["optimize", "build", "--", "--features=python"], env=cargo_env)
     optimised_path = install_artifact(workdir)
 
-    print("PGO build complete. Optimised extension installed at", optimised_path, flush=True)
+    print(
+        "PGO build complete. Optimised extension installed at",
+        optimised_path,
+        flush=True,
+    )
 
     if args.build_wheel:
-        wheel_out_dir = resolve_path(args.wheel_dir) if args.wheel_dir else (ROOT / "dist")
+        wheel_out_dir = (
+            resolve_path(args.wheel_dir) if args.wheel_dir else (ROOT / "dist")
+        )
         wheel_out_dir.mkdir(parents=True, exist_ok=True)
         existing = {path.resolve() for path in wheel_out_dir.glob("*.whl")}
 
         print("Building wheel with `uv build`...", flush=True)
         run(["uv", "build", "--wheel", "--out-dir", str(wheel_out_dir)], cwd=ROOT)
 
-        wheels = [path for path in wheel_out_dir.glob("*.whl") if path.resolve() not in existing]
+        wheels = [
+            path
+            for path in wheel_out_dir.glob("*.whl")
+            if path.resolve() not in existing
+        ]
         if not wheels:
             wheels = list(wheel_out_dir.glob("*.whl"))
         if not wheels:

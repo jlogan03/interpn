@@ -236,11 +236,6 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
 
-        // Make sure there are enough coordinate inputs for each dimension
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
-
         // Make sure the size of inputs and output match
         let size_matches = x.iter().all(|&xx| xx.len() == out.len());
         if !size_matches {
@@ -267,18 +262,10 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     ///   * If the index along any dimension exceeds the maximum representable
     ///     integer value within the value type `T`
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
-        // Check sizes
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
-
         // Initialize fixed-size intermediate storage.
         // Maybe counterintuitively, initializing this storage here on every usage
         // instead of once with the top level struct is a significant speedup
         // and does not increase peak stack usage.
-        //
-        // Also notably, storing the index offsets as bool instead of usize
-        // reduces memory overhead, but has not effect on throughput rate.
         let mut origin = [0_usize; N]; // Indices of lower corner of hypercub
         let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
         let mut dimprod = [1_usize; N];
@@ -356,7 +343,6 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         }
 
         // Interpolate the final value
-        // This could use a const index as well, if we were using a fixed number of dims
         let grid_cell = &self.grids[N - 1][origin[N - 1]..origin[N - 1] + 4];
         let interped = interp_inner::<T, N>(
             store[N - 1],

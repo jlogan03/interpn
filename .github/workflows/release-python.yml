@@ -39,7 +39,10 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -51,7 +54,7 @@ jobs:
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
-          python ./scripts/run_pgo.py --build-wheel
+          uv run python ./scripts/run_pgo.py --build-wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -74,7 +77,10 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -86,7 +92,7 @@ jobs:
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
-          python ./scripts/run_pgo.py --build-wheel
+          uv run python ./scripts/run_pgo.py --build-wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -105,7 +111,10 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
         with:
           architecture: ${{ matrix.platform.target }}
           python-version: ${{ matrix.python-version }}
@@ -119,7 +128,7 @@ jobs:
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
-          python ./scripts/run_pgo.py --build-wheel
+          uv run python ./scripts/run_pgo.py --build-wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -138,7 +147,10 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -149,7 +161,7 @@ jobs:
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
-          python ./scripts/run_pgo.py --build-wheel
+          uv run python ./scripts/run_pgo.py --build-wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

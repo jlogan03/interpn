@@ -5,9 +5,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from interpn import MulticubicRectilinear, MulticubicRegular, MultilinearRectilinear, MultilinearRegular
+from interpn import (
+    MulticubicRectilinear,
+    MulticubicRegular,
+    MultilinearRectilinear,
+    MultilinearRegular,
+)
 
-_OBSERVATION_COUNTS = (1,3)
+_OBSERVATION_COUNTS = (1, 3)
 _MAX_DIMS = 4
 _GRID_SIZE = 20
 
@@ -39,7 +44,9 @@ def main() -> None:
 
     for dtype in (np.float64, np.float32):
         for ndims in range(1, _MAX_DIMS + 1):
-            grids = [np.linspace(-1.0, 1.0, _GRID_SIZE, dtype=dtype) for _ in range(ndims)]
+            grids = [
+                np.linspace(-1.0, 1.0, _GRID_SIZE, dtype=dtype) for _ in range(ndims)
+            ]
             mesh = np.meshgrid(*grids, indexing="ij")
             zgrid = rng.uniform(-1.0, 1.0, mesh[0].size).astype(dtype)
             dims = [grid.size for grid in grids]
@@ -53,12 +60,12 @@ def main() -> None:
                 starts,
                 steps,
                 zgrid,
-                linearize_extrapolation=(ndims % 2 == 0),
+                linearize_extrapolation=True,
             )
             cubic_rect = MulticubicRectilinear.new(
                 grids,
                 zgrid,
-                linearize_extrapolation=(ndims % 2 == 1),
+                linearize_extrapolation=True,
             )
 
             for nobs in _OBSERVATION_COUNTS:
@@ -72,7 +79,9 @@ def main() -> None:
                 ):
                     _evaluate(interpolator, points)
 
-                    print(f"Completed {type(interpolator).__name__} dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}")
+                    print(
+                        f"Completed {type(interpolator).__name__} dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
+                    )
 
 
 if __name__ == "__main__":

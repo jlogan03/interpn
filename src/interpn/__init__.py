@@ -2,6 +2,7 @@
 Python bindings to the `interpn` Rust library
 for N-dimensional interpolation and extrapolation.
 """
+
 from __future__ import annotations
 
 from importlib.metadata import version

@@ -76,17 +76,17 @@ class MultilinearRegular(BaseModel):
         """Check that all inputs are contiguous and of the same data type,
         and that the grid dimensions and values make sense."""
         ndims = self.ndims()
-        assert (
-            ndims <= 8 and ndims >= 1
-        ), "Number of dimensions must be at least 1 and no more than 8"
+        assert ndims <= 8 and ndims >= 1, (
+            "Number of dimensions must be at least 1 and no more than 8"
+        )
         assert self.starts.data.size == ndims, "Grid dimension mismatch"
         assert self.steps.data.size == ndims, "Grid dimension mismatch"
-        assert self.vals.data.size == reduce(
-            lambda acc, x: acc * x, self.dims
-        ), "Size of value array does not match grid dims"
-        assert all(
-            [x > 0.0 for x in self.steps.data]
-        ), "All grid steps must be positive and nonzero"
+        assert self.vals.data.size == reduce(lambda acc, x: acc * x, self.dims), (
+            "Size of value array does not match grid dims"
+        )
+        assert all([x > 0.0 for x in self.steps.data]), (
+            "All grid steps must be positive and nonzero"
+        )
         assert all(
             [x.data.dtype == self.vals.data.dtype for x in [self.steps, self.vals]]
         ), "All grid inputs must be of the same data type (np.float32 or np.float64)"

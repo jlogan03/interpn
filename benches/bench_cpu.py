@@ -25,7 +25,9 @@ TARGET_SAMPLE_SECONDS = 1.0
 MAX_TIMER_LOOPS = 1_000_000_000
 
 
-def average_call_time(func, points, target_seconds: float = TARGET_SAMPLE_SECONDS) -> float:
+def average_call_time(
+    func, points, target_seconds: float = TARGET_SAMPLE_SECONDS
+) -> float:
     """Measure average execution time for func(points) using ~target_seconds of samples."""
     timer = Timer(lambda: func(points))
     gc.collect()
@@ -75,8 +77,12 @@ def bench_4_dims_1_obs():
     )
     rectilinear_interpn = MultilinearRectilinear.new(grids, zgrid)
     regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
-    cubic_regular_interpn = MulticubicRegular.new(dims, starts, steps, zgrid)
-    cubic_rectilinear_interpn = MulticubicRectilinear.new(grids, zgrid)
+    cubic_regular_interpn = MulticubicRegular.new(
+        dims, starts, steps, zgrid, linearize_extrapolation=True
+    )
+    cubic_rectilinear_interpn = MulticubicRectilinear.new(
+        grids, zgrid, linearize_extrapolation=True
+    )
 
     # Preallocate output for potential perf advantage
     # Allocate at eval for 1:1 comparison with Scipy
@@ -87,7 +93,9 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": lambda p: regular_interpn.eval(p, out),
         "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p, out),
         "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p, out),
-        "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(p, out),
+        "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
+            p, out
+        ),
         "numpy interp": lambda p: np.interp(p[0], grids[0], zgrid),  # 1D only
     }
 
@@ -229,8 +237,12 @@ def bench_3_dims_n_obs_unordered():
         )
         rectilinear_interpn = MultilinearRectilinear.new(grids, zgrid)
         regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
-        cubic_regular_interpn = MulticubicRegular.new(dims, starts, steps, zgrid)
-        cubic_rectilinear_interpn = MulticubicRectilinear.new(grids, zgrid)
+        cubic_regular_interpn = MulticubicRegular.new(
+            dims, starts, steps, zgrid, linearize_extrapolation=True
+        )
+        cubic_rectilinear_interpn = MulticubicRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
 
         throughputs = {
             "Scipy RegularGridInterpolator Linear": [],
@@ -344,7 +356,10 @@ def bench_3_dims_n_obs_unordered():
 
         plt.tight_layout()
         with_alloc_string = "_prealloc" if preallocate else ""
-        plt.savefig(Path(__file__).parent / f"../docs/3d_throughput_vs_nobs{with_alloc_string}.svg")
+        plt.savefig(
+            Path(__file__).parent
+            / f"../docs/3d_throughput_vs_nobs{with_alloc_string}.svg"
+        )
         plt.show(block=False)
 
 
@@ -371,8 +386,12 @@ def bench_4_dims_n_obs_unordered():
         )
         rectilinear_interpn = MultilinearRectilinear.new(grids, zgrid)
         regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
-        cubic_regular_interpn = MulticubicRegular.new(dims, starts, steps, zgrid)
-        cubic_rectilinear_interpn = MulticubicRectilinear.new(grids, zgrid)
+        cubic_regular_interpn = MulticubicRegular.new(
+            dims, starts, steps, zgrid, linearize_extrapolation=True
+        )
+        cubic_rectilinear_interpn = MulticubicRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
 
         throughputs = {
             "Scipy RegularGridInterpolator Linear": [],
@@ -481,7 +500,10 @@ def bench_4_dims_n_obs_unordered():
 
         plt.tight_layout()
         with_alloc_string = "_prealloc" if preallocate else ""
-        plt.savefig(Path(__file__).parent / f"../docs/4d_throughput_vs_nobs{with_alloc_string}.svg")
+        plt.savefig(
+            Path(__file__).parent
+            / f"../docs/4d_throughput_vs_nobs{with_alloc_string}.svg"
+        )
         plt.show(block=False)
 
 
@@ -518,8 +540,12 @@ def bench_throughput_vs_dims():
             )
             rectilinear_interpn = MultilinearRectilinear.new(grids, zgrid)
             regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
-            cubic_regular_interpn = MulticubicRegular.new(dims, starts, steps, zgrid)
-            cubic_rectilinear_interpn = MulticubicRectilinear.new(grids, zgrid)
+            cubic_regular_interpn = MulticubicRegular.new(
+                dims, starts, steps, zgrid, linearize_extrapolation=True
+            )
+            cubic_rectilinear_interpn = MulticubicRectilinear.new(
+                grids, zgrid, linearize_extrapolation=True
+            )
 
             m = max(int(float(nobs) ** (1.0 / ndims) + 2), 2)
 
@@ -541,7 +567,9 @@ def bench_throughput_vs_dims():
                 "InterpN MultilinearRegular": lambda p: regular_interpn.eval(p),
                 "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p),
                 "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p),
-                "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(p),
+                "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
+                    p
+                ),
             }
 
             if ndims == 1:
@@ -650,8 +678,11 @@ def bench_throughput_vs_dims():
             plt.title(kind)
 
         plt.tight_layout()
-        plt.savefig(Path(__file__).parent / f"../docs/throughput_vs_dims_{nobs}_obs.svg")
+        plt.savefig(
+            Path(__file__).parent / f"../docs/throughput_vs_dims_{nobs}_obs.svg"
+        )
         plt.show(block=False)
+
 
 def main():
     bench_throughput_vs_dims()

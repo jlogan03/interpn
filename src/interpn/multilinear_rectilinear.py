@@ -70,18 +70,18 @@ class MultilinearRectilinear(BaseModel):
         and that the grid dimensions and values make sense."""
         dims = self.dims()
         ndims = self.ndims()
-        assert (
-            ndims <= 8 and ndims >= 1
-        ), "Number of dimensions must be at least 1 and no more than 8"
-        assert self.vals.data.size == reduce(
-            lambda acc, x: acc * x, dims
-        ), "Size of value array does not match grid dims"
-        assert all(
-            [np.all(np.diff(x.data) > 0.0) for x in self.grids]
-        ), "All grids must be monotonically increasing"
-        assert all(
-            [x.data.dtype == self.vals.data.dtype for x in self.grids]
-        ), "All grid inputs must be of the same data type (np.float32 or np.float64)"
+        assert ndims <= 8 and ndims >= 1, (
+            "Number of dimensions must be at least 1 and no more than 8"
+        )
+        assert self.vals.data.size == reduce(lambda acc, x: acc * x, dims), (
+            "Size of value array does not match grid dims"
+        )
+        assert all([np.all(np.diff(x.data) > 0.0) for x in self.grids]), (
+            "All grids must be monotonically increasing"
+        )
+        assert all([x.data.dtype == self.vals.data.dtype for x in self.grids]), (
+            "All grid inputs must be of the same data type (np.float32 or np.float64)"
+        )
         assert (
             all([x.data.data.contiguous for x in self.grids])
             and self.vals.data.data.contiguous

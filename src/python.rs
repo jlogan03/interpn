@@ -31,7 +31,6 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-
 macro_rules! unpack_vec_of_arr {
     ($inname:ident, $outname:ident, $T:ty) => {
         // We need a mutable slice-of-slice,
