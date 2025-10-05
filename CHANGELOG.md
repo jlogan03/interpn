@@ -3,7 +3,8 @@
 ## 0.6.0 2025-10-05
 
 Combine python bindings project into rust crate to streamline development process.
-Implement PGO (profile-guided optimization) for python releases.
+Implement PGO (profile-guided optimization) for python releases, giving a 1.2-5x speedup for
+dimensions 1-4 at the expense of a ~2x slowdown for higher dimensions.
 
 ### Changed
 
