@@ -104,13 +104,24 @@ jobs:
     strategy:
       matrix:
         platform:
-          # - runner: windows-latest
-          #   target: x64
+          - runner: windows-latest
+            target: x64
           - runner: windows-latest
             target: x86
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+
+      # Install Rust and Python separate from maturin and uv actions
+      # to try to avoid ending up with one or the other end up with
+      # the 32-bit version
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          architecture: ${{ matrix.platform.target }}
+          python-version: ${{ matrix.python-version }}
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
