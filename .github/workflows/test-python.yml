@@ -76,8 +76,8 @@ jobs:
         rustup component add llvm-tools-preview
 
         # Needed to allow build to run without failing on undefined symbols on mac
-        export RUSTFLAGS="$RUSTFLAGS -C link-arg=-undefined -C link-arg=dynamic_lookup"
-        
+        export RUSTFLAGS="$RUSTFLAGS -C link-arg=-undefined"
+
         uv run python ./scripts/run_pgo.py --build-wheel
 
     - name: Test (with PGO)
