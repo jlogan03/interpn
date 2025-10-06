@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test_rust:
 
     runs-on: ubuntu-latest
 
@@ -25,9 +25,6 @@ jobs:
 
     - name: Lint
       run: cargo clippy
-
-    - name: Build
-      run: cargo build
 
     - name: Check semver
       uses: obi1kenobi/cargo-semver-checks-action@v2

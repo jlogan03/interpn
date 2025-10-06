@@ -16,8 +16,8 @@ jobs:
     # Don't release a rust crate version that breaks the python bindings
     uses: ./.github/workflows/test-python.yml
 
-  release-plz:
-    name: Release-plz
+  release-rust:
+    name: Release Rust
     runs-on: ubuntu-latest
     needs: [test_rust, test_python]
     steps:
@@ -30,4 +30,4 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}

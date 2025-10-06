@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  test_python:
     runs-on: ubuntu-latest
     strategy:
       matrix:
