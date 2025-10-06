@@ -12,9 +12,10 @@ from interpn import (
     MultilinearRegular,
 )
 
-_OBSERVATION_COUNTS = (1, 2)
+_TARGET_COUNT = int(1e4)
+_OBSERVATION_COUNTS = (1, 7, 16)
 _MAX_DIMS = 4
-_GRID_SIZE = 4
+_GRID_SIZE = 30
 
 
 def _observation_points(
@@ -25,7 +26,7 @@ def _observation_points(
     extrapolation branches.
     """
     m = max(int(float(nobs) ** (1.0 / ndims) + 2.0), 2)
-    axes = [rng.uniform(-1.1, 1.1, m).astype(dtype) for _ in range(ndims)]
+    axes = [rng.uniform(-1.05, 1.05, m).astype(dtype) for _ in range(ndims)]
     mesh = np.meshgrid(*axes, indexing="ij")
     points = [axis.flatten()[:nobs].copy() for axis in mesh]
     return points
@@ -33,8 +34,8 @@ def _observation_points(
 
 def _evaluate(interpolator, points: list[np.ndarray]) -> None:
     # Without preallocated output
-    # interpolator.eval(points)
-    # With preallocated output - we don't need to profile the allocator
+    interpolator.eval(points)
+    # With preallocated output
     out = np.empty_like(points[0])
     interpolator.eval(points, out)
 
@@ -47,6 +48,10 @@ def main() -> None:
             grids = [
                 np.linspace(-1.0, 1.0, _GRID_SIZE, dtype=dtype) for _ in range(ndims)
             ]
+            grids_rect = [
+                np.array(sorted(np.random.uniform(-1.0, 1.0, _GRID_SIZE).astype(dtype)))
+                for _ in range(ndims)
+            ]
             mesh = np.meshgrid(*grids, indexing="ij")
             zgrid = rng.uniform(-1.0, 1.0, mesh[0].size).astype(dtype)
             dims = [grid.size for grid in grids]
@@ -54,7 +59,7 @@ def main() -> None:
             steps = np.array([grid[1] - grid[0] for grid in grids], dtype=dtype)
 
             linear_regular = MultilinearRegular.new(dims, starts, steps, zgrid)
-            linear_rect = MultilinearRectilinear.new(grids, zgrid)
+            linear_rect = MultilinearRectilinear.new(grids_rect, zgrid)
             cubic_regular = MulticubicRegular.new(
                 dims,
                 starts,
@@ -63,13 +68,13 @@ def main() -> None:
                 linearize_extrapolation=True,
             )
             cubic_rect = MulticubicRectilinear.new(
-                grids,
+                grids_rect,
                 zgrid,
                 linearize_extrapolation=True,
             )
 
             for nobs in _OBSERVATION_COUNTS:
-                points = _observation_points(rng, ndims, nobs, dtype)
+                nreps = int(_TARGET_COUNT / nobs)
 
                 for interpolator in (
                     linear_regular,
@@ -77,7 +82,9 @@ def main() -> None:
                     cubic_regular,
                     cubic_rect,
                 ):
-                    _evaluate(interpolator, points)
+                    for _ in range(nreps):
+                        points = _observation_points(rng, ndims, nobs, dtype)
+                        _evaluate(interpolator, points)
 
                     print(
                         f"Completed {type(interpolator).__name__} "

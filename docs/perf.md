@@ -33,7 +33,7 @@ despite not specifically handling low-dimensional special cases.
 #### 1000 Observation Points
 ![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
 
-For evaluating a single observation point at a time, the 1D-specialized `numpy.interp` is somewhat faster,
+For evaluating a single point at a time, the 1D-specialized `numpy.interp` is somewhat faster,
 likely as a result of not needing to allocate for a scalar output. This discrepancy vanishes for higher
 numbers of observation points.
 
