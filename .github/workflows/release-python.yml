@@ -133,6 +133,7 @@ jobs:
           args: --release --out dist
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Profile-Guided Optimization (PGO)
+        if: ${{ matrix.platform.target != 'x86' }}  # Can't do PGO cross-compile
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
@@ -167,6 +168,9 @@ jobs:
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Profile-Guided Optimization (PGO)
         run: |
+          # macos-13 x86_64 needs this special extra step
+          export PYO3_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+          
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
           uv run python ./scripts/run_pgo.py --build-wheel
