@@ -33,17 +33,17 @@ despite not specifically handling low-dimensional special cases.
 #### 1000 Observation Points
 ![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
 
+#### 1 Observation Point
 For evaluating a single point at a time, the 1D-specialized `numpy.interp` is somewhat faster,
 likely as a result of not needing to allocate for a scalar output. This discrepancy vanishes for higher
 numbers of observation points.
 
 In this benchmark, scipy's `RectBivariateSpline` is slightly (~20%) faster for evaluating one point at a time;
-however, it is interesting to note that this benchmark method heavily favor's scipy methods by pre-building
+however, it is interesting to note that this benchmark method heavily favors scipy's approach by pre-building
 the interpolator object (which removes the timing effect of their initial linear solve for knots) and by
 performing a warmup that clears an appropriately-sized region of memory for allocation. This discrepancy
 also vanishes for higher numbers of observation points.
 
-#### 1 Observation Point
 ![ND throughput 1 obs](./throughput_vs_dims_1_obs.svg)
 
 
