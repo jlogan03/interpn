@@ -1,11 +1,18 @@
-# interpn
+# InterpN
 
-Python bindings to the `interpn` Rust library for N-dimensional interpolation and extrapolation. 
+[Repo](https://github.com/jlogan03/interpn) |
+[Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
+[Rust Docs](https://docs.rs/interpn/latest/interpn/)
 
-[Docs](https://interpnpy.readthedocs.io/en/latest/) |
-[Repo](https://github.com/jlogan03/interpnpy) |
-[Rust Library (github)](https://github.com/jlogan03/interpn) | 
-[Rust Docs (docs.rs)](https://docs.rs/interpn/latest/interpn/)
+N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatible,
+prioritizing correctness, performance, and compatiblity with memory-constrained environments.
+
+Available as a rust crate and python library.
+
+These methods perform zero allocation when evaluated (except, optionally, for the output).
+Because of this, they have minimal per-call overhead, and are particularly
+effective when examining small numbers of observation points. See the
+[performance](https://interpnpy.readthedocs.io/en/latest/perf/) page for detailed benchmarks.
 
 ## Features
 
@@ -33,17 +40,80 @@ See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about
 pip install interpn
 ```
 
-## Profile-Guided Optimisation
+## Profile-Guided Optimization
 
-To build the extension with profile-guided optimisation, using the lightweight `scripts/profile_workload.py` workload (1 and 1000 observation points across 1–8 dimensions for every InterpN method) by default:
+To build the extension with profile-guided optimization, do `uv run python ./scripts/run_pgo.py`
+after installing these extra compiler dependencies:
 
-1. Ensure the cargo subcommand is installed: `cargo install cargo-pgo`
-2. Install the optional benchmarking dependencies if you plan to run the full SciPy benchmarks: `uv pip install '.[bench]'`
-3. Run the automation script: `python scripts/run_pgo.py`
+```bash
+cargo install cargo-pgo
+rustup component add llvm-tools-preview
+```
 
-The helper uses `cargo-pgo` to build an instrumented extension, executes `scripts/profile_workload.py` to generate LLVM `.profraw` files, and then rebuilds the module with the merged profile data before copying the optimised library into `interpn/_interpn*.so`. Pass `--bench test/bench_cpu.py` to reuse the original comprehensive workload. Using `--skip-final-build` leaves the instrumented library in place alongside the collected profiles.
+## Rust Examples
 
-## Example: Available Methods
+### Regular Grid
+```rust
+use interpn::{multilinear, multicubic};
+
+// Define a grid
+let x = [1.0_f64, 2.0, 3.0, 4.0];
+let y = [0.0_f64, 1.0, 2.0, 3.0];
+
+// Grid input for rectilinear method
+let grids = &[&x[..], &y[..]];
+
+// Grid input for regular grid method
+let dims = [x.len(), y.len()];
+let starts = [x[0], y[0]];
+let steps = [x[1] - x[0], y[1] - y[0]];
+
+// Values at grid points
+let z = [2.0; 16];
+
+// Observation points to interpolate/extrapolate
+let xobs = [0.0_f64, 5.0];
+let yobs = [-1.0, 3.0];
+let obs = [&xobs[..], &yobs[..]];
+
+// Storage for output
+let mut out = [0.0; 2];
+
+// Do interpolation
+multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out);
+```
+
+### Rectilinear Grid
+```rust
+use interpn::{multilinear, multicubic};
+
+// Define a grid
+let x = [1.0_f64, 2.0, 3.0, 4.0];
+let y = [0.0_f64, 1.0, 2.0, 3.0];
+
+// Grid input for rectilinear method
+let grids = &[&x[..], &y[..]];
+
+// Values at grid points
+let z = [2.0; 16];
+
+// Points to interpolate/extrapolate
+let xobs = [0.0_f64, 5.0];
+let yobs = [-1.0, 3.0];
+let obs = [&xobs[..], &yobs[..]];
+
+// Storage for output
+let mut out = [0.0; 2];
+
+// Do interpolation
+multilinear::rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
+multicubic::rectilinear::interpn(grids, &z, false, &obs, &mut out).unwrap();
+```
+
+## Python Examples
+
+### Available Methods
 
 ```python
 import interpn
@@ -70,7 +140,7 @@ linear_rectilinear = interpn.MultilinearRectilinear.new(grids, zgrid)
 cubic_rectilinear = interpn.MulticubicRectilinear.new(grids, zgrid)
 ```
 
-## Example: Multilinear Interpolation on a Regular Grid
+### Multilinear Interpolation
 
 ```python
 import interpn

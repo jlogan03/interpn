@@ -1,9 +1,8 @@
-# Quickstart
+# InterpN
 
-[Docs](https://interpnpy.readthedocs.io/en/latest/) |
-[Repo](https://github.com/jlogan03/interpnpy) |
-[Rust Library (github)](https://github.com/jlogan03/interpn) |
-[Rust Docs (docs.rs)](https://docs.rs/interpn/latest/interpn/)
+[Repo](https://github.com/jlogan03/interpn) |
+[Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
+[Rust Docs](https://docs.rs/interpn/latest/interpn/)
 
 This library provides serializable N-dimensional interpolators
 backed by compute-heavy code written in Rust.
@@ -37,7 +36,80 @@ See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about
 pip install interpn
 ```
 
-## Example: Available Methods
+## Profile-Guided Optimization
+
+To build the extension with profile-guided optimization, do `uv run python ./scripts/run_pgo.py`
+after installing these extra compiler dependencies:
+
+```bash
+cargo install cargo-pgo
+rustup component add llvm-tools-preview
+```
+
+## Rust Examples
+
+### Regular Grid
+```rust
+use interpn::{multilinear, multicubic};
+
+// Define a grid
+let x = [1.0_f64, 2.0, 3.0, 4.0];
+let y = [0.0_f64, 1.0, 2.0, 3.0];
+
+// Grid input for rectilinear method
+let grids = &[&x[..], &y[..]];
+
+// Grid input for regular grid method
+let dims = [x.len(), y.len()];
+let starts = [x[0], y[0]];
+let steps = [x[1] - x[0], y[1] - y[0]];
+
+// Values at grid points
+let z = [2.0; 16];
+
+// Observation points to interpolate/extrapolate
+let xobs = [0.0_f64, 5.0];
+let yobs = [-1.0, 3.0];
+let obs = [&xobs[..], &yobs[..]];
+
+// Storage for output
+let mut out = [0.0; 2];
+
+// Do interpolation
+multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out);
+multicubic::regular::interpn(&dims, &starts, &steps, &z, false, &obs, &mut out);
+```
+
+### Rectilinear Grid
+```rust
+use interpn::{multilinear, multicubic};
+
+// Define a grid
+let x = [1.0_f64, 2.0, 3.0, 4.0];
+let y = [0.0_f64, 1.0, 2.0, 3.0];
+
+// Grid input for rectilinear method
+let grids = &[&x[..], &y[..]];
+
+// Values at grid points
+let z = [2.0; 16];
+
+// Points to interpolate/extrapolate
+let xobs = [0.0_f64, 5.0];
+let yobs = [-1.0, 3.0];
+let obs = [&xobs[..], &yobs[..]];
+
+// Storage for output
+let mut out = [0.0; 2];
+
+// Do interpolation
+multilinear::rectilinear::interpn(grids, &z, &obs, &mut out).unwrap();
+multicubic::rectilinear::interpn(grids, &z, false, &obs, &mut out).unwrap();
+```
+
+## Python Examples
+
+### Available Methods
 
 ```python
 import interpn
@@ -64,7 +136,7 @@ linear_rectilinear = interpn.MultilinearRectilinear.new(grids, zgrid)
 cubic_rectilinear = interpn.MulticubicRectilinear.new(grids, zgrid)
 ```
 
-## Example: Multilinear Interpolation on a Regular Grid
+### Multilinear Interpolation
 
 ```python
 import interpn
@@ -86,7 +158,7 @@ steps = np.array([x[1] - x[0], y[1] - y[0]])
 obs = [xgrid.flatten(), ygrid.flatten()]
 
 # Initialize
-interpolator = interpn.MultilinearRegular.new(dims, starts, steps, zgrid)
+interpolator = interpn.MultilinearRegular.new(dims, starts, steps, zgrid.flatten())
 
 # Interpolate
 out = interpolator.eval(obs)
