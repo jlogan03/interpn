@@ -34,16 +34,6 @@ jobs:
       run: |
         uv run pytest .
 
-    - name: Profile-Guided Optimization (PGO)
-      run: |
-        cargo install cargo-pgo
-        rustup component add llvm-tools-preview
-        uv run python ./scripts/run_pgo.py --build-wheel
-
-    - name: Test (with PGO)
-      run: |
-        uv run --no-sync pytest .
-
   test_pgo:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -53,6 +43,8 @@ jobs:
             target: x64
           - runner: ubuntu-latest
             target: aarch64
+          - runner: ubuntu-latest
+            target: x86_64
           - runner: macos-13
             target: x86_64
           - runner: macos-14
@@ -76,7 +68,10 @@ jobs:
         rustup component add llvm-tools-preview
 
         # Needed to allow build to run without failing on undefined symbols on mac
-        export RUSTFLAGS="$RUSTFLAGS -C link-arg=-undefined"
+        export PYO3_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+        if [[ "$(uname)" == "Darwin" ]]; then
+          export RUSTFLAGS="$RUSTFLAGS -C link-arg=-undefined -C link-arg=dynamic_lookup"
+        fi
 
         uv run python ./scripts/run_pgo.py --build-wheel
 
