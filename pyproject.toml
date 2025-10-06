@@ -1,0 +1,71 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "interpn"
+version = "0.6.0"
+repository = "https://github.com/jlogan03/interpn"
+documentation = "https://interpn.readthedocs.io/"
+description = "N-dimensional interpolation/extrapolation methods"
+authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
+requires-python = ">=3.9, <3.14"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "numpy >= 2",
+    "pydantic >= 2.5.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest >= 8.4.2",
+    "pytest-cov >= 7.0.0",
+    "ruff >= 0.13.3",
+    "pyright == 1.1.337",
+    "mktestdocs >= 0.2.1",
+    "scipy >= 1.11.4",
+    "matplotlib >= 3.8",
+]
+bench = [
+    "scipy >= 1.11.4",
+    "matplotlib >= 3.8",
+    "memory_profiler >= 0.61.0",
+]
+doc = [
+    "mkdocs >= 1.5.3",
+    "mkdocstrings-python >= 1.7.5",
+    "mkdocs-material >= 9.4.10"
+]
+
+[tool.uv]
+cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "**/*.rs"}]
+
+[tool.maturin]
+features = ["python"]
+module-name = "interpn.interpn"
+python-packages = ["interpn"]
+python-source = "src"
+
+[tool.pytest.ini_options]
+addopts = "--cov=interpn --cov-report html --cov-fail-under=94"
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+]

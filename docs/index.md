@@ -4,18 +4,14 @@
 [Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
 [Rust Docs](https://docs.rs/interpn/latest/interpn/)
 
-N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatible,
-prioritizing correctness, performance, and compatiblity with memory-constrained environments.
-
-Available as a rust crate and python library.
+This library provides serializable N-dimensional interpolators
+backed by compute-heavy code written in Rust.
 
 These methods perform zero allocation when evaluated (except, optionally, for the output).
 Because of this, they have minimal per-call overhead, and are particularly
-effective when examining small numbers of observation points. See the
-[performance](https://interpnpy.readthedocs.io/en/latest/perf/) page for detailed benchmarks.
+effective when examining small numbers of observation points. See the [performance](/perf) page for detailed benchmarks.
 
 ## Features
-
 | Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization |
 |-----------------------------------|-----------------|---------------------|-----------------------|
 | Linear                            |   ✅            |     ✅              | ✅                    |
@@ -30,7 +26,7 @@ The methods provided here, while more limited in scope than scipy's,
 * can also be used easily in web and embedded applications via the Rust library
 * are permissively licensed
 
-![ND throughput 1000 obs](./docs/throughput_vs_dims_1000_obs.svg)
+![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
@@ -179,7 +175,6 @@ out2 = roundtrip_interpolator.eval(obs)
 # Check result from roundtrip serialized/deserialized interpolator
 assert np.all(out == out2)
 ```
-
 
 # License
 
