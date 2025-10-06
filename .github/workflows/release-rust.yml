@@ -1,8 +1,7 @@
 name: release-rust
 
 permissions:
-  pull-requests: write
-  contents: write
+  contents: read
 
 on:
   workflow_call:
