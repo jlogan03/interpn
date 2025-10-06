@@ -6,18 +6,21 @@ permissions:
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
 
-  test:
+  test_rust:
     uses: ./.github/workflows/test-rust.yml
+
+  test_python:
     # Don't release a rust crate version that breaks the python bindings
     uses: ./.github/workflows/test-python.yml
 
   release-plz:
     name: Release-plz
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test_rust, test_python]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
