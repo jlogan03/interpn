@@ -5,19 +5,17 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import os
-import platform
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
-from collections.abc import Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
-import contextlib
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BENCH = ROOT / "scripts" / "profile_workload.py"
@@ -25,40 +23,7 @@ DEFAULT_WORKDIR = ROOT / "target" / "pgo"
 ARTIFACT_NAMES = {"libinterpn.so", "libinterpn.dylib", "interpn.dll", "interpn.pyd"}
 
 
-ABI3_FEATURE_PATTERN = re.compile(r'"abi3-py(\d+)"')
 EXTENSION_FILE_SUFFIXES = {".so", ".pyd", ".dll", ".dylib"}
-
-
-def _detect_abi3_python_tag() -> str | None:
-    """Return the cpXY tag configured for abi3 builds."""
-    try:
-        cargo_text = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
-    except OSError:
-        return None
-    match = ABI3_FEATURE_PATTERN.search(cargo_text)
-    if match is None:
-        return None
-    return f"cp{match.group(1)}"
-
-
-ABI3_PYTHON_TAG = _detect_abi3_python_tag()
-
-
-def _windows_platform_tag() -> str:
-    """Map the current machine architecture to a wheel platform tag."""
-    machine = platform.machine().lower()
-    mapping = {
-        "amd64": "win_amd64",
-        "x86_64": "win_amd64",
-        "arm64": "win_arm64",
-        "aarch64": "win_arm64",
-        "x86": "win32",
-        "i386": "win32",
-        "i686": "win32",
-    }
-    if machine:
-        return mapping.get(machine, f"win_{machine.replace('-', '_')}")
-    return "win_amd64"
 
 
 def _remove_stale_extensions(destination: Path) -> None:
@@ -159,23 +124,7 @@ def find_cdylib(target_dir: Path) -> Path:
 
 def extension_destination() -> Path:
     """Derive the expected extension filename inside the package."""
-    suffix = next((s for s in EXTENSION_SUFFIXES if "abi3" in s), None)
-
-    if suffix is None and ABI3_PYTHON_TAG:
-        candidate = next(
-            (s for s in EXTENSION_SUFFIXES if s.startswith(f".{ABI3_PYTHON_TAG}-")),
-            None,
-        )
-        if sys.platform == "win32":
-            if candidate:
-                prefix = f".{ABI3_PYTHON_TAG}"
-                suffix = f"{prefix}-abi3{candidate[len(prefix) :]}"
-            else:
-                suffix = f".{ABI3_PYTHON_TAG}-abi3-{_windows_platform_tag()}.pyd"
-
-    if suffix is None:
-        suffix = EXTENSION_SUFFIXES[0]
-
+    suffix = next((s for s in EXTENSION_SUFFIXES if "abi3" in s), EXTENSION_SUFFIXES[0])
     return ROOT / "src" / "interpn" / f"interpn{suffix}"
 
 
@@ -212,8 +161,22 @@ def swap_wheel_binary(wheel_path: Path, optimized_lib: Path) -> None:
                 break
 
         if target_rel is None:
+            module_root = optimized_lib.name.split(".", 1)[0]
+            suffix = optimized_lib.suffix.lower()
+            alt_candidates = [
+                path
+                for path in package_dir.rglob(f"{module_root}*{optimized_lib.suffix}")
+                if path.is_file() and path.suffix.lower() == suffix
+            ]
+            if alt_candidates:
+                target_rel = min(
+                    alt_candidates, key=lambda path: len(path.parts)
+                ).relative_to(tmp_root)
+
+        if target_rel is None:
             raise SystemExit(
-                f"Could not find {optimized_lib.name}"
+                "Could not locate an extension for module "
+                f"{optimized_lib.name.split('.', 1)[0]}"
                 f" inside wheel {wheel_path.name}; unable to swap binary."
             )
 
