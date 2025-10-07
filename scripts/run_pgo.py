@@ -20,6 +20,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BENCH = ROOT / "scripts" / "profile_workload.py"
 DEFAULT_WORKDIR = ROOT / "target" / "pgo"
+PROFILE_EXPORT_DIR = ROOT / "scripts" / "pgo-profiles"
 ARTIFACT_NAMES = {"libinterpn.so", "libinterpn.dylib", "interpn.dll", "interpn.pyd"}
 
 
@@ -41,6 +42,22 @@ def _remove_stale_extensions(destination: Path) -> None:
             continue
         with contextlib.suppress(OSError):
             entry.unlink()
+
+
+def _export_profdata(profiles_dir: Path) -> Path | None:
+    """Copy the latest merged profile data into scripts/ for reuse."""
+    candidates = sorted(
+        profiles_dir.glob("*.profdata"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+
+    PROFILE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    destination = PROFILE_EXPORT_DIR / "interpn.profdata"
+    shutil.copy2(candidates[0], destination)
+    return destination
 
 
 class CommandError(RuntimeError):
@@ -318,6 +335,9 @@ def main() -> None:
     print("Building optimised extension with cargo-pgo...", flush=True)
     cargo_pgo(["optimize", "build", "--", "--features=python"], env=cargo_env)
     optimised_path = install_artifact(workdir)
+    exported = _export_profdata(profiles_dir)
+    if exported is not None:
+        print(f"PGO profile exported to {exported}", flush=True)
 
     print(
         "PGO build complete. Optimised extension installed at",
