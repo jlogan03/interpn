@@ -40,15 +40,10 @@ jobs:
       matrix:
         platform:
           - runner: windows-latest
-            target: x64
           - runner: ubuntu-latest
-            target: aarch64
-          - runner: ubuntu-latest
-            target: x86_64
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
+          - runner: ubuntu-24.04-arm  # aarch64
+          - runner: macos-13  # x86_64
+          - runner: macos-14  # aarch64
         python-version: ["3.9"]
     steps:
     - uses: actions/checkout@v3
@@ -62,7 +57,7 @@ jobs:
         uv venv
         uv pip install -e .[test,bench]
 
-        cargo install cargo-pgo
+        # cargo install cargo-pgo
         rustup component add llvm-tools-preview
 
     - name: Profile-Guided Optimization (PGO)
