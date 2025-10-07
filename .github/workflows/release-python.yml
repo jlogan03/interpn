@@ -45,6 +45,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter -j 1
@@ -78,6 +80,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
@@ -111,13 +115,10 @@ jobs:
         with:
           architecture: ${{ matrix.platform.target }}
           python-version: ${{ matrix.python-version }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
@@ -146,6 +147,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter

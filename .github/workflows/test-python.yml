@@ -65,21 +65,16 @@ jobs:
         cargo install cargo-pgo
         rustup component add llvm-tools-preview
 
-    - name: Profile-Guided Optimization (PGO) Unix
-      if: ${{ matrix.platform.runner != 'windows-latest' }}
+    - name: Profile-Guided Optimization (PGO)
+      # if: ${{ matrix.platform.runner != 'windows-latest' }}
+      shell: bash
       run: |
-        # Needed to allow build to run without failing on undefined symbols on mac
-        export PYO3_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
-        if [[ "$(uname)" == "Darwin" ]]; then
-          export RUSTFLAGS="$RUSTFLAGS -C link-arg=-undefined -C link-arg=dynamic_lookup"
-        fi
+        sh ./scripts/pgo_install.sh
 
-        uv run python ./scripts/run_pgo.py --build-wheel
-
-    - name: Profile-Guided Optimization (PGO) Windows
-      if: ${{ matrix.platform.runner == 'windows-latest' }}
-      run: |
-        uv run python ./scripts/run_pgo.py --build-wheel
+    # - name: Profile-Guided Optimization (PGO) Windows
+    #   if: ${{ matrix.platform.runner == 'windows-latest' }}
+    #   run: |
+    #     uv run python ./scripts/run_pgo.py --build-wheel
 
     - name: Test (with PGO)
       run: |

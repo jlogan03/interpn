@@ -13,7 +13,7 @@ from interpn import (
 )
 
 _TARGET_COUNT = int(1e4)
-_OBSERVATION_COUNTS = (1, 7, 1017)
+_OBSERVATION_COUNTS = (1, 10017)
 _MAX_DIMS = 4
 _GRID_SIZE = 30
 
