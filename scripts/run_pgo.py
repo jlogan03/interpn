@@ -17,6 +17,7 @@ from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 from collections.abc import Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
+import contextlib
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BENCH = ROOT / "scripts" / "profile_workload.py"
@@ -73,10 +74,8 @@ def _remove_stale_extensions(destination: Path) -> None:
             continue
         if entry.suffix.lower() not in EXTENSION_FILE_SUFFIXES:
             continue
-        try:
+        with contextlib.suppress(OSError):
             entry.unlink()
-        except OSError:
-            pass
 
 
 class CommandError(RuntimeError):
