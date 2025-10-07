@@ -25,6 +25,7 @@ ARTIFACT_NAMES = {"libinterpn.so", "libinterpn.dylib", "interpn.dll", "interpn.p
 
 
 ABI3_FEATURE_PATTERN = re.compile(r'"abi3-py(\d+)"')
+EXTENSION_FILE_SUFFIXES = {".so", ".pyd", ".dll", ".dylib"}
 
 
 def _detect_abi3_python_tag() -> str | None:
@@ -57,6 +58,25 @@ def _windows_platform_tag() -> str:
     if machine:
         return mapping.get(machine, f"win_{machine.replace('-', '_')}")
     return "win_amd64"
+
+
+def _remove_stale_extensions(destination: Path) -> None:
+    """Drop prior interpn extension builds so the fresh artifact is imported."""
+    parent = destination.parent
+    if not parent.exists():
+        return
+
+    for entry in parent.iterdir():
+        if not entry.is_file() or entry.name == destination.name:
+            continue
+        if not entry.name.startswith("interpn"):
+            continue
+        if entry.suffix.lower() not in EXTENSION_FILE_SUFFIXES:
+            continue
+        try:
+            entry.unlink()
+        except OSError:
+            pass
 
 
 class CommandError(RuntimeError):
@@ -165,6 +185,7 @@ def install_artifact(target_dir: Path) -> Path:
     artifact = find_cdylib(target_dir)
     destination = extension_destination()
     destination.parent.mkdir(parents=True, exist_ok=True)
+    _remove_stale_extensions(destination)
     shutil.copy2(artifact, destination)
     return destination
 
