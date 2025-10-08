@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, aarch64]
+        target: [x86_64]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v3
@@ -34,11 +34,33 @@ jobs:
       run: |
         uv run pytest .
 
-    - name: Profile-Guided Optimization (PGO)
+  test_pgo:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: windows-latest
+          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm  # aarch64
+          - runner: macos-13  # x86_64
+          - runner: macos-14  # aarch64
+        python-version: ["3.9"]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install
       run: |
-        cargo install cargo-pgo
+        uv venv
         rustup component add llvm-tools-preview
-        uv run python ./scripts/run_pgo.py --build-wheel
+
+    - name: Profile-Guided Optimization (PGO)
+      shell: bash
+      run: |
+        sh ./scripts/pgo_install.sh
 
     - name: Test (with PGO)
       run: |

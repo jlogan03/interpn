@@ -42,11 +42,11 @@ pip install interpn
 
 ## Profile-Guided Optimization
 
-To build the extension with profile-guided optimization, do `uv run python ./scripts/run_pgo.py`
+To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/pgo_install.sh`.
+You can also generate your own PGO profiles like `sh ./scripts/pgo_profile.sh`.
 after installing these extra compiler dependencies:
 
 ```bash
-cargo install cargo-pgo
 rustup component add llvm-tools-preview
 ```
 

@@ -73,3 +73,6 @@ docs/_build/
 
 # Extra
 *.svg
+
+# Unmerged PGO profiles
+*.profraw

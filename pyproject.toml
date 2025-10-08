@@ -42,13 +42,30 @@ doc = [
 ]
 
 [tool.uv]
-cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "**/*.rs"}]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "**/*.rs" },
+    { file = "scripts/pgo-profiles/interpn.profdata" },
+    { env = "RUSTFLAGS" },
+]
+
 
 [tool.maturin]
 features = ["python"]
 module-name = "interpn.interpn"
 python-packages = ["interpn"]
 python-source = "src"
+profile = "release"
+
+#rustc-args = [
+#    "-Cprofile-use=./scripts/pgo-profiles/interpn.profdata",
+#    "-Cllvm-args=-pgo-warn-missing-function"
+#]
+
+include = [
+  { path = "all", format = ["sdist", "wheel"] },
+]
 
 [tool.pytest.ini_options]
 addopts = "--cov=interpn --cov-report html --cov-fail-under=94"
