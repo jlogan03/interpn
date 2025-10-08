@@ -39,10 +39,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
@@ -75,10 +72,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
@@ -144,10 +138,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
