@@ -16,6 +16,7 @@ dimensions 1-4 at the expense of a ~2x slowdown for higher dimensions.
   * Update test deps & add linter/formatter configuration
   * Add uv lock and uv cache configuration
   * Use uv for actions
+  * Add more vector instruction sets for x86_64 targets reflecting a ~2015-era CPU
 * Rust
   * Eliminate some length check error handling that is no longer necessary for const-generic flattened methods
   * Add PyO3 bindings from python project as `python.rs` module behind `python` feature gate

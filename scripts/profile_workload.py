@@ -13,8 +13,8 @@ from interpn import (
 )
 
 _TARGET_COUNT = int(1e4)
-_OBSERVATION_COUNTS = (1, 10017)
-_MAX_DIMS = 4
+_OBSERVATION_COUNTS = (1, 571, 2017)
+_MAX_DIMS = 6
 _GRID_SIZE = 30
 
 
@@ -45,11 +45,12 @@ def main() -> None:
 
     for dtype in (np.float64, np.float32):
         for ndims in range(1, _MAX_DIMS + 1):
+            ngrid = _GRID_SIZE if ndims < 5 else 6
             grids = [
-                np.linspace(-1.0, 1.0, _GRID_SIZE, dtype=dtype) for _ in range(ndims)
+                np.linspace(-1.0, 1.0, ngrid, dtype=dtype) for _ in range(ndims)
             ]
             grids_rect = [
-                np.array(sorted(np.random.uniform(-1.0, 1.0, _GRID_SIZE).astype(dtype)))
+                np.array(sorted(np.random.uniform(-1.0, 1.0, ngrid).astype(dtype)))
                 for _ in range(ndims)
             ]
             mesh = np.meshgrid(*grids, indexing="ij")
@@ -74,7 +75,7 @@ def main() -> None:
             )
 
             for nobs in _OBSERVATION_COUNTS:
-                nreps = int(_TARGET_COUNT / nobs)
+                nreps = max(int(_TARGET_COUNT / nobs), 1)
 
                 for interpolator in (
                     linear_regular,
