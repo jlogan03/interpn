@@ -46,9 +46,7 @@ def main() -> None:
     for dtype in (np.float64, np.float32):
         for ndims in range(1, _MAX_DIMS + 1):
             ngrid = _GRID_SIZE if ndims < 5 else 6
-            grids = [
-                np.linspace(-1.0, 1.0, ngrid, dtype=dtype) for _ in range(ndims)
-            ]
+            grids = [np.linspace(-1.0, 1.0, ngrid, dtype=dtype) for _ in range(ndims)]
             grids_rect = [
                 np.array(sorted(np.random.uniform(-1.0, 1.0, ngrid).astype(dtype)))
                 for _ in range(ndims)
