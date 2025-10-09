@@ -17,6 +17,7 @@ permissions:
 jobs:
   release_rust:
     uses: ./.github/workflows/release-rust.yml
+    secrets: inherit
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
