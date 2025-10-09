@@ -39,20 +39,17 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter -j 1
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
-          rust-flags: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -75,20 +72,17 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: musllinux_1_2
-          rust-flags: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -120,12 +114,12 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          rust-flags: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -144,19 +138,16 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-python@v5
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          rust-flags: "-Cprofile-use=${GITHUB_WORKSPACE}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -197,7 +188,7 @@ jobs:
         with:
           subject-path: 'wheels-*/*'
       - name: Publish to PyPI
-        # if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        if: github.ref == 'refs/heads/main'
         uses: PyO3/maturin-action@v1
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
