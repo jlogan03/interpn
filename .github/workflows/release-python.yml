@@ -47,10 +47,9 @@ jobs:
           RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter -j 1
+          args: --release --out dist --find-interpreter -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
-          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -80,10 +79,9 @@ jobs:
           RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: musllinux_1_2
-          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -118,9 +116,8 @@ jobs:
           RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist
+          args: --release --out dist -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -146,9 +143,8 @@ jobs:
           RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
