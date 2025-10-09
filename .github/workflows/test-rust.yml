@@ -36,3 +36,7 @@ jobs:
       run: |
         rustup target add thumbv7em-none-eabihf
         cargo build --target thumbv7em-none-eabihf --no-default-features
+
+    - name: Publish dry-run
+      if: github.ref != 'refs/heads/main'
+      run: cargo publish --dry-run
