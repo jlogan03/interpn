@@ -44,7 +44,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
@@ -76,7 +76,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
@@ -113,7 +113,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
@@ -140,7 +140,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
