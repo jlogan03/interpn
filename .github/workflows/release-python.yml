@@ -37,7 +37,7 @@ jobs:
             target: s390x
           - runner: ubuntu-22.04
             target: ppc64le
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.13"]  # Using stable abi3-py39
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,7 +50,7 @@ jobs:
           args: --release --out dist --find-interpreter -j 1
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
-          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -70,7 +70,7 @@ jobs:
             target: aarch64
           - runner: ubuntu-22.04
             target: armv7
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.13"]  # Using stable abi3-py39
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -83,7 +83,7 @@ jobs:
           args: --release --out dist --find-interpreter
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: musllinux_1_2
-          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -99,7 +99,7 @@ jobs:
             target: x64
           - runner: windows-latest
             target: x86
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.13"]  # Using stable abi3-py39
     steps:
       - uses: actions/checkout@v4
 
@@ -120,7 +120,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -136,7 +136,7 @@ jobs:
             target: x86_64
           - runner: macos-14
             target: aarch64
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.13"]  # Using stable abi3-py39
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -148,7 +148,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          # rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
+          rust-flags: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Cmetadata=interpn_pgo"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
