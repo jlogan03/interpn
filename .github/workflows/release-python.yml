@@ -42,12 +42,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
       - name: Build wheels
+        if: ${{ matrix.platform.target }} != 'x86_64'
         uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
+          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          manylinux: auto
+      - name: Build wheels x86_64  # Enable modern instruction sets for x86_64
+        if: ${{ matrix.platform.target }} == 'x86_64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
       - name: Upload wheels
@@ -74,12 +81,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
       - name: Build wheels
+        if: ${{ matrix.platform.target }} != 'x86_64'
         uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
+          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          manylinux: musllinux_1_2
+      - name: Build wheels x86_64  # Enable modern instruction sets for x86_64
+        if: ${{ matrix.platform.target }} == 'x86_64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: musllinux_1_2
       - name: Upload wheels
@@ -111,12 +125,18 @@ jobs:
           architecture: ${{ matrix.platform.target }}
           python-version: ${{ matrix.python-version }}
       - name: Build wheels
+        if: ${{ matrix.platform.target }} != 'x64'
         uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
+          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Build wheels x86_64  # Enable modern instruction sets for x86_64
+        if: ${{ matrix.platform.target }} == 'x64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -138,12 +158,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
       - name: Build wheels
+        if: ${{ matrix.platform.target }} != 'x86_64'
         uses: PyO3/maturin-action@v1
-        env:
-          RUSTFLAGS: "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata"
+          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Build wheels x86_64  # Enable modern instruction sets for x86_64
+        if: ${{ matrix.platform.target }} == 'x86_64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/interpn.profdata -Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cmpxchg16b,+avx,+avx2,+fma,+bmi1,+bmi2,+lzcnt,+pclmulqdq,+movbe"
           # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
         uses: actions/upload-artifact@v4
