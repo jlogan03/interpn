@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1 2025-10-10
+
+### Changed
+
+* Python
+  * Pass PGO profile-use argument for rustc via maturin args instead of RUSTFLAGS to avoid overriding flags set in .cargo/config.toml
+  * Split PGO scripts into native and distribution variants
+    * Distribution variant tests the exact build configuration used for distribution
+    * Native variant builds with target-cpu=native to enable all available instruction sets
+  * Add x64 to platforms where extra instruction sets are enabled
+  * Update baked PGO profile based on distribution build
+
 ## 0.6.0 2025-10-05
 
 Combine python bindings project into rust crate to streamline development process.
