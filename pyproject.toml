@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.6.0"
+version = "0.6.1"
 repository = "https://github.com/jlogan03/interpn"
 documentation = "https://interpn.readthedocs.io/"
 description = "N-dimensional interpolation/extrapolation methods"
@@ -45,6 +45,7 @@ doc = [
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
+    { file = ".cargo/config.toml" },
     { file = "**/*.rs" },
     { file = "scripts/pgo-profiles/interpn.profdata" },
     { env = "RUSTFLAGS" },

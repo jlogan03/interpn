@@ -60,7 +60,7 @@ jobs:
     - name: Profile-Guided Optimization (PGO)
       shell: bash
       run: |
-        sh ./scripts/pgo_install.sh
+        sh ./scripts/distr_pgo_install.sh
 
     - name: Test (with PGO)
       run: |

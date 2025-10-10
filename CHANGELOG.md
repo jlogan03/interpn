@@ -9,8 +9,9 @@
   * Split PGO scripts into native and distribution variants
     * Distribution variant tests the exact build configuration used for distribution
     * Native variant builds with target-cpu=native to enable all available instruction sets
-  * Add x64 to platforms where extra instruction sets are enabled
   * Update baked PGO profile based on distribution build
+* Rust
+  * Add x64 to platforms where extra instruction sets are enabled in .cargo/config.toml
 
 ## 0.6.0 2025-10-05
 
