@@ -11,7 +11,7 @@
     * Native variant builds with target-cpu=native to enable all available instruction sets
   * Update baked PGO profile based on distribution build
 * Rust
-  * Add x64 to platforms where extra instruction sets are enabled in .cargo/config.toml
+  * Add x64 to platforms where extra instruction sets are enabled in .cargo/config.toml to capture windows 64-bit x86
 
 ## 0.6.0 2025-10-05
 
