@@ -55,6 +55,7 @@ jobs:
     - name: Install
       run: |
         uv venv
+        uv pip install .[test,bench]
         rustup component add llvm-tools-preview
 
     - name: Profile-Guided Optimization (PGO)
