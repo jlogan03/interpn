@@ -10,6 +10,7 @@
     * Distribution variant tests the exact build configuration used for distribution
     * Native variant builds with target-cpu=native to enable all available instruction sets
   * Update baked PGO profile based on distribution build
+  * Only run pypi distribution for single python version, because ABI3 build is portable to later python versions
 * Rust
   * Add x64 to platforms where extra instruction sets are enabled in .cargo/config.toml to capture windows 64-bit x86
 
