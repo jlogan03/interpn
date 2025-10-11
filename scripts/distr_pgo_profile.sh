@@ -6,6 +6,7 @@
 # Build instrumented
 cargo clean
 uv cache clean
+uv pip install maturin
 UV_NO_BUILD_CACHE=1 uv run --no-sync maturin build --compatibility pypi --out dist --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/interpn.profraw"
 
 # Run profile (update wheel name here)
