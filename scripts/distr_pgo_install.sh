@@ -5,7 +5,7 @@ cargo clean
 uv cache clean
 uv pip install maturin
 rm -rf dist/
-UV_NO_BUILD_CACHE=1 uv run --no-sync maturin build --compatibility pypi --out dist --verbose -- "-Cprofile-use=${PWD}/scripts/pgo-profiles/interpn.profdata"
+UV_NO_BUILD_CACHE=1 uv run --no-sync maturin build --compatibility pypi --out dist --verbose -- "-Cprofile-use=${PWD}/scripts/pgo-profiles/pgo.profdata"
 
 # Install from wheel
 uv pip install $(find dist/ -name '*.whl') --reinstall
