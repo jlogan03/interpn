@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.1 2025-10-10
+
+### Changed
+
+* Python
+  * Pass PGO profile-use argument for rustc via maturin args instead of RUSTFLAGS to avoid overriding flags set in .cargo/config.toml
+  * Split PGO scripts into native and distribution variants
+    * Distribution variant tests the exact build configuration used for distribution
+    * Native variant builds with target-cpu=native to enable all available instruction sets
+  * Update baked PGO profile based on distribution build
+  * Only run pypi distribution for single python version, because ABI3 build is portable to later python versions
+* Rust
+  * Add x64 to platforms where extra instruction sets are enabled in .cargo/config.toml to capture windows 64-bit x86
+
 ## 0.6.0 2025-10-05
 
 Combine python bindings project into rust crate to streamline development process.

@@ -76,6 +76,7 @@ docs/_build/
 
 # Unmerged PGO profiles
 *.profraw
+*native.profdata
 
 # cargo-semver-checks
 semver-checks/
