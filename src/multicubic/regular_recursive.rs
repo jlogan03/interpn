@@ -454,7 +454,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegularRecursive<'a, T, MAXDI
                 loc[next_dim] = origin[next_dim]; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
-                interp_inner::<T, MAXDIMS>(
+                interp_inner::<T>(
                     vals,
                     dts[next_dim],
                     sat[next_dim],
@@ -467,7 +467,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRegularRecursive<'a, T, MAXDI
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const MAXDIMS: usize>(
+fn interp_inner<T: Float>(
     vals: [T; 4],
     t: T,
     sat: Saturation,

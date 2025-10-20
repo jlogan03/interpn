@@ -368,7 +368,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinearRecursive<'a, T, M
 
                 // Interpolate on next dim's values to populate an entry in this dim
                 let grid_cell = &self.grids[next_dim][origin[next_dim]..origin[next_dim] + 4];
-                interp_inner::<T, MAXDIMS>(
+                interp_inner::<T>(
                     vals,
                     grid_cell,
                     x[next_dim],
@@ -382,7 +382,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MulticubicRectilinearRecursive<'a, T, M
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const MAXDIMS: usize>(
+fn interp_inner<T: Float>(
     vals: [T; 4],
     grid_cell: &[T],
     x: T,
