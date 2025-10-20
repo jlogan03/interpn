@@ -330,12 +330,15 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
 
                 // Populate lower corner and saturation flag for each dimension
                 origin[i] = self.get_loc(x[i], i)?;
+                let origin_f = <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
 
 
                 // Calculate normalized delta locations
-                let index_zero_loc = self.starts[i]
-                    + self.steps[i]
-                        * <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
+                #[cfg(not(feature = "fma"))]
+                let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
+                #[cfg(feature = "fma")]
+                let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
+
                 dts[i] = (x[i] - index_zero_loc) / self.steps[i];
             }
         }
@@ -378,7 +381,11 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                                 let y0 = store[IND][0];
                                 let dy = store[IND][1] - y0;
                                 let t = dts[IND];
+
+                                #[cfg(not(feature = "fma"))]
                                 let interped = y0 + t * dy;
+                                #[cfg(feature = "fma")]
+                                let interped = t.mul_add(dy, y0);
 
                                 store[j][P] = interped;
                             }
@@ -392,7 +399,10 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let y0 = store[N - 1][0];
         let dy = store[N - 1][1] - y0;
         let t = dts[N - 1];
+        #[cfg(not(feature = "fma"))]
         let interped = y0 + t * dy;
+        #[cfg(feature = "fma")]
+        let interped = t.mul_add(dy, y0);
         Ok(interped)
     }
 

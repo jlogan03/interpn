@@ -35,6 +35,7 @@ ndarray = "0.16.1"
 default = ["std"]
 python = ["numpy", "pyo3", "std"]
 std = ["itertools"]
+fma = []
 
 [profile.release]
 opt-level = 3
