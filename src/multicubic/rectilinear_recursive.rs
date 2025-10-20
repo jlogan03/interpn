@@ -440,7 +440,11 @@ fn interp_inner<T: Float>(
             let h12 = grid_cell[2] - grid_cell[1];
             let k0 =
                 -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             let t = -(x - grid_cell[1]) / h01;
 
@@ -469,7 +473,10 @@ fn interp_inner<T: Float>(
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                y1 + k1 * (t - one)
+                #[cfg(not(feature = "fma"))]
+                {y1 + k1 * (t - one)}
+                #[cfg(feature = "fma")]
+                {k1.mul_add(t - one, y1)}
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }
@@ -484,7 +491,11 @@ fn interp_inner<T: Float>(
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
             let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             let t = (x - grid_cell[2]) / h23;
 
@@ -508,7 +519,10 @@ fn interp_inner<T: Float>(
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                y1 + k1 * (t - one)
+                #[cfg(not(feature = "fma"))]
+                {y1 + k1 * (t - one)}
+                #[cfg(feature = "fma")]
+                {k1.mul_add(t - one, y1)}
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }
