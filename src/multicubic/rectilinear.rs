@@ -326,9 +326,9 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
                             if LEVEL { // const branch
                                 let grid_cell = &self.grids[IND][origin[IND]..origin[IND] + 4];
-                                let interped = interp_inner::<T, N>(
+                                let interped = interp_inner::<T>(
                                     store[IND],
-                                    grid_cell,
+                                    grid_cell.try_into().unwrap(),
                                     x[IND],
                                     sat[IND],
                                     self.linearize_extrapolation
@@ -344,9 +344,9 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
         // Interpolate the final value
         let grid_cell = &self.grids[N - 1][origin[N - 1]..origin[N - 1] + 4];
-        let interped = interp_inner::<T, N>(
+        let interped = interp_inner::<T>(
             store[N - 1],
-            grid_cell,
+            grid_cell.try_into().unwrap(),
             x[N - 1],
             sat[N - 1],
             self.linearize_extrapolation,
@@ -423,9 +423,9 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const N: usize>(
+fn interp_inner<T: Float>(
     vals: [T; 4],
-    grid_cell: &[T],
+    grid_cell: &[T; 4],
     x: T,
     sat: Saturation,
     linearize_extrapolation: bool,
