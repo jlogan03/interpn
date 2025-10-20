@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.6.1"
+version = "0.6.2"
 repository = "https://github.com/jlogan03/interpn"
 documentation = "https://interpn.readthedocs.io/"
 description = "N-dimensional interpolation/extrapolation methods"
@@ -53,7 +53,7 @@ cache-keys = [
 
 
 [tool.maturin]
-features = ["python"]
+features = ["python", "fma"]
 module-name = "interpn.interpn"
 python-packages = ["interpn"]
 python-source = "src"

@@ -1,6 +1,6 @@
 [package]
 name = "interpn"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 authors = ["James Logan <jlogan03@gmail.com>"]
 license = "MIT OR Apache-2.0"
