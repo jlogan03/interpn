@@ -3,6 +3,10 @@
 ## 0.6.2 2025-10-20
 
 Add optional use of fused multiply-add, enabled for python distributions.
+This substantially improves floating-point roundoff; cubic method now shows
+O(1e-14) peak roundoff error even under extrapolation of a quadratic function,
+and 0-4 epsilon roundoff inside interpolating region.
+Overall effect on throughput performance is neutral.
 
 ### Added
 
