@@ -32,6 +32,9 @@ jobs:
     - name: Run tests
       run: cargo test
 
+    - name: Run tests with FMA
+      run: cargo test --features=fma
+
     - name: Test no-std
       run: |
         rustup target add thumbv7em-none-eabihf

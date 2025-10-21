@@ -374,10 +374,16 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegularRecursive<'a, T, MAXD
                 loc[next_dim] = origin[next_dim]; // Reset for next usage
 
                 // Interpolate on next dim's values to populate an entry in this dim
-                let y0 = vals[0];
-                let dy = vals[1] - vals[0];
                 let t = dts[next_dim];
-                y0 + t * dy
+                let y0 = vals[0];
+                let dy = vals[1] - y0;
+
+                #[cfg(not(feature = "fma"))]
+                let interped = y0 + t * dy;
+                #[cfg(feature = "fma")]
+                let interped = t.mul_add(dy, y0);
+
+                interped
             }
         }
     }

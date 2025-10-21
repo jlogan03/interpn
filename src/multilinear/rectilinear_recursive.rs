@@ -322,8 +322,15 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRectilinearRecursive<'a, T, 
                 let grid_cell = &self.grids[next_dim][origin[next_dim]..origin[next_dim] + 2];
                 let step = grid_cell[1] - grid_cell[0];
                 let t = (x[next_dim] - grid_cell[0]) / step;
-                let dy = vals[1] - vals[0];
-                vals[0] + t * dy
+                let y0 = vals[0];
+                let dy = vals[1] - y0;
+
+                #[cfg(not(feature = "fma"))]
+                let interped = y0 + t * dy;
+                #[cfg(feature = "fma")]
+                let interped = t.mul_add(dy, y0);
+
+                interped
             }
         }
     }

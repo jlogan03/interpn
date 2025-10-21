@@ -1,6 +1,6 @@
 [package]
 name = "interpn"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 authors = ["James Logan <jlogan03@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -35,6 +35,7 @@ ndarray = "0.16.1"
 default = ["std"]
 python = ["numpy", "pyo3", "std"]
 std = ["itertools"]
+fma = []
 
 [profile.release]
 opt-level = 3

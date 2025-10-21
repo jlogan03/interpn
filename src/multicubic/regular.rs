@@ -395,7 +395,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
                             const IND: usize = const{j.saturating_sub(1)};
 
                             if LEVEL { // const branch
-                                let interped = interp_inner::<T, N>(
+                                let interped = interp_inner::<T>(
                                     &store[IND],
                                     dts[IND],
                                     sat[IND],
@@ -411,7 +411,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
 
         // Interpolate the final value
-        let interped = interp_inner::<T, N>(
+        let interped = interp_inner::<T>(
             &store[N - 1],
             dts[N - 1],
             sat[N - 1],
@@ -484,7 +484,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
 
 /// Calculate slopes and offsets & select evaluation method
 #[inline]
-fn interp_inner<T: Float, const N: usize>(
+fn interp_inner<T: Float>(
     vals: &[T; 4],
     t: T,
     sat: Saturation,
@@ -534,7 +534,11 @@ fn interp_inner<T: Float, const N: usize>(
             let dy = vals[0] - vals[1];
 
             let k0 = -(vals[2] - vals[0]) / two;
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -551,12 +555,23 @@ fn interp_inner<T: Float, const N: usize>(
             let dy = vals[0] - vals[1];
 
             let k0 = -(vals[2] - vals[0]) / two;
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                y1 + k1 * (t - one)
+                #[cfg(not(feature = "fma"))]
+                {
+                    y1 + k1 * (t - one)
+                }
+                #[cfg(feature = "fma")]
+                {
+                    k1.mul_add(t - one, y1)
+                }
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }
@@ -574,7 +589,11 @@ fn interp_inner<T: Float, const N: usize>(
             let dy = vals[3] - vals[2];
 
             let k0 = (vals[3] - vals[1]) / two;
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -592,12 +611,23 @@ fn interp_inner<T: Float, const N: usize>(
             let dy = vals[3] - vals[2];
 
             let k0 = (vals[3] - vals[1]) / two;
+
+            #[cfg(not(feature = "fma"))]
             let k1 = two * dy - k0; // Natural spline boundary condition
+            #[cfg(feature = "fma")]
+            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                y1 + k1 * (t - one)
+                #[cfg(not(feature = "fma"))]
+                {
+                    y1 + k1 * (t - one)
+                }
+                #[cfg(feature = "fma")]
+                {
+                    k1.mul_add(t - one, y1)
+                }
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }

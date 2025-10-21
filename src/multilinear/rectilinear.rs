@@ -314,7 +314,10 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
                                 let y0 = store[IND][0];
                                 let dy = store[IND][1] - y0;
 
+                                #[cfg(not(feature = "fma"))]
                                 let interped = y0 + t * dy;
+                                #[cfg(feature = "fma")]
+                                let interped = t.mul_add(dy, y0);
 
                                 store[j][P] = interped;
                             }
@@ -334,7 +337,10 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
 
         let y0 = store[ind][0];
         let dy = store[ind][1] - y0;
+        #[cfg(not(feature = "fma"))]
         let interped = y0 + t * dy;
+        #[cfg(feature = "fma")]
+        let interped = t.mul_add(dy, y0);
         Ok(interped)
     }
 

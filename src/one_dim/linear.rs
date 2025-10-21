@@ -27,7 +27,11 @@ where
 
         let slope = (y1 - y0) / (x1 - x0);
         let dx = loc - x0;
+
+        #[cfg(not(feature = "fma"))]
         let v = y0 + slope * dx;
+        #[cfg(feature = "fma")]
+        let v = slope.mul_add(dx, y0);
 
         Ok(v)
     }
@@ -65,7 +69,13 @@ where
             Extrap::Inside => {
                 let slope = (y1 - y0) / (x1 - x0);
                 let dx = loc - x0;
-                y0 + slope * dx
+
+                #[cfg(not(feature = "fma"))]
+                let v = y0 + slope * dx;
+                #[cfg(feature = "fma")]
+                let v = slope.mul_add(dx, y0);
+
+                v
             }
             Extrap::OutsideLow => y0,
             Extrap::OutsideHigh => y1,
