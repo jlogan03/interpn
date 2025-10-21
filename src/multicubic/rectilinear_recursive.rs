@@ -474,9 +474,13 @@ fn interp_inner<T: Float>(
             // hold the last slope outside the grid
             if linearize_extrapolation {
                 #[cfg(not(feature = "fma"))]
-                {y1 + k1 * (t - one)}
+                {
+                    y1 + k1 * (t - one)
+                }
                 #[cfg(feature = "fma")]
-                {k1.mul_add(t - one, y1)}
+                {
+                    k1.mul_add(t - one, y1)
+                }
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }
@@ -520,9 +524,13 @@ fn interp_inner<T: Float>(
             // hold the last slope outside the grid
             if linearize_extrapolation {
                 #[cfg(not(feature = "fma"))]
-                {y1 + k1 * (t - one)}
+                {
+                    y1 + k1 * (t - one)
+                }
                 #[cfg(feature = "fma")]
-                {k1.mul_add(t - one, y1)}
+                {
+                    k1.mul_add(t - one, y1)
+                }
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }

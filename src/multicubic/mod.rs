@@ -81,9 +81,13 @@ pub(crate) fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1:
 
     // Horner's method
     #[cfg(not(feature = "fma"))]
-    {y0 + t * (c1 + t * (c2 + t * c3))}
+    {
+        y0 + t * (c1 + t * (c2 + t * c3))
+    }
     #[cfg(feature = "fma")]
-    {c3.mul_add(t, c2).mul_add(t, c1).mul_add(t, y0)}
+    {
+        c3.mul_add(t, c2).mul_add(t, c1).mul_add(t, y0)
+    }
 }
 
 /// Second-order central difference on non-uniform grid per
@@ -103,7 +107,11 @@ pub(crate) fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01:
     let d = (y1 - y0) / h01;
 
     #[cfg(not(feature = "fma"))]
-    {a * b + c * d}
+    {
+        a * b + c * d
+    }
     #[cfg(feature = "fma")]
-    {a.mul_add(b, c * d)}
+    {
+        a.mul_add(b, c * d)
+    }
 }

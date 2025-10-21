@@ -74,7 +74,7 @@ where
                 let v = y0 + slope * dx;
                 #[cfg(feature = "fma")]
                 let v = slope.mul_add(dx, y0);
-                
+
                 v
             }
             Extrap::OutsideLow => y0,
