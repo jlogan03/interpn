@@ -25,7 +25,7 @@ dependencies = [
 repository = "https://github.com/jlogan03/interpn"
 documentation = "https://interpn.readthedocs.io/"
 
-[project.optional-dependencies]
+[dependency-groups]
 test = [
     "pytest >= 8.4.2",
     "pytest-cov >= 7.0.0",
