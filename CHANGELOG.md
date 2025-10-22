@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.3 2025-10-22
+
+Unpin max supported python version due to use of stable ABI3,
+along with a host of other improvements to packaging and actions workflows.
+
+### New Contributors
+
+* [Clément Robert](https://github.com/neutrinoceros) contributed PRs 30,32,33,36 making up all the substantial changes in this release. Thanks, Clément!
+
+### Changed
+
+* Python
+  * Unpin max python version
+  * Roll forward pydantic version for python 3.14 compatibility
+  * Update package metadata
+  * Add python 3.14 to test matrix
+* Workflows
+  * Reconfigure from single-contributor to commons-project by segmenting release workflows to be dispatched manually only
+  * Update python release workflow to depend on test-python instead of release-rust to support separate releases
+
 ## 0.6.2 2025-10-20
 
 Add optional use of fused multiply-add, enabled for python distributions.
