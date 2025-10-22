@@ -71,9 +71,6 @@ include = [
 [tool.pytest.ini_options]
 addopts = "--cov=interpn --cov-report html --cov-fail-under=94"
 
-[tool.ruff]
-target-version = "py39"
-
 [tool.ruff.lint]
 select = [
     # pycodestyle
