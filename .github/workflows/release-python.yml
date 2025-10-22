@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   test_python:
-    uses: ./.github/workflows/test-python
+    uses: ./.github/workflows/test-python.yml
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
