@@ -7,10 +7,10 @@ name = "interpn"
 version = "0.6.2"
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
-requires-python = ">=3.9, <3.14"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -75,9 +75,6 @@ include = [
 
 [tool.pytest.ini_options]
 addopts = "--cov=interpn --cov-report html --cov-fail-under=94"
-
-[tool.ruff]
-target-version = "py39"
 
 [tool.ruff.lint]
 select = [
