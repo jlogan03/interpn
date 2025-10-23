@@ -14,6 +14,8 @@ from interpn import (
     MultilinearRegular,
     MulticubicRegular,
     MulticubicRectilinear,
+    NearestRegular,
+    NearestRectilinear,
 )
 
 # Toggle SciPy/NumPy baselines via environment for PGO workloads.
@@ -85,6 +87,8 @@ def bench_4_dims_1_obs():
     cubic_rectilinear_interpn = MulticubicRectilinear.new(
         grids, zgrid, linearize_extrapolation=True
     )
+    nearest_regular_interpn = NearestRegular.new(dims, starts, steps, zgrid)
+    nearest_rectilinear_interpn = NearestRectilinear.new(grids, zgrid)
 
     # Preallocate output for potential perf advantage
     # Allocate at eval for 1:1 comparison with Scipy
@@ -96,6 +100,10 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p, out),
         "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p, out),
         "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
+            p, out
+        ),
+        "InterpN NearestRegular": lambda p: nearest_regular_interpn.eval(p, out),
+        "InterpN NearestRectilinear": lambda p: nearest_rectilinear_interpn.eval(
             p, out
         ),
         "numpy interp": lambda p: np.interp(p[0], grids[0], zgrid),  # 1D only
@@ -111,6 +119,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn,
         "InterpN MulticubicRegular": points_interpn,
         "InterpN MulticubicRectilinear": points_interpn,
+        "InterpN NearestRegular": points_interpn,
+        "InterpN NearestRectilinear": points_interpn,
         "numpy interp": points_interpn,
     }
 
@@ -139,6 +149,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn1,
         "InterpN MulticubicRegular": points_interpn1,
         "InterpN MulticubicRectilinear": points_interpn1,
+        "InterpN NearestRegular": points_interpn1,
+        "InterpN NearestRectilinear": points_interpn1,
         "numpy interp": points_interpn1,
     }
 
@@ -167,6 +179,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn2,
         "InterpN MulticubicRegular": points_interpn2,
         "InterpN MulticubicRectilinear": points_interpn2,
+        "InterpN NearestRegular": points_interpn2,
+        "InterpN NearestRectilinear": points_interpn2,
         "numpy interp": points_interpn2,
     }
 
@@ -198,6 +212,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn3,
         "InterpN MulticubicRegular": points_interpn3,
         "InterpN MulticubicRectilinear": points_interpn3,
+        "InterpN NearestRegular": points_interpn3,
+        "InterpN NearestRectilinear": points_interpn3,
         "numpy interp": points_interpn3,
     }
 
@@ -245,6 +261,8 @@ def bench_3_dims_n_obs_unordered():
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
+        nearest_regular_interpn = NearestRegular.new(dims, starts, steps, zgrid)
+        nearest_rectilinear_interpn = NearestRectilinear.new(grids, zgrid)
 
         throughputs = {
             "Scipy RegularGridInterpolator Linear": [],
@@ -253,6 +271,8 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             "InterpN MulticubicRectilinear": [],
+            "InterpN NearestRegular": [],
+            "InterpN NearestRectilinear": [],
         }
         # ns = np.logspace(0, 5, 10, base=10)
         # ns = [int(x) for x in ns]
@@ -291,6 +311,12 @@ def bench_3_dims_n_obs_unordered():
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
+                "InterpN NearestRegular": lambda p: nearest_regular_interpn.eval(
+                    p, out
+                ),
+                "InterpN NearestRectilinear": lambda p: nearest_rectilinear_interpn.eval(
+                    p, out
+                ),
             }
 
             # Interpolation in random order
@@ -303,6 +329,8 @@ def bench_3_dims_n_obs_unordered():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
+                "InterpN NearestRegular": points_interpn,
+                "InterpN NearestRectilinear": points_interpn,
             }
 
             for name, func in interps.items():
@@ -322,6 +350,8 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
+            "InterpN NearestRegular": "Linear",
+            "InterpN NearestRectilinear": "Linear",
         }
 
         linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1))]
@@ -394,6 +424,8 @@ def bench_4_dims_n_obs_unordered():
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
+        nearest_regular_interpn = NearestRegular.new(dims, starts, steps, zgrid)
+        nearest_rectilinear_interpn = NearestRectilinear.new(grids, zgrid)
 
         throughputs = {
             "Scipy RegularGridInterpolator Linear": [],
@@ -402,6 +434,8 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             "InterpN MulticubicRectilinear": [],
+            "InterpN NearestRegular": [],
+            "InterpN NearestRectilinear": [],
         }
         # ns = np.logspace(0, 4, 40, base=10)
         # ns = [int(x) for x in ns]
@@ -438,6 +472,12 @@ def bench_4_dims_n_obs_unordered():
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
+                "InterpN NearestRegular": lambda p: nearest_regular_interpn.eval(
+                    p, out
+                ),
+                "InterpN NearestRectilinear": lambda p: nearest_rectilinear_interpn.eval(
+                    p, out
+                ),
             }
 
             # Interpolation in random order
@@ -450,6 +490,8 @@ def bench_4_dims_n_obs_unordered():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
+                "InterpN NearestRegular": points_interpn,
+                "InterpN NearestRectilinear": points_interpn,
             }
 
             for name, func in interps.items():
@@ -467,6 +509,8 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
+            "InterpN NearestRegular": "Linear",
+            "InterpN NearestRectilinear": "Linear",
         }
 
         linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1))]
@@ -518,6 +562,8 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             "InterpN MulticubicRectilinear": [],
+            "InterpN NearestRegular": [],
+            "InterpN NearestRectilinear": [],
             "Scipy RectBivariateSpline Cubic": [],  # Move to end to order plots
             "Numpy Interp": [],
         }
@@ -548,6 +594,8 @@ def bench_throughput_vs_dims():
             cubic_rectilinear_interpn = MulticubicRectilinear.new(
                 grids, zgrid, linearize_extrapolation=True
             )
+            nearest_regular_interpn = NearestRegular.new(dims, starts, steps, zgrid)
+            nearest_rectilinear_interpn = NearestRectilinear.new(grids, zgrid)
 
             m = max(int(float(nobs) ** (1.0 / ndims) + 2), 2)
 
@@ -570,6 +618,8 @@ def bench_throughput_vs_dims():
                 "InterpN MultilinearRectilinear": rectilinear_interpn.eval,
                 "InterpN MulticubicRegular": cubic_regular_interpn.eval,
                 "InterpN MulticubicRectilinear": cubic_rectilinear_interpn.eval,
+                "InterpN NearestRegular": nearest_regular_interpn.eval,
+                "InterpN NearestRectilinear": nearest_rectilinear_interpn.eval,
             }
 
             if ndims == 1:
@@ -594,6 +644,8 @@ def bench_throughput_vs_dims():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
+                "InterpN NearestRegular": points_interpn,
+                "InterpN NearestRectilinear": points_interpn,
                 "Numpy Interp": points_interpn,
             }
 
@@ -617,11 +669,13 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
+            "InterpN NearestRegular": "Linear",
+            "InterpN NearestRectilinear": "Linear",
             "Numpy Interp": "Linear",
         }
 
-        linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1))]
-        alpha = [0.5, 1.0, 1.0, 1.0, 1.0]
+        linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1)), ":"]
+        alpha = [0.5, 1.0, 1.0, 1.0, 1.0, 1.0]
 
         _fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
         plt.suptitle(

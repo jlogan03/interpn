@@ -31,6 +31,7 @@
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 use super::{MulticubicRegularRecursive, Saturation, normalized_hermite_spline};
+use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -384,7 +385,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
                                 }
                             }
                             const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = self.index_arr(loc, dimprod);
+                            store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
                         }
                         else { // const branch
                             // For other nodes, interpolate on child values
@@ -465,20 +466,6 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
 
         Ok((loc, saturation))
-    }
-
-    /// Index a single value from an array
-    #[inline]
-    fn index_arr(&self, loc: [usize; N], dimprod: [usize; N]) -> T {
-        let mut i = 0;
-
-        unroll! {
-            for j < 5 in 0..N {
-                i += loc[j] * dimprod[j];
-            }
-        }
-
-        self.vals[i]
     }
 }
 

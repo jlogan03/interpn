@@ -16,6 +16,8 @@ from interpn import (
     MultilinearRegular,
     MulticubicRegular,
     MulticubicRectilinear,
+    NearestRegular,
+    NearestRectilinear,
 )
 
 
@@ -27,6 +29,8 @@ def bench_eval_mem_vs_dims():
         "InterpN MultilinearRectilinear": [],
         "InterpN MulticubicRegular": [],
         "InterpN MulticubicRectilinear": [],
+        "InterpN NearestRegular": [],
+        "InterpN NearestRectilinear": [],
     }
     ndims_to_test = [x for x in range(1, 9)]
     for ndims in ndims_to_test:
@@ -97,14 +101,14 @@ def bench_eval_mem_vs_dims():
             mems = memory_usage((func, (p,), {}), interval=1e-9, backend="psutil")
             usages[name].append(max(mems))
 
-    kinds = {
-        "Scipy RegularGridInterpolator Linear": "Linear",
-        "Scipy RegularGridInterpolator Cubic": "Cubic",
-        "InterpN MultilinearRegular": "Linear",
-        "InterpN MultilinearRectilinear": "Linear",
-        "InterpN MulticubicRegular": "Cubic",
-        "InterpN MulticubicRectilinear": "Cubic",
-    }
+        kinds = {
+            "Scipy RegularGridInterpolator Linear": "Linear",
+            "Scipy RegularGridInterpolator Cubic": "Cubic",
+            "InterpN MultilinearRegular": "Linear",
+            "InterpN MultilinearRectilinear": "Linear",
+            "InterpN MulticubicRegular": "Cubic",
+            "InterpN MulticubicRectilinear": "Cubic",
+        }
 
     linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1))]
     alpha = [0.5, 1.0, 1.0, 1.0, 1.0]

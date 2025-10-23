@@ -10,6 +10,8 @@ from interpn import (
     MulticubicRegular,
     MultilinearRectilinear,
     MultilinearRegular,
+    NearestRectilinear,
+    NearestRegular,
 )
 
 _TARGET_COUNT = int(1e4)
@@ -71,6 +73,8 @@ def main() -> None:
                 zgrid,
                 linearize_extrapolation=True,
             )
+            nearest_regular = NearestRegular.new(dims, starts, steps, zgrid)
+            nearest_rect = NearestRectilinear.new(grids_rect, zgrid)
 
             for nobs in _OBSERVATION_COUNTS:
                 nreps = max(int(_TARGET_COUNT / nobs), 1)
@@ -80,6 +84,8 @@ def main() -> None:
                     linear_rect,
                     cubic_regular,
                     cubic_rect,
+                    nearest_regular,
+                    nearest_rect,
                 ):
                     for _ in range(nreps):
                         points = _observation_points(rng, ndims, nobs, dtype)

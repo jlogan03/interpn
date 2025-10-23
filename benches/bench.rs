@@ -3,8 +3,8 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D, multicubic,
-    multilinear,
+    Linear1D, LinearHoldLast1D, MultilinearRegular, NearestRectilinear, NearestRegular,
+    RectilinearGrid1D, RegularGrid1D, multicubic, multilinear, nearest,
     one_dim::{
         Interp1D,
         hold::{Left1D, Nearest1D},
@@ -130,6 +130,70 @@ macro_rules! bench_interp_specific {
                 b.iter(|| {
                     black_box(
                         multilinear::rectilinear::interpn(&gridslice, &z, &obs, &mut out).unwrap(),
+                    )
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Nearest Regular {}x{}D, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = match $kind {
+                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                };
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let mut out = vec![0.0; size];
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                b.iter(|| {
+                    black_box({
+                        nearest::regular::interpn(&dims, &starts, &steps, &z, &obs[..], &mut out)
+                            .unwrap()
+                    })
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Nearest Rectilinear {}x{}D, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = match $kind {
+                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                };
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let mut out = vec![0.0; size];
+
+                let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+
+                b.iter(|| {
+                    black_box(
+                        nearest::rectilinear::interpn(&gridslice, &z, &obs, &mut out).unwrap(),
                     )
                 });
             },
@@ -426,41 +490,8 @@ fn bench_interp(c: &mut Criterion) {
     }
 }
 
-fn bench_extrap(c: &mut Criterion) {
-    //
-    // Shuffled (un-ordered observation points)
-    //
-    for gridsize in [10] {
-        let mut group = c.benchmark_group(format!("Extrap_1D_Shuffled_{gridsize}-grid"));
-        for size in [1, 100, 1_000_000].iter() {
-            group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 1, gridsize, size, Kind::Extrap);
-        }
-        group.finish();
-    }
-
-    for gridsize in [10] {
-        let mut group = c.benchmark_group(format!("Extrap_2D_Shuffled_{gridsize}-grid"));
-        for size in [1, 100, 1_000_000].iter() {
-            group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 2, gridsize, size, Kind::Extrap);
-        }
-        group.finish();
-    }
-
-    for gridsize in [10] {
-        let mut group = c.benchmark_group(format!("Extrap_3D_Shuffled_{gridsize}-grid"));
-        for size in [1, 100, 1_000_000].iter() {
-            group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 3, gridsize, size, Kind::Extrap);
-        }
-        group.finish();
-    }
-}
-
 criterion_group!(benches_interp, bench_interp);
-criterion_group!(benches_extrap, bench_extrap);
-criterion_main!(benches_interp, benches_extrap,);
+criterion_main!(benches_interp);
 
 mod randn {
     use rand::Rng;

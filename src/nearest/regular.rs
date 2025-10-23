@@ -1,7 +1,7 @@
-//! Multilinear interpolation/extrapolation on a regular grid.
+//! Nearest-neighbor interpolation/extrapolation on a regular grid.
 //!
 //! ```rust
-//! use interpn::multilinear::regular;
+//! use interpn::nearest::regular;
 //!
 //! // Define a grid
 //! let x = [1.0_f64, 2.0];
@@ -26,25 +26,15 @@
 //! // Do interpolation, allocating for the output for convenience
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, &obs).unwrap();
 //! ```
-//!
-//! References
-//! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
-use super::MultilinearRegularRecursive;
 use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
-/// Evaluate multilinear interpolation on a regular grid in up to 8 dimensions.
+/// Evaluate nearest-neighbor interpolation on a regular grid in up to 6 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
-/// For 1-6 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
-///
 /// This is a convenience function; best performance will be achieved by using the exact right
-/// number for the N parameter, as this will slightly reduce compute and storage overhead,
-/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
-/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+/// number for the N parameter, as this will slightly reduce compute and compile times.
 ///
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
@@ -62,55 +52,49 @@ pub fn interpn<T: Float>(
     }
 
     match ndims {
-        1 => MultilinearRegular::<'_, T, 1>::new(
+        1 => NearestRegular::<'_, T, 1>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        2 => MultilinearRegular::<'_, T, 2>::new(
+        2 => NearestRegular::<'_, T, 2>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        3 => MultilinearRegular::<'_, T, 3>::new(
+        3 => NearestRegular::<'_, T, 3>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        4 => MultilinearRegular::<'_, T, 4>::new(
+        4 => NearestRegular::<'_, T, 4>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        5 => MultilinearRegular::<'_, T, 5>::new(
+        5 => NearestRegular::<'_, T, 5>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        6 => MultilinearRegular::<'_, T, 6>::new(
+        6 => NearestRegular::<'_, T, 6>::new(
             dims.try_into().unwrap(),
             starts.try_into().unwrap(),
             steps.try_into().unwrap(),
             vals,
         )?
         .interp(obs.try_into().unwrap(), out),
-        7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
-            .interp(obs, out),
-        8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
-            .interp(obs, out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
+        _ => Err("Dimension exceeds maximum (6)."),
     }?;
 
     Ok(())
@@ -133,53 +117,7 @@ pub fn interpn_alloc<T: Float>(
     Ok(out)
 }
 
-/// Check whether a list of observation points are inside the grid within some absolute tolerance.
-/// Assumes the grid is valid for the rectilinear interpolator (monotonically increasing).
-///
-/// Output slice entry `i` is set to `false` if no points on that dimension are out of bounds,
-/// and set to `true` if there is a bounds violation on that axis.
-///
-/// # Errors
-/// * If the dimensionality of the grid does not match the dimensionality of the observation points
-/// * If the output slice length does not match the dimensionality of the grid
-pub fn check_bounds<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    obs: &[&[T]],
-    atol: T,
-    out: &mut [bool],
-) -> Result<(), &'static str> {
-    let n = dims.len();
-    if !(obs.len() == n && out.len() == n) {
-        return Err("Dimension mismatch");
-    }
-
-    for i in 0..n {
-        let first = starts[i];
-        let last_elem = <T as NumCast>::from(dims[i] - 1); // Last element in grid
-
-        match last_elem {
-            Some(last_elem) => {
-                let last = starts[i] + steps[i] * last_elem;
-                let lo = first.min(last);
-                let hi = first.max(last);
-
-                let bad = obs[i]
-                    .iter()
-                    .any(|&x| (x - lo) <= -atol || (x - hi) >= atol);
-                out[i] = bad;
-            }
-            // Passing an unrepresentable number in isn't, strictly speaking, an error
-            // and since an unrepresentable number can't be on the grid,
-            // we can just flag it for the bounds check like normal
-            None => {
-                out[i] = true;
-            }
-        }
-    }
-    Ok(())
-}
+pub use crate::multilinear::regular::check_bounds;
 
 /// An arbitrary-dimensional multilinear interpolator / extrapolator on a regular grid.
 ///
@@ -197,7 +135,7 @@ pub fn check_bounds<T: Float>(
 /// Timing
 /// * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
 ///   That said, floating-point calculations can take a different number of clock-cycles depending on numerical values.
-pub struct MultilinearRegular<'a, T: Float, const N: usize> {
+pub struct NearestRegular<'a, T: Float, const N: usize> {
     /// Size of each dimension
     dims: [usize; N],
 
@@ -211,7 +149,7 @@ pub struct MultilinearRegular<'a, T: Float, const N: usize> {
     vals: &'a [T],
 }
 
-impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
+impl<'a, T: Float, const N: usize> NearestRegular<'a, T, N> {
     /// Build a new interpolator, using O(N) calculations and storage.
     ///
     /// This method does not handle degenerate dimensions; all grids must have at least 2 entries.
@@ -306,11 +244,12 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let mut origin = [0_usize; N]; // Indices of lower corner of hypercube
-        let mut dts = [T::zero(); N]; // Normalized coordinate storage
         let mut dimprod = [1_usize; N];
         let mut loc = [0_usize; N];
-        let mut store = [[T::zero(); FP]; N];
+
+        // These are done at compile time for primitives like f32, f64
+        let two = T::one() + T::one();
+        let half = T::one() / two;
 
         let mut acc = 1;
         unroll! {
@@ -326,9 +265,8 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                 dimprod[N - i - 1] = acc;
 
                 // Populate lower corner and saturation flag for each dimension
-                origin[i] = self.get_loc(x[i], i)?;
-                let origin_f = <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
-
+                let origin = self.get_loc(x[i], i)?;
+                let origin_f = <T as NumCast>::from(origin).ok_or("Unrepresentable coordinate value")?;
 
                 // Calculate normalized delta locations
                 #[cfg(not(feature = "fma"))]
@@ -336,70 +274,23 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                 #[cfg(feature = "fma")]
                 let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
 
-                dts[i] = (x[i] - index_zero_loc) / self.steps[i];
+                let dt = (x[i] - index_zero_loc) / self.steps[i];
+
+                // Determine nearest index for this dimension based on distance.
+                // NOTE: This method, despite including a division operation,
+                // is about 10-20% faster than just checking the left and right
+                // distances against each other directly.
+                let offset = if dt <= half {
+                    0
+                } else {
+                    1
+                };
+
+                loc[i] = origin + offset;
             }
         }
 
-        // Recursive interpolation of one dependency tree at a time
-        const FP: usize = 2; // Footprint size
-        let nverts = const { FP.pow(N as u32) }; // Total number of vertices
-
-        unroll! {
-            for i < 64 in 0..nverts {  // const loop
-                // Index, interpolate, or pass on each level of the tree
-                unroll!{
-                    for j < 7 in 0..N {  // const loop
-
-                        // Most of these iterations will get optimized out
-                        if const{j == 0} { // const branch
-                            // At leaves, index values
-
-                            unroll!{
-                                for k < 7 in 0..N {  // const loop
-                                    // Bit pattern in an integer matches C-ordered array indexing
-                                    // so we can just use the vertex index to index into the array
-                                    // by selecting the appropriate bit from the index.
-                                    const OFFSET: usize = const{(i & (1 << k)) >> k};
-                                    loc[k] = origin[k] + OFFSET;
-                                }
-                            }
-                            const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
-                        }
-                        else { // const branch
-                            // For other nodes, interpolate on child values
-
-                            const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
-                            const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
-                            const IND: usize = const{j.saturating_sub(1)};
-
-                            if LEVEL { // const branch
-                                let y0 = store[IND][0];
-                                let dy = store[IND][1] - y0;
-                                let t = dts[IND];
-
-                                #[cfg(not(feature = "fma"))]
-                                let interped = y0 + t * dy;
-                                #[cfg(feature = "fma")]
-                                let interped = t.mul_add(dy, y0);
-
-                                store[j][P] = interped;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Interpolate the final value
-        let y0 = store[N - 1][0];
-        let dy = store[N - 1][1] - y0;
-        let t = dts[N - 1];
-        #[cfg(not(feature = "fma"))]
-        let interped = y0 + t * dy;
-        #[cfg(feature = "fma")]
-        let interped = t.mul_add(dy, y0);
+        let interped = index_arr_fixed_dims(loc, dimprod, self.vals);
         Ok(interped)
     }
 
@@ -428,7 +319,22 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
 #[cfg(test)]
 mod test {
     use super::interpn;
-    use crate::{MultilinearRegular, utils::*};
+    use crate::{NearestRegular, utils::*};
+
+    fn nearest_regular_index(value: f64, start: f64, step: f64, dim: usize) -> usize {
+        let floc = ((value - start) / step).floor();
+        let n = dim as isize;
+        let dimmax = n.saturating_sub(2).max(0);
+        let origin = floc as isize;
+        let origin = origin.max(0).min(dimmax) as usize;
+        let index_zero = start + step * origin as f64;
+        let dt = (value - index_zero) / step;
+        if dt <= 0.5 {
+            origin
+        } else {
+            (origin + 1).min(dim - 1)
+        }
+    }
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -457,8 +363,23 @@ mod test {
                 .map(|i| gridobs.iter().map(|x| x[i]).collect())
                 .collect(); // transpose
             let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..]).collect();
-            let uobs: Vec<f64> = gridobs.iter().map(|x| x.iter().sum()).collect(); // expected output at observation points
-            let mut out = vec![0.0; uobs.len()];
+            let expected: Vec<f64> = gridobs
+                .iter()
+                .map(|point| {
+                    (0..n)
+                        .map(|dim| {
+                            let idx = nearest_regular_index(
+                                point[dim],
+                                starts[dim],
+                                steps[dim],
+                                dims[dim],
+                            );
+                            starts[dim] + steps[dim] * idx as f64
+                        })
+                        .sum()
+                })
+                .collect();
+            let mut out = vec![0.0; expected.len()];
 
             // Evaluate
             interpn(&dims, &starts, &steps, &u, &xobsslice, &mut out[..]).unwrap();
@@ -467,11 +388,11 @@ mod test {
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
 
-            (0..uobs.len()).for_each(|i| {
+            (0..expected.len()).for_each(|i| {
                 let outi = out[i];
-                let uobsi = uobs[i];
-                println!("{outi} {uobsi}");
-                assert!((out[i] - uobs[i]).abs() < 1e-12)
+                let expecti = expected[i];
+                println!("{outi} {expecti}");
+                assert!((outi - expecti).abs() < 1e-12)
             });
         }
     }
@@ -486,11 +407,12 @@ mod test {
         let y = (0..3).map(|x| hat_func(x as f64)).collect::<Vec<f64>>();
         let obs = linspace(-2.0, 4.0, 100);
 
-        let interpolator: MultilinearRegular<f64, 1> =
-            MultilinearRegular::new([3], [0.0], [1.0], &y).unwrap();
+        let interpolator: NearestRegular<f64, 1> =
+            NearestRegular::new([3], [0.0], [1.0], &y).unwrap();
 
         (0..obs.len()).for_each(|i| {
-            assert_eq!(hat_func(obs[i]), interpolator.interp_one([obs[i]]).unwrap());
+            let idx = nearest_regular_index(obs[i], 0.0, 1.0, y.len());
+            assert_eq!(y[idx], interpolator.interp_one([obs[i]]).unwrap());
         })
     }
 }

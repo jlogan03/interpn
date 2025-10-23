@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.4 2025-10-24
+
+Implement N-dimensional nearest-neighbor interpolation on regular and rectilinear grids.
+
+### Added
+
+* Rust
+  * Add `nearest` module with regular- and rectilinear- grid methods in up to 6 dimensions
+  * Reduce code duplication for fixed-dim array indexing
+  * Update pyo3 and numpy rust deps
+* Python
+  * Add bindings, tests, benchmarks, and quality-of-fit plots for `NearestRegular` and `NearestRectilinear`
+  * Update PGO profile data to include new functions
+
 ## 0.6.3 2025-10-22
 
 Unpin max supported python version due to use of stable ABI3,

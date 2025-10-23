@@ -285,7 +285,7 @@ impl<'a, T: Float, const MAXDIMS: usize> MultilinearRegularRecursive<'a, T, MAXD
         //
         // Also notably, storing the index offsets as bool instead of usize
         // reduces memory overhead, but has not effect on throughput rate.
-        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercub
+        let origin = &mut [0_usize; MAXDIMS][..ndims]; // Indices of lower corner of hypercube
         let dts = &mut [T::zero(); MAXDIMS][..ndims]; // Normalized coordinate storage
         let dimprod = &mut [1_usize; MAXDIMS][..ndims];
 
