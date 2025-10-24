@@ -56,7 +56,14 @@ cache-keys = [
     { file = "scripts/pgo-profiles/interpn.profdata" },
     { env = "RUSTFLAGS" },
 ]
-
+no-build-package = [
+    "numpy",
+    "pydantic-core",
+    "scipy",
+    "matplotlib",
+    "coverage",
+    "ruff",
+]
 
 [tool.maturin]
 features = ["python", "fma"]
