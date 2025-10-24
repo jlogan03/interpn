@@ -17,8 +17,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "numpy >= 2",
-    "pydantic >= 2.12",
+    "numpy >= 1.21.2",
+    "pydantic >= 2.2.0",
 ]
 
 [project.urls]
