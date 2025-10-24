@@ -17,8 +17,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "numpy >= 2",
-    "pydantic >= 2.12",
+    "numpy >= 1.21.2",
+    "pydantic >= 2.2.0",
 ]
 
 [project.urls]
@@ -56,7 +56,14 @@ cache-keys = [
     { file = "scripts/pgo-profiles/interpn.profdata" },
     { env = "RUSTFLAGS" },
 ]
-
+no-build-package = [
+    "numpy",
+    "pydantic-core",
+    "scipy",
+    "matplotlib",
+    "coverage",
+    "ruff",
+]
 
 [tool.maturin]
 features = ["python", "fma"]
