@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Union, Annotated, Literal, Any
+from typing import Annotated, Literal, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -74,4 +74,4 @@ class ArrayF32(BaseModel):
         return json.dumps(data.tolist())
 
 
-Array = Annotated[Union[ArrayF32, ArrayF64], Field(discriminator="dtype")]
+Array = Annotated[ArrayF32 | ArrayF64, Field(discriminator="dtype")]

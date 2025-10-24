@@ -12,7 +12,6 @@ jobs:
       matrix:
         target: [x86_64]
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
@@ -50,13 +49,12 @@ jobs:
           - runner: ubuntu-24.04-arm  # aarch64
           - runner: macos-15-intel  # x86_64
           - runner: macos-14  # aarch64
-        python-version: ["3.9"]
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
       uses: astral-sh/setup-uv@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.10"
 
     - name: Install
       run: |
