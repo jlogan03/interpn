@@ -73,4 +73,4 @@ The memory profiler picks up a large amount of RAM that is not actually part of 
 ----
 ## Profile-Guided Optimisation
 
-You can rebuild the Python extension with profile-guided optimisation enabled by running `python scripts/run_pgo.py`. The helper relies on `cargo-pgo` (install it with `cargo install cargo-pgo`) and executes `scripts/profile_workload.py`, which exercises each InterpN method for 1 and 1000 observation points across 1–8 dimensions to gather representative profiles, before merging the resulting `.profraw` files and copying the optimised library back into the package. Use `--bench test/bench_cpu.py` to run the comprehensive SciPy-based benchmark instead, and install the optional benchmarking dependencies first with `uv pip install '.[bench]'` if you need that workload.
+To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/distr_pgo_install.sh`. You can also generate your own PGO profiles like `sh ./scripts/distr_pgo_profile.sh`.

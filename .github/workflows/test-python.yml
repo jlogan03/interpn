@@ -25,19 +25,18 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install
-      run: |
-        uv venv
-        uv pip install -e .[test,bench]
+      run: uv sync --locked --extra test --extra bench
       
     - name: Format
-      run: uv run ruff check; uv run ruff format --check
+      run: |
+        uv run --no-sync ruff check
+        uv run --no-sync ruff format --check
 
     - name: Static typing
-      run: uv run pyright ./src
+      run: uv run --no-sync pyright ./src
 
     - name: Test (without PGO)
-      run: |
-        uv run pytest .
+      run: uv run --no-sync pytest
 
   test_pgo:
     runs-on: ${{ matrix.platform.runner }}
@@ -58,8 +57,7 @@ jobs:
 
     - name: Install
       run: |
-        uv venv
-        uv pip install .[test,bench]
+        uv sync --locked --no-editable --extra test --extra bench
         rustup component add llvm-tools-preview
 
     - name: Profile-Guided Optimization (PGO)
