@@ -32,7 +32,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install
-      run: uv sync --locked --extra test --extra bench ${{ matrix.sync-args }}
+      run: uv sync --frozen --extra test --extra bench ${{ matrix.sync-args }}
       
     - name: Format
       run: |
