@@ -17,7 +17,7 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
-        sync-args: [null]
+        sync-args: [--locked]
 
         include:
          - target: x86_64
@@ -32,7 +32,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install
-      run: uv sync --frozen --extra test --extra bench ${{ matrix.sync-args }}
+      run: uv sync --extra test --extra bench ${{ matrix.sync-args }}
       
     - name: Format
       run: |
