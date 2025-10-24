@@ -4,6 +4,7 @@ use pyo3::prelude::*;
 
 use crate::multicubic;
 use crate::multilinear;
+use crate::nearest;
 
 /// Maximum number of dimensions for linear interpn convenience methods
 const MAXDIMS: usize = 8;
@@ -22,6 +23,12 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpn_linear_rectilinear_f32, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_rectilinear_f32, m)?)?;
+    // Nearest-neighbor regular grid
+    m.add_function(wrap_pyfunction!(interpn_nearest_regular_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_nearest_regular_f32, m)?)?;
+    // Nearest-neighbor rectilinear grid
+    m.add_function(wrap_pyfunction!(interpn_nearest_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_nearest_rectilinear_f32, m)?)?;
     // Multicubic with regular grid
     m.add_function(wrap_pyfunction!(interpn_cubic_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_cubic_regular_f32, m)?)?;
@@ -40,7 +47,7 @@ macro_rules! unpack_vec_of_arr {
         // PyArray readonly references are very lightweight
         // but aren't Copy, so we can't template them out like
         // [...; 8]
-        let mut _ro: [_; 8] = core::array::from_fn(|_| None);
+        let mut _ro: [_; MAXDIMS] = core::array::from_fn(|_| None);
         let n = $inname.len();
         (0..n).for_each(|i| _ro[i] = Some($inname[i].readonly()));
         for i in 0..n {
@@ -150,6 +157,65 @@ macro_rules! interpn_linear_rectilinear_impl {
 
 interpn_linear_rectilinear_impl!(interpn_linear_rectilinear_f64, f64);
 interpn_linear_rectilinear_impl!(interpn_linear_rectilinear_f32, f32);
+
+macro_rules! interpn_nearest_regular_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname<'py>(
+            dims: Vec<usize>,
+            starts: Bound<'py, PyArray1<$T>>,
+            steps: Bound<'py, PyArray1<$T>>,
+            vals: Bound<'py, PyArray1<$T>>,
+            obs: Vec<Bound<'py, PyArray1<$T>>>,
+            out: Bound<'py, PyArray1<$T>>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            match nearest::regular::interpn(
+                &dims,
+                starts.readonly().as_slice()?,
+                steps.readonly().as_slice()?,
+                vals.readonly().as_slice()?,
+                obs,
+                out.try_readwrite()?.as_slice_mut()?,
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_nearest_regular_impl!(interpn_nearest_regular_f64, f64);
+interpn_nearest_regular_impl!(interpn_nearest_regular_f32, f32);
+
+macro_rules! interpn_nearest_rectilinear_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname<'py>(
+            grids: Vec<Bound<'py, PyArray1<$T>>>,
+            vals: Bound<'py, PyArray1<$T>>,
+            obs: Vec<Bound<'py, PyArray1<$T>>>,
+            out: Bound<'py, PyArray1<$T>>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            match nearest::rectilinear::interpn(
+                grids,
+                vals.readonly().as_slice()?,
+                obs,
+                out.try_readwrite()?.as_slice_mut()?,
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_nearest_rectilinear_impl!(interpn_nearest_rectilinear_f64, f64);
+interpn_nearest_rectilinear_impl!(interpn_nearest_rectilinear_f32, f32);
 
 macro_rules! check_bounds_rectilinear_impl {
     ($funcname:ident, $T:ty) => {

@@ -16,6 +16,11 @@ InterpN shows significantly improvements in both numerical error and quality-of-
 Both InterpN and Scipy methods can full capture a quadratic function in arbitrary dimensions, including under extrapolation. However, InterpN produces several orders of magnitude less floating point error, despite requiring significantly less run time.
 ![2D cubic](./2d_quality_of_fit_Rectilinear.svg)
 
+### 2D Nearest-Neighbor Interpolation & Extrapolation
+InterpN's regular- and rectilinear- grid nearest-neighbor methods match scipy griddata at all tested conditions.
+Midpoint tie-breaking is not guaranteed to match exactly.
+![2D nearest](./nearest_quality_of_fit.svg)
+
 ----
 ## Throughput
 
