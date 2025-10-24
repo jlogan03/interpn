@@ -25,7 +25,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install
-      run: uv sync --extra test --extra bench
+      run: uv sync --locked --extra test --extra bench
       
     - name: Format
       run: |
@@ -57,7 +57,7 @@ jobs:
 
     - name: Install
       run: |
-        uv sync --no-editable --extra test --extra bench
+        uv sync --locked --no-editable --extra test --extra bench
         rustup component add llvm-tools-preview
 
     - name: Profile-Guided Optimization (PGO)
