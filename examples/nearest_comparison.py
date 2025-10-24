@@ -78,7 +78,7 @@ if __name__ == "__main__":
     ]
 
     extent = [x_eval.min(), x_eval.max(), y_eval.min(), y_eval.max()]
-    for ax, (data, title) in zip(axes, plots):
+    for ax, (data, title) in zip(axes, plots, strict=True):
         im = ax.imshow(
             data.T,
             origin="lower",
