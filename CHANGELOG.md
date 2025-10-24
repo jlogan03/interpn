@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.0 2025-10-25
+
+Implement `interpn` convenience function that defers directly
+to `raw` functions without serializable wrapper classes.
+
+This enables use without pydantic for dep-constrained environments.
+
+Contributions
+* [Clément Robert](https://github.com/neutrinoceros)
+  * #40
+  * #41
+  * #42
+  * #44
+  * #45
+  * #46
+
+### Added
+
+* Python
+  * Add type stubs for `raw` module
+  * Add `interpn` function that defers directly to `raw` functions without serializable wrapper classes
+
+### Changed
+
+* Python
+  * !Move pydantic dep to `serde` optional group
+  * !Move optional dev dep groups to dependency groups (no longer installable via `.[dep]` syntax)
+  * !Import serializable wrapper classes into top level module only if pydantic is found
+  * !Drop support for python 3.9, which is leaving long-term support soon
+  * Update PGO profile data
+* Rust
+  * Use abi3-py310 for python bindings
+
 ## 0.6.4 2025-10-24
 
 Implement N-dimensional nearest-neighbor interpolation on regular and rectilinear grids.

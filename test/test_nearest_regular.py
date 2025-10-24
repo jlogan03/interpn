@@ -21,6 +21,7 @@ def test_nearest_regular():
         dims = [x.size, y.size]
         starts = np.array([x[0], y[0]]).astype(dtype)
         steps = np.array([x[1] - x[0], y[1] - y[0]]).astype(dtype)
+        grids = [x, y]
 
         obs = [
             np.array([0.1, 1.6, 2.9, 5.0], dtype=dtype),
@@ -58,6 +59,14 @@ def test_nearest_regular():
             expected.append(zgrid[ix, iy])
         expected = np.array(expected, dtype=dtype)
         np.testing.assert_array_equal(out, expected)
+
+        out_helper = interpn.interpn(
+            obs=obs,
+            grids=grids,
+            vals=zgrid.flatten(),
+            method="nearest",
+        )
+        np.testing.assert_array_equal(out_helper, expected)
 
         interpolator = interpn.NearestRegular.new(dims, starts, steps, zgrid.flatten())
         out2 = interpolator.eval(obs)

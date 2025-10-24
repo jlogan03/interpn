@@ -14,6 +14,7 @@ def test_multicubic_regular():
         dims = [x.size, y.size]
         starts = np.array([x[0], y[0]]).astype(dtype)
         steps = np.array([x[1] - x[0], y[1] - y[0]]).astype(dtype)
+        grids = [x, y]
 
         # Observation points
         obs = [xgrid.flatten().astype(dtype), ygrid.flatten().astype(dtype)]
@@ -47,6 +48,16 @@ def test_multicubic_regular():
         zf = zgrid.flatten()
         for i in range(out.size):
             assert approx(out[i], zf[i], dtype(tol))
+
+        out_helper = interpn.interpn(
+            obs=obs,
+            grids=grids,
+            vals=zgrid.flatten(),
+            method="cubic",
+            linearize_extrapolation=False,
+        )
+        for i in range(out_helper.size):
+            assert approx(out_helper[i], zf[i], dtype(tol))
 
         # Do interpolation using class
         interpolator = interpn.MulticubicRegular.new(
