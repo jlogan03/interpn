@@ -48,7 +48,7 @@ def test_nearest_regular():
             )
 
         expected = []
-        for xi, yi in zip(obs[0], obs[1]):
+        for xi, yi in zip(obs[0], obs[1], strict=True):
             ix = _nearest_regular_index(
                 float(xi), float(starts[0]), float(steps[0]), dims[0]
             )

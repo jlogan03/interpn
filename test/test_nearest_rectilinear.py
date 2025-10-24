@@ -42,7 +42,7 @@ def test_nearest_rectilinear():
             )
 
         expected = []
-        for xi, yi in zip(obs[0], obs[1]):
+        for xi, yi in zip(obs[0], obs[1], strict=True):
             ix = _nearest_rectilinear_index(float(xi), grids[0])
             iy = _nearest_rectilinear_index(float(yi), grids[1])
             expected.append(zgrid[ix, iy])
