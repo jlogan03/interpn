@@ -18,6 +18,7 @@ effective when examining small numbers of observation points. See the
 
 | Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization |
 |-----------------------------------|-----------------|---------------------|-----------------------|
+| Nearest-Neighbor                  |   ✅            |     ✅              | ✅                    |
 | Linear                            |   ✅            |     ✅              | ✅                    |
 | Cubic                             |   ✅            |     ✅              | ✅                    |
 
@@ -42,9 +43,9 @@ pip install interpn
 
 ## Profile-Guided Optimization
 
-To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/pgo_install.sh`.
-You can also generate your own PGO profiles like `sh ./scripts/pgo_profile.sh`.
-after installing these extra compiler dependencies:
+To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/distr_pgo_install.sh`.
+You can also generate your own PGO profiles like `sh ./scripts/distr_pgo_profile.sh`.
+after installing this extra compiler dependency:
 
 ```bash
 rustup component add llvm-tools-preview

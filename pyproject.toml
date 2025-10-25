@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.6.4"
+version = "0.7.0"
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
 readme = "README.md"
@@ -18,7 +18,6 @@ classifiers = [
 ]
 dependencies = [
     "numpy >= 1.21.2",
-    "pydantic >= 2.2.0",
 ]
 
 [project.urls]
@@ -27,11 +26,14 @@ documentation = "https://interpn.readthedocs.io/"
 changelog = "https://github.com/jlogan03/interpn/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+pydantic = ["pydantic >= 2.2.0"]
+
+[dependency-groups]
 test = [
     "pytest >= 8.4.2",
     "pytest-cov >= 7.0.0",
     "ruff >= 0.13.3",
-    "pyright == 1.1.337",
+    "pyright == 1.1.407",
     "mktestdocs >= 0.2.1",
     "scipy >= 1.11.4",
     "matplotlib >= 3.8",

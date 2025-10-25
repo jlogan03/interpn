@@ -49,6 +49,14 @@ def test_nearest_rectilinear():
         expected = np.array(expected, dtype=dtype)
         np.testing.assert_array_equal(out, expected)
 
+        out_helper = interpn.interpn(
+            obs=obs,
+            grids=grids,
+            vals=zgrid.flatten(),
+            method="nearest",
+        )
+        np.testing.assert_array_equal(out_helper, expected)
+
         interpolator = interpn.NearestRectilinear.new(grids, zgrid.flatten())
         out2 = interpolator.eval(obs)
         np.testing.assert_array_equal(out2, expected)

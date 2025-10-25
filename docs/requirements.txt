@@ -1,1 +1,1 @@
--e .[doc]
+-e .[pydantic] --group doc

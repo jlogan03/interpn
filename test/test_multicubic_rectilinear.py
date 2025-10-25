@@ -42,6 +42,16 @@ def test_multilinear_rectilinear():
         for i in range(out.size):
             assert out[i] == zf[i]
 
+        out_helper = interpn.interpn(
+            obs=obs,
+            grids=grids,
+            vals=zgrid.flatten(),
+            method="cubic",
+            linearize_extrapolation=False,
+        )
+        for i in range(out_helper.size):
+            assert out_helper[i] == zf[i]
+
         # Do interpolation using class
         interpolator = interpn.MulticubicRectilinear.new(grids, zgrid.flatten())
         out2 = interpolator.eval(obs)
