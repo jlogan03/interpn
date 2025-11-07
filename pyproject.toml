@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.7.0"
+version = "0.8.0"
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
 readme = "README.md"
@@ -30,17 +30,19 @@ pydantic = ["pydantic >= 2.2.0"]
 
 [dependency-groups]
 test = [
-    "pytest >= 8.4.2",
+    "pytest >= 9",
     "pytest-cov >= 7.0.0",
     "ruff >= 0.13.3",
     "pyright == 1.1.407",
-    "mktestdocs >= 0.2.1",
+    "mktestdocs == 0.2.1",
     "scipy >= 1.11.4",
-    "matplotlib >= 3.8",
+    "kaleido==0.2.1",
+    "plotly>=5,<6",
 ]
 bench = [
     "scipy >= 1.11.4",
-    "matplotlib >= 3.8",
+    "kaleido==0.2.1",
+    "plotly>=5,<6",
     "memory_profiler >= 0.61.0",
 ]
 doc = [
@@ -62,7 +64,6 @@ no-build-package = [
     "numpy",
     "pydantic-core",
     "scipy",
-    "matplotlib",
     "coverage",
     "ruff",
 ]

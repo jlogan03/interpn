@@ -10,7 +10,7 @@
 # the code, separate profiles would be beneficial, but no such cfg directives are used here.
 
 # Dependencies
-# * Get llvm-profdata from `apt install llvm-20`
+# * Get llvm-profdata from `apt install llvm-21`
 #   * Must match rust's llvm version or it will crash
 # * rustup component add llvm-tools-preview
 #   * Provides PGO profile generation functionality

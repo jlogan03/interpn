@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.0 2025-11-08
+
+Support ndarray inputs for python interpn function, require kwargs for most inputs,
+and use numpy's internal borrowchecking interface.
+
+### Changed
+
+* Rust
+  * Use numpy borrowchecking system in python interface
+  * Update deps
+* Python
+  * !Require kwargs for most inputs to interpn function
+  * Support ndarray inputs and outputs by flattening and reshaping arrays internally
+  * Use plotly instead of matplotlib in examples and benchmarks
+  * Use PGO for linux builds only, as other platforms will need their own profiles
+    * While PGO profiles _could_ be cross-platform portable because they use instrumentation inserted at the
+      LLVM IR level, in practice, the function hashes come out different, causing the counts not to be mapped
+      correctly
+    * Later, we may be able to resolve this by using QEMU to run the PGO builds on each platform or by uploading
+      pgo profiles for individual platform runners as build artifacts
+
 ## 0.7.0 2025-10-25
 
 Implement `interpn` convenience function that defers directly

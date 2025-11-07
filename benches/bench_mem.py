@@ -9,7 +9,8 @@ from memory_profiler import memory_usage
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from interpn import (
     MultilinearRectilinear,
@@ -33,8 +34,8 @@ def bench_eval_mem_vs_dims():
         "InterpN NearestRectilinear": [],
     }
     ndims_to_test = [x for x in range(1, 9)]
+    nobs = 10000
     for ndims in ndims_to_test:
-        nobs = 10000
         ngrid = 4  # Size of grid on each dimension
 
         grids = [np.linspace(-1.0, 1.0, ngrid) for _ in range(ndims)]
@@ -110,39 +111,118 @@ def bench_eval_mem_vs_dims():
             "InterpN MulticubicRectilinear": "Cubic",
         }
 
-    linestyles = ["dotted", "-", "--", "-.", (0, (3, 1, 1, 1, 1, 1))]
-    alpha = [0.5, 1.0, 1.0, 1.0, 1.0]
-
-    _fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
-    plt.suptitle(
-        f"Interpolation on 4x...x4 N-Dimensional Grid\n{nobs} Observation Points"
+    dash_styles = ["dot", "solid", "dash", "dashdot", "longdashdot"]
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        shared_yaxes=True,
+        subplot_titles=["Linear", "Cubic"],
+        horizontal_spacing=0.08,
     )
-    for i, kind in enumerate(["Linear", "Cubic"]):
-        plt.sca(axes[i])
-        usages_this_kind = [(k, v) for k, v in usages.items() if kinds[k] == kind]
-        for i, (k, v) in enumerate(usages_this_kind):
-            # The memory profiler captures some things not actually involved
-            # in the function evaluation, which gives both methods a floor of
-            # about 100MB
-            plt.semilogy(
-                ndims_to_test,
-                v,
-                color="k",
-                linewidth=2,
-                linestyle=linestyles[i],
-                label=k,
-                alpha=alpha[i],
-            )
-        plt.legend()
-        plt.xlabel("Number of Dimensions")
-        plt.ylabel("Peak Memory Usage [MB]")
-        plt.title(kind)
 
-    plt.tight_layout()
-    plt.savefig(Path(__file__).parent / "../docs/ram_vs_dims.svg")
-    plt.show(block=False)
+    for col, kind in enumerate(["Linear", "Cubic"], start=1):
+        usages_this_kind = [(k, v) for k, v in usages.items() if kinds[k] == kind]
+        if not usages_this_kind:
+            continue
+        for idx, (label, values) in enumerate(usages_this_kind):
+            fig.add_trace(
+                go.Scatter(
+                    x=ndims_to_test[: len(values)],
+                    y=values,
+                    mode="lines+markers",
+                    line=dict(
+                        color="black",
+                        width=2,
+                        dash=dash_styles[idx % len(dash_styles)],
+                    ),
+                    opacity=0.5 if idx == 0 else 1.0,
+                    name=label,
+                    showlegend=col == 1,
+                ),
+                row=1,
+                col=col,
+            )
+
+    fig.update_yaxes(
+        type="log",
+        title_text="Peak Memory Usage [MB]",
+        row=1,
+        col=1,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_yaxes(
+        type="log",
+        row=1,
+        col=2,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_xaxes(
+        title_text="Number of Dimensions",
+        row=1,
+        col=1,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_xaxes(
+        title_text="Number of Dimensions",
+        row=1,
+        col=2,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_layout(
+        title=dict(
+            text=f"Interpolation on 4x...x4 N-Dimensional Grid — {nobs} Observation Points",
+            y=0.97,
+            yanchor="top",
+        ),
+        height=450,
+        margin=dict(t=80, l=60, r=200, b=90),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            x=1.02,
+            xanchor="left",
+        ),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="black"),
+    )
+
+    output_path = Path(__file__).parent / "../docs/ram_vs_dims.svg"
+    fig.write_image(str(output_path))
+    fig.write_html(
+        str(output_path.with_suffix(".html")), include_plotlyjs="cdn", full_html=False
+    )
+    fig.show()
 
 
 if __name__ == "__main__":
     bench_eval_mem_vs_dims()
-    plt.show(block=True)
