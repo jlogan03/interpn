@@ -15,7 +15,7 @@ jobs:
   test_python:
     uses: ./.github/workflows/test-python.yml
 
-  linux:
+  linux_pgo:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -25,15 +25,80 @@ jobs:
           # Exclude 32-bit linux due to OOM issues during compilation & no demand
           # - runner: ubuntu-22.04
           #   target: x86
-          - runner: ubuntu-22.04
+          - runner: ubuntu-22.04-arm
             target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          architecture: ${{ matrix.platform.target }}
+
+      - name: Install LLVM
+        run: bash ./scripts/install_llvm.sh
+
+      - name: Clear profiles
+        run: rm -rf ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles/pgo.profraw
+
+      - name: Instrumented build
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo.profraw"
+          manylinux: auto
+
+      - name: Install instrumented
+        run: |
+          # Need recent pip for dep groups
+          python -m pip install -U pip
+
+          # Try each wheel until we find the right one
+          for whl in $(find dist/ -type f -name '*.whl'); do
+            echo "Trying $whl"
+            if ! python -m pip install "$whl"[pydantic] --group test; then
+              echo "Failed to install $whl"
+            else
+              echo "Installed $whl"
+              break
+            fi
+          done
+
+      - name: Instrumented profile workload
+        run: |
+          # Run profile workload
+          LLVM_PROFILE_FILE=scripts/pgo-profiles/pgo.profraw/pgo-%p-%m.profraw python ./scripts/profile_workload.py
+
+          # Remove instrumented wheel
+          rm -rf ./dist/
+
+          # Merge profiles
+          PROFILES=$(find scripts/pgo-profiles/pgo.profraw -name '*.profraw')
+          echo "Profiles to merge: $PROFILES"
+          /usr/lib/llvm-21/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo.profdata $PROFILES
+
+      - name: Build wheels optimized
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
+          manylinux: auto
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}-${{ matrix.python-version }}
+          path: dist
+
+  linux_cross:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
           - runner: ubuntu-22.04
             target: armv7
           - runner: ubuntu-22.04
             target: s390x
           - runner: ubuntu-22.04
             target: ppc64le
-        python-version: ["3.13"]  # Using stable abi3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,9 +106,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
-          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          args: --release --out dist --find-interpreter
           manylinux: auto
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -63,7 +128,6 @@ jobs:
             target: aarch64
           - runner: ubuntu-22.04
             target: armv7
-        python-version: ["3.13"]  # Using stable abi3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,9 +135,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          # PGO profile specified in maturin args because passing rustflags wipes out x86_64 instruction sets
-          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
-          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          args: --release --out dist --find-interpreter --verbose
+
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -81,16 +144,88 @@ jobs:
           name: wheels-musllinux-${{ matrix.platform.target }}-${{ matrix.python-version }}
           path: dist
 
-  windows:
+  windows_pgo:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
           - runner: windows-latest
             target: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install Rust and Python separate from maturin and uv actions
+      # to try to avoid ending up with one or the other end up with
+      # the 32-bit version
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install LLVM
+        run: choco install llvm --version="21.1.0" -y; llvm-profdata --version
+
+      - name: Clear profiles
+        shell: bash
+        run: rm -rf ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles/pgo.profraw
+
+      - name: Instrumented build
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo.profraw"
+
+      - name: Install instrumented
+        shell: bash
+        run: |
+          # Need recent pip for dep groups
+          python -m pip install -U pip
+
+          # Try each wheel until we find the right one
+          for whl in $(find dist/ -type f -name '*.whl'); do
+            echo "Trying $whl"
+            if ! python -m pip install "$whl"[pydantic] --group test; then
+              echo "Failed to install $whl"
+            else
+              echo "Installed $whl"
+              break
+            fi
+          done
+
+      - name: Instrumented profile workload
+        shell: bash
+        run: |
+          # Run profile workload
+          LLVM_PROFILE_FILE=scripts/pgo-profiles/pgo.profraw/pgo-%p-%m.profraw python ./scripts/profile_workload.py
+
+          # Remove instrumented wheel
+          rm -rf ./dist/
+
+          # Merge profiles
+          PROFILES=$(find scripts/pgo-profiles/pgo.profraw -name '*.profraw')
+          echo "Profiles to merge: $PROFILES"
+          llvm-profdata merge -o scripts/pgo-profiles/pgo.profdata $PROFILES
+
+      - name: Build wheels optimized
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.platform.target }}-${{ matrix.python-version }}
+          path: dist
+
+  windows_cross:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
           - runner: windows-latest
             target: x86
-        python-version: ["3.13"]  # Using stable abi3
     steps:
       - uses: actions/checkout@v4
 
@@ -102,38 +237,83 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           architecture: ${{ matrix.platform.target }}
-          python-version: ${{ matrix.python-version }}
+
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --verbose #-- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
-          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          args: --release --out dist --verbose
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.platform.target }}-${{ matrix.python-version }}
           path: dist
 
-  macos:
+  macos_pgo:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
           - runner: macos-15-intel
             target: x86_64
-          - runner: macos-14
+            # macos-15 runner is arm64
+          - runner: macos-15
             target: aarch64
-        python-version: ["3.13"]  # Using stable abi3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-      - name: Build wheels
+        with:
+          python-version: "3.12"
+
+      - name: Install LLVM
+        run: bash ./scripts/install_llvm.sh
+
+      - name: Clear profiles
+        run: rm -rf ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles/pgo.profraw
+
+      - name: Instrumented build
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter --verbose #-- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
-          # sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo.profraw"
+
+      - name: Install instrumented
+        run: |
+          # Need recent pip for dep groups
+          pip install -U pip
+
+          # Try each wheel until we find the right one
+          for whl in $(find dist/ -type f -name '*.whl'); do
+            echo "Trying $whl"
+            if ! python -m pip install "$whl"[pydantic] --group test; then
+              echo "Failed to install $whl"
+            else
+              echo "Installed $whl"
+              break
+            fi
+          done
+
+      - name: Instrumented profile workload
+        run: |
+          # Run profile workload
+          LLVM_PROFILE_FILE=scripts/pgo-profiles/pgo.profraw/pgo-%p-%m.profraw python ./scripts/profile_workload.py
+
+          # Remove instrumented wheel
+          rm -rf ./dist/
+
+          # Merge profiles
+          PROFILES=$(find scripts/pgo-profiles/pgo.profraw -name '*.profraw')
+          echo "Profiles to merge: $PROFILES"
+          $(brew --prefix llvm@21)/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo.profdata $PROFILES
+
+      - name: Build wheels optimized
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --verbose -- "-Cprofile-use=${{github.workspace}}/scripts/pgo-profiles/pgo.profdata" "-Cllvm-args=-pgo-warn-missing-function"
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -159,7 +339,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     # if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: [test_python, linux, musllinux, windows, macos, sdist]
+    needs: [test_python, linux_pgo, linux_cross, musllinux, windows_pgo, windows_cross, macos_pgo, sdist]
     permissions:
       # Use to sign the release artifacts
       id-token: write

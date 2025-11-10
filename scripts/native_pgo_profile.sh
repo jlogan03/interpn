@@ -8,6 +8,9 @@ cargo clean
 uv cache clean
 uv run --no-sync maturin develop .[pydantic] --release --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo_native.profraw" "-Ctarget-cpu=native"
 
+# Clear existing profiles
+rm -rf ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles/pgo.profraw
+
 # Run profile
 uv run --no-sync ./scripts/profile_workload.py
 

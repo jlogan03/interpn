@@ -54,7 +54,7 @@ jobs:
           # - runner: ubuntu-latest
           - runner: ubuntu-24.04-arm  # aarch64
           - runner: macos-15-intel  # x86_64
-          - runner: macos-14  # aarch64
+          - runner: macos-15  # aarch64
     steps:
     - uses: actions/checkout@v3
     - name: Install uv
@@ -88,7 +88,7 @@ jobs:
     - name: Profile-Guided Optimization (PGO)
       shell: bash
       run: |
-        sh ./scripts/distr_pgo_install.sh
+        sh ./scripts/distr_pgo.sh
 
     - name: Test (with PGO)
       run: |

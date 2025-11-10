@@ -13,6 +13,9 @@ UV_NO_BUILD_CACHE=1 uv run --no-sync maturin build --compatibility pypi --out di
 # Install instrumented wheel
 uv pip install $(find dist/ -name '*.whl')[pydantic] --group test --group bench --reinstall
 
+# Clear existing profiles
+rm -rf ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles; mkdir ./scripts/pgo-profiles/pgo.profraw
+
 # Run reference workload to generate profile
 uv run --no-sync ./scripts/profile_workload.py
 
