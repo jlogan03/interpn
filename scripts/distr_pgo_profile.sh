@@ -17,4 +17,4 @@ uv pip install $(find dist/ -name '*.whl')[pydantic] --group test --group bench 
 uv run --no-sync ./scripts/profile_workload.py
 
 # Merge profiles
-/usr/lib/llvm-20/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo.profdata $(find scripts/pgo-profiles/pgo.profraw -name '*.profraw')
+/usr/lib/llvm-21/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo.profdata $(find scripts/pgo-profiles/pgo.profraw -name '*.profraw')

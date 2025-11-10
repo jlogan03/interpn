@@ -7,7 +7,7 @@
 # native-optimized install differs slightly from the distribution-optimized install.
 
 # Dependencies
-# * Get llvm-profdata from `apt install llvm-20`
+# * Get llvm-profdata from `apt install llvm-21`
 #   * Must match rust's llvm version or it will crash
 # * rustup component add llvm-tools-preview
 #   * Provides PGO profile generation functionality

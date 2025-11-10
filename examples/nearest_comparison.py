@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from interpn import NearestRectilinear
 
@@ -35,6 +36,30 @@ def _build_rectilinear_grid(
     coords = (coords - coords[0]) * scale + start
     coords[-1] = stop
     return coords
+
+
+def _add_grid_outline(
+    fig: go.Figure,
+    row: int,
+    col: int,
+    xrange: tuple[float, float],
+    yrange: tuple[float, float],
+) -> None:
+    fig.add_shape(
+        type="rect",
+        x0=xrange[0],
+        x1=xrange[1],
+        y0=yrange[0],
+        y1=yrange[1],
+        line=dict(color="white"),
+        row=row,
+        col=col,
+    )
+
+
+def _axis_name(prefix: str, row: int, col: int, ncols: int) -> str:
+    idx = (row - 1) * ncols + col
+    return prefix if idx == 1 else f"{prefix}{idx}"
 
 
 if __name__ == "__main__":
@@ -61,60 +86,127 @@ if __name__ == "__main__":
         points, zmesh.flatten(), (x_eval_mesh, y_eval_mesh), method="nearest"
     )
 
-    fig, axes = plt.subplots(2, 3, figsize=(12, 7))
-    axes = axes.flatten()
-    plt.suptitle(
-        "Nearest-Neighbor Quality of Fit\nInterpN vs. SciPy griddata (nearest)",
-        fontsize=14,
-    )
-
     plots = [
-        (z_truth, "Truth"),
-        (interpn_vals, "InterpN NearestRectilinear"),
-        (griddata_vals, "SciPy griddata (nearest)"),
-        (interpn_vals - z_truth, "Error: InterpN"),
-        (griddata_vals - z_truth, "Error: SciPy"),
-        (griddata_vals - interpn_vals, "SciPy - InterpN"),
+        (z_truth, "Truth", False),
+        (interpn_vals, "InterpN", False),
+        (griddata_vals, "SciPy", False),
+        (interpn_vals - z_truth, "Error: InterpN", True),
+        (griddata_vals - z_truth, "Error: SciPy", True),
+        (griddata_vals - interpn_vals, "SciPy - InterpN", True),
     ]
 
-    extent = [x_eval.min(), x_eval.max(), y_eval.min(), y_eval.max()]
-    for ax, (data, title) in zip(axes, plots, strict=True):
-        im = ax.imshow(
-            data.T,
-            origin="lower",
-            extent=extent,
-            aspect="auto",
+    fig = make_subplots(
+        rows=2,
+        cols=3,
+        subplot_titles=[title for _, title, _ in plots],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.16,
+    )
+
+    for idx, (data, title, is_error) in enumerate(plots, start=1):
+        row = 1 if idx <= 3 else 2
+        col = idx - 3 if idx > 3 else idx
+        coloraxis = "coloraxis2" if is_error else "coloraxis1"
+        showscale = (row == 1 and col == 3) or (row == 2 and col == 3)
+        fig.add_trace(
+            go.Heatmap(
+                x=x_eval,
+                y=y_eval,
+                z=data.T,
+                coloraxis=coloraxis,
+                showscale=showscale,
+                name=title,
+            ),
+            row=row,
+            col=col,
         )
-        ax.set_title(title, fontsize=11)
-        ax.scatter(
-            xmesh.flatten(),
-            ymesh.flatten(),
-            s=4,
-            c="k",
-            alpha=0.6,
-            label="Data",
+        fig.add_trace(
+            go.Scatter(
+                x=xmesh.flatten(),
+                y=ymesh.flatten(),
+                mode="markers",
+                marker=dict(color="white", size=4, line=dict(color="black", width=0.5)),
+                name="Grid samples",
+                legendgroup="samples",
+                showlegend=idx == 1,
+            ),
+            row=row,
+            col=col,
         )
-        ax.add_patch(
-            plt.Rectangle(
-                (xdata[0], ydata[0]),
-                xdata[-1] - xdata[0],
-                ydata[-1] - ydata[0],
-                edgecolor="white",
-                linewidth=1.0,
-                fill=False,
-                label="Grid extent",
+        _add_grid_outline(
+            fig, row, col, xrange=(xdata[0], xdata[-1]), yrange=(ydata[0], ydata[-1])
+        )
+
+    for row in (1, 2):
+        for col in (1, 2, 3):
+            fig.update_xaxes(
+                showticklabels=False,
+                title_text="",
+                showgrid=False,
+                zeroline=False,
+                row=row,
+                col=col,
+                showline=False,
             )
-        )
-        ax.legend(loc="lower right", fontsize=7, facecolor="white", framealpha=0.8)
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            fig.update_yaxes(
+                showticklabels=False,
+                title_text="",
+                showgrid=False,
+                zeroline=False,
+                row=row,
+                col=col,
+                showline=False,
+            )
 
-    for ax in axes:
-        ax.set_xlim(extent[0], extent[1])
-        ax.set_ylim(extent[2], extent[3])
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
+    fig.update_layout(
+        title=dict(
+            text="Nearest-Neighbor Quality of Fit —"
+            " InterpN vs. SciPy griddata (nearest)",
+            y=0.97,
+            yanchor="top",
+        ),
+        height=500,
+        margin=dict(t=70, l=60, r=80, b=80),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.18,
+            x=0.0,
+            xanchor="left",
+        ),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        coloraxis1=dict(
+            colorscale=[
+                [0.0, "#ffffff"],
+                [1.0, "#000000"],
+            ],
+            colorbar=dict(len=0.55, x=1.2, y=0.78),
+        ),
+        coloraxis2=dict(
+            colorscale=[
+                [0.0, "#000000"],
+                [0.5, "#ffffff"],
+                [1.0, "#000000"],
+            ],
+            cmid=0.0,
+            colorbar=dict(len=0.55, x=1.2, y=0.25),
+        ),
+        font=dict(color="black"),
+    )
+    for row in (1, 2):
+        for col in (1, 2, 3):
+            x_name = _axis_name("x", row, col, 3)
+            fig.update_yaxes(
+                scaleanchor=x_name,
+                scaleratio=1,
+                row=row,
+                col=col,
+            )
 
-    fig.tight_layout()
-    fig.show()
     output_path = Path(__file__).parent / "../docs/nearest_quality_of_fit.svg"
-    fig.savefig(output_path)
+    fig.write_image(str(output_path))
+    fig.write_html(
+        str(output_path.with_suffix(".html")), include_plotlyjs="cdn", full_html=False
+    )
+    fig.show()

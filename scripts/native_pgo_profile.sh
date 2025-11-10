@@ -6,10 +6,10 @@
 # Build instrumented
 cargo clean
 uv cache clean
-uv run --no-sync maturin develop --release --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo_native.profraw" "-Ctarget-cpu=native"
+uv run --no-sync maturin develop .[pydantic] --release --verbose -- "-Cprofile-generate=${PWD}/scripts/pgo-profiles/pgo_native.profraw" "-Ctarget-cpu=native"
 
 # Run profile
 uv run --no-sync ./scripts/profile_workload.py
 
 # Merge profiles
-/usr/lib/llvm-20/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo_native.profdata $(find scripts/pgo-profiles/pgo_native.profraw -name '*.profraw')
+/usr/lib/llvm-21/bin/llvm-profdata merge -o scripts/pgo-profiles/pgo_native.profdata $(find scripts/pgo-profiles/pgo_native.profraw -name '*.profraw')

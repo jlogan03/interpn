@@ -32,7 +32,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install
-      run: uv sync --extra pydantic --group test --group bench ${{ matrix.sync-args }}
+      run: uv sync --extra pydantic --group test ${{ matrix.sync-args }}
       
     - name: Format
       run: |
@@ -45,16 +45,34 @@ jobs:
     - name: Test (without PGO)
       run: uv run --no-sync pytest
 
+  test_platforms:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          # - runner: windows-latest
+          # - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm  # aarch64
+          - runner: macos-15-intel  # x86_64
+          - runner: macos-14  # aarch64
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: "3.10"
+
+    - name: Test
+      run: |
+        uv sync --locked --no-editable --extra pydantic --group test --group bench
+        uv run --no-sync pytest .
+
   test_pgo:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
-          - runner: windows-latest
           - runner: ubuntu-latest
-          - runner: ubuntu-24.04-arm  # aarch64
-          - runner: macos-15-intel  # x86_64
-          - runner: macos-14  # aarch64
     steps:
     - uses: actions/checkout@v3
     - name: Install uv

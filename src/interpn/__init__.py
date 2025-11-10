@@ -49,6 +49,7 @@ def interpn(
     obs: Sequence[NDArray],
     grids: Sequence[NDArray],
     vals: NDArray,
+    *,
     method: Literal["linear", "cubic", "nearest"] = "linear",
     out: NDArray | None = None,
     linearize_extrapolation: bool = True,
@@ -83,6 +84,13 @@ def interpn(
     """
     # Allocate for the output if it is not supplied
     out = out or np.zeros_like(obs[0])
+    outshape = out.shape
+    out = out.ravel()  # Flat view without reallocating
+
+    # Ensure contiguous and flat, reallocating only if necessary
+    obs = [np.ascontiguousarray(x.ravel()) for x in obs]
+    grids = [np.ascontiguousarray(x.ravel()) for x in grids]
+    vals = np.ascontiguousarray(vals.ravel())
 
     # Check data type
     dtype = vals.dtype
@@ -102,10 +110,6 @@ def interpn(
         dims = np.empty((0,), dtype=int)
         starts = np.empty((0,), dtype=dtype)
         steps = starts
-
-    # Ensure contiguous, reallocating only if necessary
-    grids = [np.ascontiguousarray(grid) for grid in grids]
-    vals = np.ascontiguousarray(vals)
 
     # Check bounds
     if check_bounds:
@@ -187,7 +191,7 @@ def interpn(
                 f" {dtype}, {is_regular}, {method}"
             )
 
-    return out
+    return out.reshape(outshape)
 
 
 def _check_regular(grids: Sequence[NDArray]) -> bool:
