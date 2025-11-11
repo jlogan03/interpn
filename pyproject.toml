@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.8.0"
+version = "0.8.1"
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
 readme = "README.md"

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.1 2025-11-10
+
+### Added
+
+* Python
+  * Implement PGO for mac intel/aarch64, linux aarch64, and windows x64
+  * Add script for installing llvm on linux and mac to support PGO
+
+### Changed
+
+* Python
+  * Remove stored pgo profiles
+  * Update PGO scripts
+
 ## 0.8.0 2025-11-08
 
 Support ndarray inputs for python interpn function, require kwargs for most inputs,
