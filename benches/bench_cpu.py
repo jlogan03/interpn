@@ -469,7 +469,7 @@ def _plot_speedup_vs_dims(
                 yanchor="top",
             ),
             height=450,
-            margin=dict(t=60, l=60, r=200, b=90),
+            margin=dict(t=60, l=60, r=20, b=90),
             # legend=dict(
             #     orientation="v",
             #     yanchor="top",
