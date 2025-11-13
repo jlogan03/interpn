@@ -14,6 +14,7 @@ build:
     pre_build:
       # Rust 1.90 required but not available yet
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.90.0
+      - pip install -U pip
 
 mkdocs:
   configuration: mkdocs.yml
