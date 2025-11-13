@@ -221,7 +221,7 @@ checksum = "b248f5224d1d606005e02c97f5aa4e88eeb230488bcc03bc9ca4d7991399f2b5"
 
 [[package]]
 name = "interpn"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "criterion",
  "crunchy",

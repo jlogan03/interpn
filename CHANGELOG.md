@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2 2025-11-12
+
+### Changed
+
+* Use `x86-64-v3` reference CPU as compilation target instead of manually specifying features
+  * Includes AVX2 and vector FMA
+
 ## 0.8.1 2025-11-10
 
 ### Added
