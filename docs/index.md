@@ -26,7 +26,13 @@ The methods provided here, while more limited in scope than scipy's,
 * can also be used easily in web and embedded applications via the Rust library
 * are permissively licensed
 
-![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
+--8<--
+docs/speedup_vs_dims_1_obs_linear.html
+--8<--
+
+--8<--
+docs/speedup_vs_dims_1_obs_cubic.html
+--8<--
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 

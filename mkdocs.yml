@@ -25,14 +25,20 @@ theme:
   features:
     - search.suggest
     - search.highlight
+
 plugins:
 - mkdocstrings
 - search
+
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
   - pymdownx.superfences
+
+extra_css:
+  - stylesheets/extra.css
