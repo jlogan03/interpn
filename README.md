@@ -1,5 +1,11 @@
 # InterpN
 
+<style type="text/css">
+    svg { filter: invert(100%) hue-rotate(180deg); background-color: transparent !important; }
+    image { filter: invert(100%) hue-rotate(180deg) saturate(1.25); }
+</style>
+
+[Writeup](https://jlogan.dev/blog/#2025-11-10-interpn-fast-interpolation) |
 [Repo](https://github.com/jlogan03/interpn) |
 [Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
 [Rust Docs](https://docs.rs/interpn/latest/interpn/)
@@ -8,11 +14,6 @@ N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatibl
 prioritizing correctness, performance, and compatiblity with memory-constrained environments.
 
 Available as a rust crate and python library.
-
-These methods perform zero allocation when evaluated (except, optionally, for the output).
-Because of this, they have minimal per-call overhead, and are particularly
-effective when examining small numbers of observation points. See the
-[performance](https://interpnpy.readthedocs.io/en/latest/perf/) page for detailed benchmarks.
 
 ## Features
 
@@ -28,10 +29,12 @@ The methods provided here, while more limited in scope than scipy's,
 * use almost no RAM (and perform no heap allocations at all)
 * produce significantly improved floating-point error (by several orders of magnitude)
 * are json-serializable using Pydantic
-* can also be used easily in web and embedded applications via the Rust library
+* can also be used easily in web, embedded and gpu applications via the Rust library
 * are permissively licensed
 
-![ND throughput 1000 obs](./docs/throughput_vs_dims_1000_obs.svg)
+<br>
+
+<img style="filter: invert(100%) hue-rotate(180deg)" src="./docs/speedup_vs_dims_1_obs_linear.svg" alt="">
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
@@ -43,8 +46,7 @@ pip install interpn
 
 ## Profile-Guided Optimization
 
-To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/distr_pgo_install.sh`.
-You can also generate your own PGO profiles like `sh ./scripts/distr_pgo_profile.sh`.
+To build the extension with profile-guided optimization, do `sh ./scripts/distr_pgo.sh`
 after installing this extra compiler dependency:
 
 ```bash
