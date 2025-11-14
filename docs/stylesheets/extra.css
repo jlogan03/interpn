@@ -1,5 +1,7 @@
 
-.plotly-graph-div {
-    filter: invert(100%) hue-rotate(180deg);
+@media (prefers-color-scheme: dark) {
+    .plotly-graph-div {
+        filter: invert(100%) hue-rotate(180deg);
+    }
 }
 

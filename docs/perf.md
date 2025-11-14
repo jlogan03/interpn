@@ -92,8 +92,3 @@ The linear methods all use roughly the same amount of RAM during evaluation. In 
 The memory profiler picks up a large amount of RAM that is not actually part of the function evaluation, but belongs to the outer process. As a result, all methods show a bogus memory usage floor of about 97MB.
 
 ![ND memory usage](./ram_vs_dims.svg)
-
-----
-## Profile-Guided Optimisation
-
-To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/distr_pgo_install.sh`. You can also generate your own PGO profiles like `sh ./scripts/distr_pgo_profile.sh`.
