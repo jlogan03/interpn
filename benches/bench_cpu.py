@@ -342,6 +342,7 @@ def _plot_throughput_vs_dims(
         ),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="black"),
     )
     fig.write_image(str(output_path))
     fig.write_html(
@@ -453,6 +454,7 @@ def _plot_speedup_vs_dims(
             # ),
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="black"),
         )
         output_path = output_dir / f"speedup_vs_dims_{nobs}_obs_{kind.lower()}.svg"
         fig.write_image(str(output_path))
