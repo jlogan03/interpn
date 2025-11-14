@@ -92,13 +92,7 @@ def _plot_normalized_vs_nobs(
     title: str,
     output_path: Path,
 ) -> None:
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        subplot_titles=["Linear", "Cubic"],
-        horizontal_spacing=0.08,
-    )
-    for row, kind in enumerate(["Linear", "Cubic"], start=1):
+    for kind in ["Linear", "Cubic"]:
         baseline_vals = throughputs.get(f"Scipy RegularGridInterpolator {kind}")
         if not baseline_vals:
             continue
@@ -108,7 +102,7 @@ def _plot_normalized_vs_nobs(
             for name, values in throughputs.items()
             if kinds.get(name) == kind and values
         ]
-
+        fig = make_subplots(rows=1, cols=1)
         for idx, (label, values) in enumerate(series):
             min_len = min(len(values), len(baseline_arr))
             if min_len == 0:
@@ -116,6 +110,12 @@ def _plot_normalized_vs_nobs(
             x_vals = np.array(ns[:min_len])
             ratios = values[:min_len] / baseline_arr[:min_len]
             is_baseline = label.startswith("Scipy RegularGridInterpolator")
+            legend_name = "Scipy" if is_baseline else "InterpN"
+            showlegend = True
+            for trace in fig.data:
+                if trace.name == legend_name:
+                    showlegend = False
+                    break
             fig.add_trace(
                 go.Scatter(
                     x=x_vals,
@@ -129,13 +129,9 @@ def _plot_normalized_vs_nobs(
                         size=8,
                     ),
                     opacity=1.0,
-                    name=label if not is_baseline else f"{label}<br>(baseline)",
-                    showlegend=True,
-                    legendgroup=kind,
-                    legendgrouptitle_text=kind,
-                ),
-                row=row,
-                col=1,
+                    name=legend_name,
+                    showlegend=showlegend,
+                )
             )
             if not is_baseline and label.startswith("InterpN"):
                 ones = np.ones_like(ratios)
@@ -146,81 +142,59 @@ def _plot_normalized_vs_nobs(
                     x=x_vals,
                     upper=upper,
                     lower=lower,
-                    row=row,
+                    row=1,
                     col=1,
                 )
-
-    fig.update_xaxes(
-        type="log",
-        row=1,
-        col=1,
-        showline=True,
-        linecolor="black",
-        linewidth=1,
-        mirror=True,
-        ticks="outside",
-        tickcolor="black",
-        showgrid=False,
-        zeroline=False,
-    )
-    fig.update_xaxes(
-        type="log",
-        title_text="Number of Observation Points",
-        row=2,
-        col=1,
-        showline=True,
-        linecolor="black",
-        linewidth=1,
-        mirror=True,
-        ticks="outside",
-        tickcolor="black",
-        showgrid=False,
-        zeroline=False,
-    )
-    fig.update_yaxes(
-        title_text="Speedup vs. Scipy",
-        row=1,
-        col=1,
-        showline=True,
-        linecolor="black",
-        linewidth=1,
-        mirror=True,
-        ticks="outside",
-        tickcolor="black",
-        showgrid=False,
-        zeroline=False,
-    )
-    fig.update_yaxes(
-        row=2,
-        col=1,
-        showline=True,
-        linecolor="black",
-        linewidth=1,
-        mirror=True,
-        ticks="outside",
-        tickcolor="black",
-        showgrid=False,
-        zeroline=False,
-    )
-    fig.update_layout(
-        title=dict(text=title, y=0.97, yanchor="top"),
-        height=450,
-        margin=dict(t=80, l=60, r=200, b=90),
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1.0,
-            x=1.02,
-            xanchor="left",
-        ),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-    )
-    fig.write_image(str(output_path))
-    fig.write_html(
-        str(output_path.with_suffix(".html")), include_plotlyjs="cdn", full_html=False
-    )
-    fig.show()
+        fig.update_xaxes(
+            type="log",
+            title_text="Number of Observation Points",
+            row=1,
+            col=1,
+            showline=True,
+            linecolor="black",
+            linewidth=1,
+            mirror=True,
+            ticks="outside",
+            tickcolor="black",
+            showgrid=False,
+            zeroline=False,
+        )
+        fig.update_yaxes(
+            title_text="Normalized Throughput",
+            row=1,
+            col=1,
+            showline=True,
+            linecolor="black",
+            linewidth=1,
+            mirror=True,
+            ticks="outside",
+            tickcolor="black",
+            showgrid=False,
+            zeroline=False,
+        )
+        fig.update_layout(
+            title=dict(text=f"{title}, {kind}", y=0.97, yanchor="top"),
+            height=400,
+            margin=dict(t=60, l=60, r=60, b=110),
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=1.0,
+                x=1.0,
+                xanchor="right",
+            ),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="black"),
+        )
+        per_kind_output = output_path.with_stem(output_path.stem + f"_{kind.lower()}")
+        fig.write_image(str(per_kind_output))
+        fig.write_html(
+            str(per_kind_output.with_suffix(".html")),
+            include_plotlyjs="cdn",
+            full_html=False,
+        )
+        fig.show()
 
 
 def _plot_throughput_vs_dims(

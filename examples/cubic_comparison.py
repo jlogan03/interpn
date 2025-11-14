@@ -126,14 +126,14 @@ if __name__ == "__main__":
                     mode="lines",
                     line=dict(color="black", width=2, dash="dot"),
                     opacity=0.7,
-                    name="SciPy",
+                    name="Scipy",
                     legendgroup="scipy",
-                    showlegend="SciPy" not in legend_tracker,
+                    showlegend="Scipy" not in legend_tracker,
                 ),
                 row=1,
                 col=col,
             )
-            legend_tracker.add("SciPy")
+            legend_tracker.add("Scipy")
 
             truth = fn(xinterp)
             fig_1d.add_trace(
@@ -157,14 +157,14 @@ if __name__ == "__main__":
                     mode="lines",
                     line=dict(color="black", width=2, dash="dot"),
                     opacity=0.7,
-                    name="SciPy Error",
+                    name="Scipy Error",
                     legendgroup="scipy_err",
-                    showlegend="SciPy Error" not in legend_tracker,
+                    showlegend="Scipy Error" not in legend_tracker,
                 ),
                 row=2,
                 col=col,
             )
-            legend_tracker.add("SciPy Error")
+            legend_tracker.add("Scipy Error")
 
         for col in range(1, 4):
             fig_1d.update_xaxes(title_text="x", row=2, col=col)
@@ -267,10 +267,10 @@ if __name__ == "__main__":
             subplot_titles=[
                 "Truth",
                 "InterpN",
-                "SciPy",
+                "Scipy",
                 "",
                 "Error, InterpN",
-                "Error, SciPy",
+                "Error, Scipy",
             ],
             horizontal_spacing=0.06,
             vertical_spacing=0.18,
@@ -281,7 +281,7 @@ if __name__ == "__main__":
             [
                 (zinterp, "Truth"),
                 (z_interpn, "InterpN"),
-                (z_sp, "SciPy"),
+                (z_sp, "Scipy"),
             ],
             start=1,
         ):
@@ -364,7 +364,7 @@ if __name__ == "__main__":
         for col, (z_data, name) in enumerate(
             [
                 (z_interpn - zinterp, "Error, InterpN"),
-                (z_sp - zinterp, "Error, SciPy"),
+                (z_sp - zinterp, "Error, Scipy"),
             ],
             start=2,
         ):

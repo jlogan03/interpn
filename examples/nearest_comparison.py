@@ -1,7 +1,7 @@
 """
 Generate a quality-of-fit comparison figure for nearest-neighbor interpolation.
 
-This script compares InterpN's nearest-neighbor interpolator against SciPy's
+This script compares InterpN's nearest-neighbor interpolator against Scipy's
 ``griddata`` with the ``nearest`` method on a slightly irregular rectilinear grid.
 The resulting SVG is saved into the ``docs`` directory.
 """
@@ -89,10 +89,10 @@ if __name__ == "__main__":
     plots = [
         (z_truth, "Truth", False),
         (interpn_vals, "InterpN", False),
-        (griddata_vals, "SciPy", False),
+        (griddata_vals, "Scipy", False),
         (interpn_vals - z_truth, "Error: InterpN", True),
-        (griddata_vals - z_truth, "Error: SciPy", True),
-        (griddata_vals - interpn_vals, "SciPy - InterpN", True),
+        (griddata_vals - z_truth, "Error: Scipy", True),
+        (griddata_vals - interpn_vals, "Scipy - InterpN", True),
     ]
 
     fig = make_subplots(
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     fig.update_layout(
         title=dict(
             text="Nearest-Neighbor Quality of Fit —"
-            " InterpN vs. SciPy griddata (nearest)",
+            " InterpN vs. Scipy griddata (nearest)",
             y=0.97,
             yanchor="top",
         ),

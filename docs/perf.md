@@ -10,16 +10,25 @@ The linear methods' quality of fit, being linear, is not very interesting.
 
 ### 1D Cubic Interpolation & Extrapolation
 InterpN shows significantly improvements in both numerical error and quality-of-fit, especially where sharp changes or strong higher derivatives are present. 
-![1D cubic quality of fit](./1d_quality_of_fit_Rectilinear.svg)
+
+--8<--
+docs/1d_quality_of_fit_Rectilinear.html
+--8<--
 
 ### 2D Cubic Interpolation & Extrapolation
 Both InterpN and Scipy methods can full capture a quadratic function in arbitrary dimensions, including under extrapolation. However, InterpN produces several orders of magnitude less floating point error, despite requiring significantly less run time.
-![2D cubic](./2d_quality_of_fit_Rectilinear.svg)
+
+--8<--
+docs/2d_quality_of_fit_Rectilinear.html
+--8<--
 
 ### 2D Nearest-Neighbor Interpolation & Extrapolation
 InterpN's regular- and rectilinear- grid nearest-neighbor methods match scipy griddata at all tested conditions.
 Midpoint tie-breaking is not guaranteed to match exactly.
-![2D nearest](./nearest_quality_of_fit.svg)
+
+--8<--
+docs/nearest_quality_of_fit.html
+--8<--
 
 ----
 ## Throughput
@@ -36,7 +45,10 @@ are shown to highlight that InterpN achieves parity even with specialized low-di
 despite not specifically handling low-dimensional special cases.
 
 #### 1000 Observation Points
-![ND throughput 1000 obs](./throughput_vs_dims_1000_obs.svg)
+
+--8<--
+docs/throughput_vs_dims_1000_obs.html
+--8<--
 
 #### 1 Observation Point
 For evaluating a single point at a time, the 1D-specialized `numpy.interp` is somewhat faster,
@@ -49,13 +61,24 @@ the interpolator object (which removes the timing effect of their initial linear
 performing a warmup that clears an appropriately-sized region of memory for allocation. This discrepancy
 also vanishes for higher numbers of observation points.
 
-![ND throughput 1 obs](./throughput_vs_dims_1_obs.svg)
+--8<--
+docs/speedup_vs_dims_1_obs_linear.html
+--8<--
 
+--8<--
+docs/speedup_vs_dims_1_obs_cubic.html
+--8<--
 
 ### 3D Throughput vs. Input Size
 Evaluating points in large batches is substantially faster than one-at-a-time for all tested methods.
 
-![3D linear throughput](./3d_throughput_vs_nobs.svg)
+--8<--
+docs/3d_throughput_vs_nobs_prealloc_linear.html
+--8<--
+
+--8<--
+docs/3d_throughput_vs_nobs_prealloc_cubic.html
+--8<--
 
 ----
 ## Memory Usage
@@ -69,8 +92,3 @@ The linear methods all use roughly the same amount of RAM during evaluation. In 
 The memory profiler picks up a large amount of RAM that is not actually part of the function evaluation, but belongs to the outer process. As a result, all methods show a bogus memory usage floor of about 97MB.
 
 ![ND memory usage](./ram_vs_dims.svg)
-
-----
-## Profile-Guided Optimisation
-
-To build the extension with profile-guided optimization using pre-built profiles, do `sh ./scripts/distr_pgo_install.sh`. You can also generate your own PGO profiles like `sh ./scripts/distr_pgo_profile.sh`.
