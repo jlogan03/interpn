@@ -44,22 +44,11 @@ Specialized methods (Scipy `RectBivariateSpline` and numpy `interp`), while not 
 are shown to highlight that InterpN achieves parity even with specialized low-dimensional methods,
 despite not specifically handling low-dimensional special cases.
 
-#### 1000 Observation Points
-
---8<--
-docs/throughput_vs_dims_1000_obs.html
---8<--
-
 #### 1 Observation Point
-For evaluating a single point at a time, the 1D-specialized `numpy.interp` is somewhat faster,
-likely as a result of not needing to allocate for a scalar output. This discrepancy vanishes for higher
-numbers of observation points.
 
-In this benchmark, scipy's `RectBivariateSpline` is slightly (~20%) faster for evaluating one point at a time;
-however, it is interesting to note that this benchmark method heavily favors scipy's approach by pre-building
-the interpolator object (which removes the timing effect of their initial linear solve for knots) and by
-performing a warmup that clears an appropriately-sized region of memory for allocation. This discrepancy
-also vanishes for higher numbers of observation points.
+--8<--
+docs/throughput_vs_dims_1_obs.html
+--8<--
 
 --8<--
 docs/speedup_vs_dims_1_obs_linear.html
@@ -68,6 +57,21 @@ docs/speedup_vs_dims_1_obs_linear.html
 --8<--
 docs/speedup_vs_dims_1_obs_cubic.html
 --8<--
+
+#### 1000 Observation Points
+
+--8<--
+docs/throughput_vs_dims_1000_obs.html
+--8<--
+
+--8<--
+docs/speedup_vs_dims_1000_obs_linear.html
+--8<--
+
+--8<--
+docs/speedup_vs_dims_1000_obs_cubic.html
+--8<--
+
 
 ### 3D Throughput vs. Input Size
 Evaluating points in large batches is substantially faster than one-at-a-time for all tested methods.
