@@ -1,10 +1,5 @@
 # InterpN
 
-<style type="text/css">
-    svg { filter: invert(100%) hue-rotate(180deg); background-color: transparent !important; }
-    image { filter: invert(100%) hue-rotate(180deg) saturate(1.25); }
-</style>
-
 [Writeup](https://jlogan.dev/blog/#2025-11-10-interpn-fast-interpolation) |
 [Repo](https://github.com/jlogan03/interpn) |
 [Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
@@ -34,7 +29,7 @@ The methods provided here, while more limited in scope than scipy's,
 
 <br>
 
-<img style="filter: invert(100%) hue-rotate(180deg)" src="./docs/speedup_vs_dims_1_obs_linear.svg" alt="">
+<img src="./docs/speedup_vs_dims_1_obs_linear_inverted.svg" alt="">
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
