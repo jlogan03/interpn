@@ -187,9 +187,7 @@ def _plot_normalized_vs_nobs(
             paper_bgcolor="rgba(0,0,0,0)",
             font=dict(color="black"),
         )
-        per_kind_output = output_path.with_stem(
-            output_path.stem + f"_{kind.lower()}"
-        )
+        per_kind_output = output_path.with_stem(output_path.stem + f"_{kind.lower()}")
         fig.write_image(str(per_kind_output))
         fig.write_html(
             str(per_kind_output.with_suffix(".html")),
