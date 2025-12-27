@@ -40,9 +40,9 @@ use num_traits::Float;
 /// Evaluate multicubic interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
-/// For 1-4 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
+/// For 1-4 dimensions with `deep-unroll` enabled (1-3 by default), a fast flattened method is used.
+/// For higher dimensions, where that flattening becomes impractical due to compile times and
+/// instruction size, evaluation defers to a bounded recursion.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -81,12 +81,27 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        4 => MulticubicRectilinear::<'_, T, 4>::new(
-            grids.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
+        4 => {
+            #[cfg(not(feature = "deep-unroll"))]
+            {
+                MulticubicRectilinearRecursive::<'_, T, 4>::new(
+                    grids,
+                    vals,
+                    linearize_extrapolation,
+                )?
+                .interp(obs, out)
+            }
+
+            #[cfg(feature = "deep-unroll")]
+            {
+                MulticubicRectilinear::<'_, T, 4>::new(
+                    grids.try_into().unwrap(),
+                    vals,
+                    linearize_extrapolation,
+                )?
+                .interp(obs.try_into().unwrap(), out)
+            }
+        }
         5 => MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
             .interp(obs, out),
         6 => MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
@@ -98,9 +113,7 @@ pub fn interpn<T: Float>(
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),
-    }?;
-
-    Ok(())
+    }
 }
 
 /// Evaluate interpolant, allocating a new Vec for the output.
@@ -197,9 +210,15 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     ) -> Result<Self, &'static str> {
         // Check dimensions
         const {
+            #[cfg(not(feature = "deep-unroll"))]
+            assert!(
+                N > 0 && N < 4,
+                "Flattened method defined for 1-3 dimensions by default (1-4 with `deep-unroll` feature). For higher dimensions, use recursive method."
+            );
+            #[cfg(feature = "deep-unroll")]
             assert!(
                 N > 0 && N < 5,
-                "Flattened method defined for 1-5 dimensions. For higher dimensions, use recursive method."
+                "Flattened method defined for 1-4 dimensions with `deep-unroll`. For higher dimensions, use recursive method."
             );
         }
         let mut dims = [1_usize; N];
@@ -295,10 +314,10 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         const FP: usize = 4; // Footprint size
         let nverts = const { FP.pow(N as u32) }; // Total number of vertices
 
-        unroll! {
-            for i < 256 in 0..nverts {  // const loop
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
                 // Index, interpolate, or pass on each level of the tree
-                unroll!{
+                unroll! {
                     for j < 5 in 0..N {  // const loop
 
                         // Most of these iterations will get optimized out
@@ -310,19 +329,19 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
                                     // Bit pattern in an integer matches C-ordered array indexing
                                     // so we can just use the vertex index to index into the array
                                     // by selecting the appropriate bit from the index.
-                                    const OFFSET: usize = const{(i & (3 << (2*k))) >> (2*k)};
+                                    const OFFSET: usize = const{($i & (3 << (2*k))) >> (2*k)};
                                     loc[k] = origin[k] + OFFSET;
                                 }
                             }
-                            const STORE_IND: usize = i % FP;
+                            const STORE_IND: usize = $i % FP;
                             store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
                         }
                         else { // const branch
                             // For other nodes, interpolate on child values
 
                             const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
-                            const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
+                            const LEVEL: bool = const {($i + 1).is_multiple_of(Q)};
+                            const P: usize = const{(($i + 1) / Q).saturating_sub(1) % FP};
                             const IND: usize = const{j.saturating_sub(1)};
 
                             if LEVEL { // const branch
@@ -340,6 +359,19 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
                         }
                     }
                 }
+            };
+        }
+
+        #[cfg(not(feature = "deep-unroll"))]
+        unroll! {
+            for i < 64 in 0..nverts {  // const loop
+                unroll_vertices_body!(i);
+            }
+        }
+        #[cfg(feature = "deep-unroll")]
+        unroll! {
+            for i < 256 in 0..nverts {  // const loop
+                unroll_vertices_body!(i);
             }
         }
 

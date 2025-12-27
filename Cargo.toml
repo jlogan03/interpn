@@ -1,6 +1,6 @@
 [package]
 name = "interpn"
-version = "0.8.2"
+version = "0.9.0"
 edition = "2024"
 authors = ["James Logan <jlogan03@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -17,11 +17,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Rust lib deps
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
-crunchy = { version = "0.2.4", default-features = false, features = ["limit_256"] }
+crunchy = { version = "0.2.4", default-features = false }
 
 # Python bindings
-pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py310", "generate-import-lib"], optional = true }
-numpy = { version = "0.27.0", optional = true }
+pyo3 = { version = "0.27.2", features = ["extension-module", "abi3-py310", "generate-import-lib"], optional = true }
+numpy = { version = "0.27.1", optional = true }
 
 # Test-only utils
 itertools = { version = "0.14.0", optional = true }
@@ -32,9 +32,10 @@ criterion = "0.7.0"
 ndarray = "0.17.1"
 
 [features]
-default = ["std"]
+default = ["std", "crunchy/limit_64"]
 python = ["numpy", "pyo3", "std"]
 std = ["itertools"]
+deep-unroll = ["crunchy/limit_256"]
 fma = []
 
 [profile.release]

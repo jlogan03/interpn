@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 2025-11-12
+
+### Added
+
+* Add `deep-unroll` feature that sets crunchy unroll depth to 256 and enables 4D unrolled cubic interpolation
+  * This improves compile times in typical use-cases
+
+### Changed
+
+* Gate 4D unrolled cubic interpolation behind `deep-unroll` feature
+* Enable `deep-unroll` feature for Python builds
+
 ## 0.8.2 2025-11-12
 
 ### Changed

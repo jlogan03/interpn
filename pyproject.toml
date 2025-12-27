@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.8.2"
+version = "0.9.0"
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
 readme = "README.md"
@@ -69,7 +69,7 @@ no-build-package = [
 ]
 
 [tool.maturin]
-features = ["python", "fma"]
+features = ["python", "fma", "deep-unroll"]
 module-name = "interpn.interpn"
 python-packages = ["interpn"]
 python-source = "src"
