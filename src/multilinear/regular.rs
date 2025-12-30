@@ -313,31 +313,32 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let mut store = [[T::zero(); FP]; N];
 
         let mut acc = 1;
-        unroll! {
-            for i < 7 in 0..N {
-                // Populate cumulative product of higher dimensions for indexing.
-                //
-                // Each entry is the cumulative product of the size of dimensions
-                // higher than this one, which is the stride between blocks
-                // relating to a given index along each dimension.
-                if const { i > 0 } {
-                    acc *= self.dims[N - i];
-                }
-                dimprod[N - i - 1] = acc;
-
-                // Populate lower corner and saturation flag for each dimension
-                origin[i] = self.get_loc(x[i], i)?;
-                let origin_f = <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
-
-
-                // Calculate normalized delta locations
-                #[cfg(not(feature = "fma"))]
-                let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
-                #[cfg(feature = "fma")]
-                let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
-
-                dts[i] = (x[i] - index_zero_loc) / self.steps[i];
+        // unroll! {
+        //     for i < 7 in 0..N {
+        for i in 0..N {
+            // Populate cumulative product of higher dimensions for indexing.
+            //
+            // Each entry is the cumulative product of the size of dimensions
+            // higher than this one, which is the stride between blocks
+            // relating to a given index along each dimension.
+            if { i > 0 } {
+                acc *= self.dims[N - i];
             }
+            dimprod[N - i - 1] = acc;
+
+            // Populate lower corner and saturation flag for each dimension
+            origin[i] = self.get_loc(x[i], i)?;
+            let origin_f =
+                <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
+
+            // Calculate normalized delta locations
+            #[cfg(not(feature = "fma"))]
+            let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
+            #[cfg(feature = "fma")]
+            let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
+
+            dts[i] = (x[i] - index_zero_loc) / self.steps[i];
+            // }
         }
 
         // Recursive interpolation of one dependency tree at a time
@@ -347,21 +348,23 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         unroll! {
             for i < 64 in 0..nverts {  // const loop
                 // Index, interpolate, or pass on each level of the tree
-                unroll!{
-                    for j < 7 in 0..N {  // const loop
+                // unroll!{
+                //     for j < 7 in 0..N {  // const loop
+                for j in 0..N {
 
                         // Most of these iterations will get optimized out
-                        if const{j == 0} { // const branch
+                        if {j == 0} { // const branch
                             // At leaves, index values
 
-                            unroll!{
-                                for k < 7 in 0..N {  // const loop
+                            // unroll!{
+                            //     for k < 7 in 0..N {  // const loop
+                            for k in 0..N {
                                     // Bit pattern in an integer matches C-ordered array indexing
                                     // so we can just use the vertex index to index into the array
                                     // by selecting the appropriate bit from the index.
-                                    const OFFSET: usize = const{(i & (1 << k)) >> k};
+                                    let OFFSET: usize = {(i & (1 << k)) >> k};
                                     loc[k] = origin[k] + OFFSET;
-                                }
+                                // }
                             }
                             const STORE_IND: usize = i % FP;
                             store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
@@ -369,10 +372,10 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                         else { // const branch
                             // For other nodes, interpolate on child values
 
-                            const Q: usize = const{FP.pow(j as u32)};
-                            const LEVEL: bool = const {(i + 1).is_multiple_of(Q)};
-                            const P: usize = const{((i + 1) / Q).saturating_sub(1) % FP};
-                            const IND: usize = const{j.saturating_sub(1)};
+                            let Q: usize = {FP.pow(j as u32)};
+                            let LEVEL: bool =  {(i + 1).is_multiple_of(Q)};
+                            let P: usize = {((i + 1) / Q).saturating_sub(1) % FP};
+                            let IND: usize = {j.saturating_sub(1)};
 
                             if LEVEL { // const branch
                                 let y0 = store[IND][0];
@@ -387,7 +390,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                                 store[j][P] = interped;
                             }
                         }
-                    }
+                    // }
                 }
             }
         }
