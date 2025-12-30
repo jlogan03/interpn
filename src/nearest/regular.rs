@@ -27,7 +27,6 @@
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, &obs).unwrap();
 //! ```
 use crate::index_arr_fixed_dims;
-use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
 /// Evaluate nearest-neighbor interpolation on a regular grid in up to 6 dimensions.
@@ -252,42 +251,38 @@ impl<'a, T: Float, const N: usize> NearestRegular<'a, T, N> {
         let half = T::one() / two;
 
         let mut acc = 1;
-        unroll! {
-            for i < 7 in 0..N {
-                // Populate cumulative product of higher dimensions for indexing.
-                //
-                // Each entry is the cumulative product of the size of dimensions
-                // higher than this one, which is the stride between blocks
-                // relating to a given index along each dimension.
-                if const { i > 0 } {
-                    acc *= self.dims[N - i];
-                }
-                dimprod[N - i - 1] = acc;
-
-                // Populate lower corner and saturation flag for each dimension
-                let origin = self.get_loc(x[i], i)?;
-                let origin_f = <T as NumCast>::from(origin).ok_or("Unrepresentable coordinate value")?;
-
-                // Calculate normalized delta locations
-                #[cfg(not(feature = "fma"))]
-                let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
-                #[cfg(feature = "fma")]
-                let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
-
-                let dt = (x[i] - index_zero_loc) / self.steps[i];
-
-                // Determine nearest index for this dimension based on distance.
-                // NOTE: This method, despite including a division operation,
-                // is about 10-20% faster than just checking the left and right
-                // distances against each other directly.
-                let offset = if dt <= half {
-                    0
-                } else {
-                    1
-                };
-
-                loc[i] = origin + offset;
+        for i in 0..N {
+            // NOTE: it is not necessary to explicitly unroll this
+            // Populate cumulative product of higher dimensions for indexing.
+            //
+            // Each entry is the cumulative product of the size of dimensions
+            // higher than this one, which is the stride between blocks
+            // relating to a given index along each dimension.
+            if i > 0 {
+                acc *= self.dims[N - i];
             }
+            dimprod[N - i - 1] = acc;
+
+            // Populate lower corner and saturation flag for each dimension
+            let origin = self.get_loc(x[i], i)?;
+            let origin_f =
+                <T as NumCast>::from(origin).ok_or("Unrepresentable coordinate value")?;
+
+            // Calculate normalized delta locations
+            #[cfg(not(feature = "fma"))]
+            let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
+            #[cfg(feature = "fma")]
+            let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
+
+            let dt = (x[i] - index_zero_loc) / self.steps[i];
+
+            // Determine nearest index for this dimension based on distance.
+            // NOTE: This method, despite including a division operation,
+            // is about 10-20% faster than just checking the left and right
+            // distances against each other directly.
+            let offset = if dt <= half { 0 } else { 1 };
+
+            loc[i] = origin + offset;
         }
 
         let interped = index_arr_fixed_dims(loc, dimprod, self.vals);

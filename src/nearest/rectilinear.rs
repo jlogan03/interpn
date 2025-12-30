@@ -25,7 +25,6 @@
 //! rectilinear::interpn_alloc(grids, &z, &obs).unwrap();
 //! ```
 use crate::index_arr_fixed_dims;
-use crunchy::unroll;
 use num_traits::Float;
 
 /// Evaluate multicubic interpolation on a regular grid in up to 6 dimensions.
@@ -204,36 +203,31 @@ impl<'a, T: Float, const N: usize> NearestRectilinear<'a, T, N> {
         let half = T::one() / two;
 
         let mut acc = 1;
-        unroll! {
-            for i < 7 in 0..N {
-                // Populate cumulative product of higher dimensions for indexing.
-                //
-                // Each entry is the cumulative product of the size of dimensions
-                // higher than this one, which is the stride between blocks
-                // relating to a given index along each dimension.
-                if const { i > 0 } {
-                    acc *= self.dims[N - i];
-                }
-                dimprod[N - i - 1] = acc;
-
-                // Populate lower corner and saturation flag for each dimension
-                let origin = self.get_loc(x[i], i)?;
-
-                // Determine normalized delta
-                let x0 = self.grids[i][origin];
-                let x1 = self.grids[i][origin + 1];
-                let step = x1 - x0;
-                let dt = (x[i] - x0) / step;
-
-                // Determine nearest index for this dimension based on distance
-                let offset = if dt <= half {
-                    0
-                } else {
-                    1
-                };
-
-                loc[i] = origin + offset;
+        for i in 0..N {
+            // NOTE: it is not necessary to explicitly unroll this
+            // Populate cumulative product of higher dimensions for indexing.
+            //
+            // Each entry is the cumulative product of the size of dimensions
+            // higher than this one, which is the stride between blocks
+            // relating to a given index along each dimension.
+            if i > 0 {
+                acc *= self.dims[N - i];
             }
+            dimprod[N - i - 1] = acc;
+
+            // Populate lower corner and saturation flag for each dimension
+            let origin = self.get_loc(x[i], i)?;
+
+            // Determine normalized delta
+            let x0 = self.grids[i][origin];
+            let x1 = self.grids[i][origin + 1];
+            let step = x1 - x0;
+            let dt = (x[i] - x0) / step;
+
+            // Determine nearest index for this dimension based on distance
+            let offset = if dt <= half { 0 } else { 1 };
+
+            loc[i] = origin + offset;
         }
 
         let interped = index_arr_fixed_dims(loc, dimprod, self.vals);

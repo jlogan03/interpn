@@ -88,8 +88,6 @@
 // expanded code that is entirely in const.
 #![allow(clippy::absurd_extreme_comparisons)]
 
-use crunchy::unroll;
-
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 
