@@ -324,7 +324,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
                             // Bit pattern in an integer matches C-ordered array indexing
                             // so we can just use the vertex index to index into the array
                             // by selecting the appropriate bit from the index.
-                            let offset: usize = { ($i & (3 << (2 * k))) >> (2 * k) };
+                            let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
                             loc[k] = origin[k] + offset;
                         }
                         const STORE_IND: usize = $i % FP;
