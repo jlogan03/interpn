@@ -321,7 +321,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
             // Each entry is the cumulative product of the size of dimensions
             // higher than this one, which is the stride between blocks
             // relating to a given index along each dimension.
-            if { i > 0 } {
+            if i > 0 {
                 acc *= self.dims[N - i];
             }
             dimprod[N - i - 1] = acc;
@@ -353,7 +353,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                 for j in 0..N {
 
                         // Most of these iterations will get optimized out
-                        if {j == 0} { // const branch
+                        if j == 0 { // const branch
                             // At leaves, index values
 
                             // unroll!{
