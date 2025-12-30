@@ -293,22 +293,19 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         let mut store = [[T::zero(); FP]; N];
 
         let mut acc = 1;
-        // unroll! {
-        //     for i < 5 in 0..N {
         for i in 0..N {
             // Populate cumulative product of higher dimensions for indexing.
             //
             // Each entry is the cumulative product of the size of dimensions
             // higher than this one, which is the stride between blocks
             // relating to a given index along each dimension.
-            if { i > 0 } {
+            if i > 0 {
                 acc *= self.dims[N - i];
             }
             dimprod[N - i - 1] = acc;
 
             // Populate lower corner and saturation flag for each dimension
             (origin[i], sat[i]) = self.get_loc(x[i], i)?;
-            // }
         }
 
         // Recursive interpolation of one dependency tree at a time
@@ -318,50 +315,42 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         macro_rules! unroll_vertices_body {
             ($i:ident) => {
                 // Index, interpolate, or pass on each level of the tree
-                // unroll! {
-                //     for j < 5 in 0..N {  // const loop
                 for j in 0..N {
                     // Most of these iterations will get optimized out
-                    if { j == 0 } {
+                    if j == 0 {
                         // const branch
                         // At leaves, index values
-
-                        // unroll!{
-                        //     for k < 5 in 0..N {  // const loop
                         for k in 0..N {
                             // Bit pattern in an integer matches C-ordered array indexing
                             // so we can just use the vertex index to index into the array
                             // by selecting the appropriate bit from the index.
-                            let OFFSET: usize = { ($i & (3 << (2 * k))) >> (2 * k) };
-                            loc[k] = origin[k] + OFFSET;
-                            // }
+                            let offset: usize = { ($i & (3 << (2 * k))) >> (2 * k) };
+                            loc[k] = origin[k] + offset;
                         }
                         const STORE_IND: usize = $i % FP;
                         store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
                     } else {
                         // const branch
                         // For other nodes, interpolate on child values
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
+                        let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
+                        let ind: usize = j.saturating_sub(1);
 
-                        let Q: usize = { FP.pow(j as u32) };
-                        let LEVEL: bool = { ($i + 1).is_multiple_of(Q) };
-                        let P: usize = { (($i + 1) / Q).saturating_sub(1) % FP };
-                        let IND: usize = { j.saturating_sub(1) };
-
-                        if LEVEL {
+                        if level {
                             // const branch
-                            let grid_cell = &self.grids[IND][origin[IND]..origin[IND] + 4];
+                            let grid_cell = &self.grids[ind][origin[ind]..origin[ind] + 4];
                             let interped = interp_inner::<T>(
-                                store[IND],
+                                store[ind],
                                 grid_cell.try_into().unwrap(),
-                                x[IND],
-                                sat[IND],
+                                x[ind],
+                                sat[ind],
                                 self.linearize_extrapolation,
                             );
 
-                            store[j][P] = interped;
+                            store[j][p] = interped;
                         }
                     }
-                    // }
                 }
             };
         }
