@@ -255,8 +255,6 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         let mut store = [[T::zero(); FP]; N];
 
         let mut acc = 1;
-        // unroll! {
-        //     for i < 7 in 0..N {
         for i in 0..N {
             // Populate cumulative product of higher dimensions for indexing.
             //
@@ -270,7 +268,6 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
 
             // Populate lower corner and saturation flag for each dimension
             origin[i] = self.get_loc(x[i], i)?;
-            // }
         }
 
         // Recursive interpolation of one dependency tree at a time
@@ -280,23 +277,17 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         unroll! {
             for i < 64 in 0..nverts { // const loop
                 // Index, interpolate, or pass on each level of the tree
-                // unroll!{
-                //     for j < 7 in 0..N { // const loop
                 for j in 0..N {
 
                         // Most of these iterations will get optimized out
                         if j == 0 { // const branch
                             // At leaves, index values
-
-                            // unroll!{
-                            //     for k < 7 in 0..N { // const loop
                             for k in 0..N {
                                     // Bit pattern in an integer matches C-ordered array indexing
                                     // so we can just use the vertex index to index into the array
                                     // by selecting the appropriate bit from the index.
                                     let offset: usize = (i & (1 << k)) >> k;
                                     loc[k] = origin[k] + offset;
-                            //     }
                             }
                             const STORE_IND: usize = i % FP;
                             store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
@@ -304,26 +295,26 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
                         else { // const branch
                             // For other nodes, interpolate on child values
 
-                            let Q: usize = {FP.pow(j as u32)};
-                            let LEVEL: bool =  {(i + 1).is_multiple_of(Q)};
-                            let P: usize = {((i + 1) / Q).saturating_sub(1) % FP};
-                            let IND: usize = {j.saturating_sub(1)};
+                            let q: usize = FP.pow(j as u32);
+                            let level: bool =  (i + 1).is_multiple_of(q);
+                            let p: usize = ((i + 1) / q).saturating_sub(1) % FP;
+                            let ind: usize = j.saturating_sub(1);
 
-                            if LEVEL { // const branch
-                                let x0 = self.grids[IND][origin[IND]];
-                                let x1 = self.grids[IND][origin[IND] + 1];
+                            if level { // const branch
+                                let x0 = self.grids[ind][origin[ind]];
+                                let x1 = self.grids[ind][origin[ind] + 1];
                                 let step = x1 - x0;
-                                let t = (x[IND] - x0) / step;
+                                let t = (x[ind] - x0) / step;
 
-                                let y0 = store[IND][0];
-                                let dy = store[IND][1] - y0;
+                                let y0 = store[ind][0];
+                                let dy = store[ind][1] - y0;
 
                                 #[cfg(not(feature = "fma"))]
                                 let interped = y0 + t * dy;
                                 #[cfg(feature = "fma")]
                                 let interped = t.mul_add(dy, y0);
 
-                                store[j][P] = interped;
+                                store[j][p] = interped;
                             }
                         }
 
