@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "interpn"
-version = "0.9.1"
+dynamic = ["version"]
 description = "N-dimensional interpolation/extrapolation methods"
 authors = [{ name = "James Logan", email = "jlogan03@gmail.com" }]
 readme = "README.md"
@@ -74,12 +74,7 @@ module-name = "interpn.interpn"
 python-packages = ["interpn"]
 python-source = "src"
 profile = "release"
-
-#rustc-args = [
-#    "-Cprofile-use=./scripts/pgo-profiles/interpn.profdata",
-#    "-Cllvm-args=-pgo-warn-missing-function"
-#]
-
+version = { source = "cargo" }
 include = [
   { path = "all", format = ["sdist", "wheel"] },
 ]

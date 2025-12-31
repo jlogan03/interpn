@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 from collections.abc import Sequence
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 
 import numpy as np
@@ -26,7 +26,10 @@ if _PYDANTIC_FOUND:
     from .nearest_regular import NearestRegular
     from .nearest_rectilinear import NearestRectilinear
 
-__version__ = version("interpn")
+try:
+    __version__ = version("interpn")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 __all__ = [
     "__version__",

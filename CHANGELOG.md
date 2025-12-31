@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.1 2025-12-31
+
+### Changed
+
+* Rust
+  * Remove explicit const-unrolling for shallow loops (eliminates nested const-unrolling)
+    * Improves compile time by a factor of 5-10
+    * Minimal effect on performance in Rust benchmarks
+    * About 20% improvement for single-sample throughput from Python
+* Python
+  * Lock python package version to rust version
+  * Improve handling of `__version__` when package is not present
+
 ## 0.9.0 2025-12-27
 
 ### Added
