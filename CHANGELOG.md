@@ -6,7 +6,7 @@
 
 * Rust
   * Remove explicit const-unrolling for shallow loops (eliminates nested const-unrolling)
-    * Improves compile time by a factor of 5-10
+    * Improves compile time
     * Minimal effect on performance in Rust benchmarks
     * About 20% improvement for single-sample throughput from Python
 * Python
