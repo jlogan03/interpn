@@ -345,8 +345,6 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         unroll! {
             for i < 64 in 0..nverts {  // const loop
                 // Index, interpolate, or pass on each level of the tree
-                // unroll!{
-                //     for j < 7 in 0..N {  // const loop
                 for j in 0..N {
 
                         // Most of these iterations will get optimized out
