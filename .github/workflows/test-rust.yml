@@ -10,6 +10,41 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  resolve-msrv:
+    runs-on: ubuntu-latest
+    outputs:
+      MSRV: ${{ steps.resolve-msrv.outputs.MSRV }}
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8   # v6.0.1
+      with:
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867   # v7.1.6
+      with:
+        python-version: '3.14'
+        enable-cache: false
+    - name: resolve MSRV
+      id: resolve-msrv
+      run: |
+        echo MSRV=`python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["rust-version"])'` >> $GITHUB_OUTPUT
+
+  check-msrv:
+    needs: [resolve-msrv]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      with:
+        persist-credentials: false
+    - run: echo MSRV=${NEEDS_RESOLVE_MSRV_OUTPUTS_MSRV}
+      env:
+        NEEDS_RESOLVE_MSRV_OUTPUTS_MSRV: ${{ needs.resolve-msrv.outputs.MSRV }}
+    - run: rustup default ${NEEDS_RESOLVE_MSRV_OUTPUTS_MSRV} && rustup default ${NEEDS_RESOLVE_MSRV_OUTPUTS_MSRV}
+      env:
+        NEEDS_RESOLVE_MSRV_OUTPUTS_MSRV: ${{ needs.resolve-msrv.outputs.MSRV }}
+    # this check is very slow, so, set up a cache
+    - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+    - run: cargo build --verbose
+    - run: cargo test --verbose
+
   test_rust:
 
     runs-on: ubuntu-latest
