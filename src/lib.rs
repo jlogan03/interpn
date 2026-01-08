@@ -88,11 +88,23 @@
 // expanded code that is entirely in const.
 #![allow(clippy::absurd_extreme_comparisons)]
 
+use num_traits::Float;
+
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 
 pub mod multicubic;
 pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
+
+pub mod linear {
+    pub use crate::multilinear::rectilinear;
+    pub use crate::multilinear::regular;
+}
+
+pub mod cubic {
+    pub use crate::multicubic::rectilinear;
+    pub use crate::multicubic::regular;
+}
 
 pub mod nearest;
 pub use nearest::{NearestRectilinear, NearestRegular};
@@ -111,6 +123,113 @@ pub(crate) mod testing;
 
 #[cfg(feature = "python")]
 pub mod python;
+
+pub enum GridInterpMethod {
+    Linear,
+    Cubic,
+}
+
+pub enum GridKind {
+    Regular,
+    Rectilinear,
+}
+
+const MAXDIMS: usize = 8;
+const MAXDIMS_ERR: &str =
+    "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
+
+pub fn interpn<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    method: GridInterpMethod,
+    assume_grid_kind: Option<GridKind>,
+    linearize_extrapolation: bool,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    if ndims > MAXDIMS {
+        return Err(MAXDIMS_ERR);
+    }
+
+    let kind = match assume_grid_kind {
+        Some(GridKind::Regular) => GridKind::Regular,
+        Some(GridKind::Rectilinear) => GridKind::Rectilinear,
+        None => {
+            // Check whether grid is regular
+            let mut is_regular = true;
+
+            for grid in grids.iter() {
+                if grid.len() < 2 {
+                    return Err("All grids must have at least two entries");
+                }
+                let step = grid[1] - grid[0];
+
+                if !grid.windows(2).all(|pair| pair[1] - pair[0] == step) {
+                    is_regular = false;
+                    break;
+                }
+            }
+
+            if is_regular {
+                GridKind::Regular
+            } else {
+                GridKind::Rectilinear
+            }
+        }
+    };
+
+    // Extract regular grid params
+    let get_regular_grid = || {
+        let mut dims = [0_usize; MAXDIMS];
+        let mut starts = [T::zero(); MAXDIMS];
+        let mut steps = [T::zero(); MAXDIMS];
+
+        for (i, grid) in grids.iter().enumerate() {
+            if grid.len() < 2 {
+                return Err("All grids must have at least two entries");
+            }
+            dims[i] = grid.len();
+            starts[i] = grid[0];
+            steps[i] = grid[1] - grid[0];
+        }
+
+        Ok((dims, starts, steps))
+    };
+
+    // Select lower-level method
+    match (method, kind) {
+        (GridInterpMethod::Linear, GridKind::Regular) => {
+            let (dims, starts, steps) = get_regular_grid()?;
+            linear::regular::interpn(
+                &dims[..ndims],
+                &starts[..ndims],
+                &steps[..ndims],
+                vals,
+                obs,
+                out,
+            )
+        }
+        (GridInterpMethod::Linear, GridKind::Rectilinear) => {
+            linear::rectilinear::interpn(grids, vals, obs, out)
+        }
+        (GridInterpMethod::Cubic, GridKind::Regular) => {
+            let (dims, starts, steps) = get_regular_grid()?;
+            cubic::regular::interpn(
+                &dims[..ndims],
+                &starts[..ndims],
+                &steps[..ndims],
+                vals,
+                linearize_extrapolation,
+                obs,
+                out,
+            )
+        }
+        (GridInterpMethod::Cubic, GridKind::Rectilinear) => {
+            cubic::rectilinear::interpn(grids, vals, linearize_extrapolation, obs, out)
+        }
+    }
+}
 
 /// Index a single value from an array
 #[inline]
