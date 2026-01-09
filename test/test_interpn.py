@@ -17,17 +17,17 @@ def test_interpn_check_bounds_regular(dtype):
         grids=[grid],
         vals=vals,
         method="linear",
-        check_bounds=True,
+        check_bounds_with_atol=1e-8,
     )
     assert inside.shape == obs_inside[0].shape
 
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         interpn(
             obs=obs_outside,
             grids=[grid],
             vals=vals,
             method="linear",
-            check_bounds=True,
+            check_bounds_with_atol=1e-8,
         )
 
 
@@ -44,15 +44,15 @@ def test_interpn_check_bounds_rectilinear(dtype):
         grids=[grid],
         vals=vals,
         method="linear",
-        check_bounds=True,
+        check_bounds_with_atol=1e-8,
     )
     assert inside.shape == obs_inside[0].shape
 
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         interpn(
             obs=obs_outside,
             grids=[grid],
             vals=vals,
             method="linear",
-            check_bounds=True,
+            check_bounds_with_atol=1e-8,
         )

@@ -176,8 +176,8 @@ pub fn interpn<T: Float + Send + Sync>(
 
     // Chunk for parallelism
     let num_cores = rayon::current_num_threads()
-        .max(1)
-        .min(max_threads.unwrap_or(usize::MAX));
+        .min(max_threads.unwrap_or(usize::MAX))
+        .max(1);
     let n = out.len();
     let chunk = 1024.max(n / num_cores);
 
