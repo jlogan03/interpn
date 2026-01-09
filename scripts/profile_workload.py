@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 
 from interpn import interpn as interpn_fn
 
 _TARGET_COUNT = int(1e4)
-_OBSERVATION_COUNTS = (1, 3, 571, 2017)
+_OBSERVATION_COUNTS = (1, 3, 571, 2017, int(1e6))
 _MAX_DIMS = 4
 _GRID_SIZE = 30
 
@@ -106,3 +110,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    script = Path(__file__).with_name("profile_workload_ser.py")
+    subprocess.run([sys.executable, str(script)], check=True)

@@ -576,7 +576,7 @@ def _plot_speedup_vs_threads(
 
 
 def bench_thread_speedup_vs_threads():
-    nobs = 10_000
+    nobs = 1_000_000
     ndims = 3
     ngrid = 20
     rng = np.random.default_rng(17)
@@ -633,7 +633,7 @@ def bench_thread_speedup_vs_threads():
                 baseline / t if t else 0.0 for t in timings
             ]
 
-    output_path = Path(__file__).parent / "../docs/speedup_vs_threads_10000_obs.svg"
+    output_path = Path(__file__).parent / "../docs/speedup_vs_threads_1000000_obs.svg"
     _plot_speedup_vs_threads(
         thread_counts=thread_counts,
         speedups=speedups,
