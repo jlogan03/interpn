@@ -162,6 +162,7 @@ pub fn interpn<T: Float + Send + Sync>(
     method: GridInterpMethod,
     assume_grid_kind: Option<GridKind>,
     linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
     max_threads: Option<usize>,
 ) -> Result<(), &'static str> {
     let ndims = grids.len();
@@ -210,6 +211,7 @@ pub fn interpn<T: Float + Send + Sync>(
             method,
             assume_grid_kind,
             linearize_extrapolation,
+            check_bounds_with_atol,
         );
 
         match res_inner {
@@ -233,6 +235,7 @@ pub fn interpn_serial<T: Float>(
     method: GridInterpMethod,
     assume_grid_kind: Option<GridKind>,
     linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
 ) -> Result<(), &'static str> {
     let ndims = grids.len();
     if ndims > MAXDIMS {
@@ -284,10 +287,37 @@ pub fn interpn_serial<T: Float>(
         Ok((dims, starts, steps))
     };
 
+    // Bounds checks for regular grid, if requested
+    let maybe_check_bounds_regular = |dims: &[usize], starts: &[T], steps: &[T], obs: &[&[T]]| {
+        if let Some(atol) = check_bounds_with_atol {
+            let mut bounds = [false; MAXDIMS];
+            let out = &mut bounds[..ndims];
+            multilinear::regular::check_bounds(
+                &dims[..ndims],
+                &starts[..ndims],
+                &steps[..ndims],
+                obs,
+                atol,
+                out,
+            )?
+        }
+        Ok(())
+    };
+
+    let maybe_check_bounds_rectilinear = |grids, obs| {
+        if let Some(atol) = check_bounds_with_atol {
+            let mut bounds = [false; MAXDIMS];
+            let out = &mut bounds[..ndims];
+            multilinear::rectilinear::check_bounds(grids, obs, atol, out)?
+        }
+        Ok(())
+    };
+
     // Select lower-level method
     match (method, kind) {
         (GridInterpMethod::Linear, GridKind::Regular) => {
             let (dims, starts, steps) = get_regular_grid()?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
             linear::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -298,10 +328,12 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Linear, GridKind::Rectilinear) => {
+            maybe_check_bounds_rectilinear(grids, obs)?;
             linear::rectilinear::interpn(grids, vals, obs, out)
         }
         (GridInterpMethod::Cubic, GridKind::Regular) => {
             let (dims, starts, steps) = get_regular_grid()?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
             cubic::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -313,6 +345,7 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Cubic, GridKind::Rectilinear) => {
+            maybe_check_bounds_rectilinear(grids, obs)?;
             cubic::rectilinear::interpn(grids, vals, linearize_extrapolation, obs, out)
         }
     }

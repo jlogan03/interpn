@@ -321,7 +321,7 @@ fn parse_grid_kind(grid_kind: Option<&str>) -> Result<Option<GridKind>, PyErr> {
 macro_rules! interpn_top_impl {
     ($funcname:ident, $T:ty) => {
         #[pyfunction]
-        #[pyo3(signature = (grids, vals, obs, out, method="linear", grid_kind=None, linearize_extrapolation=true, max_threads=None))]
+        #[pyo3(signature = (grids, vals, obs, out, method="linear", grid_kind=None, linearize_extrapolation=true, check_bounds_with_atol=None, max_threads=None))]
         fn $funcname(
             grids: Vec<PyReadonlyArray1<$T>>,
             vals: PyReadonlyArray1<$T>,
@@ -330,6 +330,7 @@ macro_rules! interpn_top_impl {
             method: &str,
             grid_kind: Option<&str>,
             linearize_extrapolation: bool,
+            check_bounds_with_atol: Option<$T>,
             max_threads: Option<usize>,
         ) -> PyResult<()> {
             unpack_vec_of_arr!(grids, grids, $T);
@@ -346,6 +347,7 @@ macro_rules! interpn_top_impl {
                 method,
                 grid_kind,
                 linearize_extrapolation,
+                check_bounds_with_atol,
                 max_threads,
             ) {
                 Ok(()) => Ok(()),
