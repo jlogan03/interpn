@@ -474,6 +474,7 @@ def _plot_speedup_vs_dims(
 
 def _thread_counts() -> list[int]:
     max_threads = os.cpu_count() or 1
+    max_threads = max(int(max_threads / 2), 1)  # Real threads, not hyperthreads
     counts = []
     threads = 1
     while threads < max_threads:
@@ -490,62 +491,88 @@ def _plot_speedup_vs_threads(
     nobs: int,
     output_path: Path,
 ) -> None:
-    fig = make_subplots(
-        rows=1,
-        cols=2,
-        subplot_titles=("Regular Grid", "Rectilinear Grid"),
-        horizontal_spacing=0.08,
-    )
-    for col, grid_kind in enumerate(["regular", "rectilinear"], start=1):
+    fig = make_subplots(rows=1, cols=1)
+    dash_styles = [
+        _normalized_line_style(i) for i in range(len(["linear", "cubic", "nearest"]) * 2)
+    ]
+    all_values = []
+    thread_arr = np.array(thread_counts)
+    series: list[tuple[str, np.ndarray]] = []
+    for grid_kind in ["regular", "rectilinear"]:
         for method in ["linear", "cubic", "nearest"]:
             values = speedups[grid_kind].get(method)
             if not values:
                 continue
-            fig.add_trace(
-                go.Scatter(
-                    x=thread_counts,
-                    y=values,
-                    mode="lines+markers",
-                    name=method.title(),
-                    line=dict(color=THREAD_SPEEDUP_COLORS[method], width=2),
-                    marker=dict(size=7),
-                    showlegend=col == 1,
+            values_arr = np.array(values, dtype=float)
+            all_values.append(values_arr)
+            series.append((f"{method.title()} {grid_kind}", values_arr))
+    for _, values_arr in series:
+        ones = np.ones_like(values_arr)
+        fill_between(
+            fig,
+            x=thread_arr,
+            upper=np.maximum(values_arr, ones),
+            lower=np.minimum(values_arr, ones),
+            row=1,
+            col=1,
+            fillcolor="rgba(139, 196, 59, 0.25)",
+        )
+    for idx, (label, values_arr) in enumerate(series):
+        fig.add_trace(
+            go.Scatter(
+                x=thread_arr,
+                y=values_arr,
+                mode="lines+markers",
+                name=label,
+                line=dict(
+                    color="black",
+                    width=2,
+                    dash=dash_styles[idx],
                 ),
-                row=1,
-                col=col,
-            )
-        fig.add_hline(
-            y=1.0,
-            line=dict(color="black", dash="dot", width=1),
+                marker=dict(size=7, color="black"),
+                showlegend=False,
+            ),
             row=1,
-            col=col,
+            col=1,
         )
-        fig.update_xaxes(
-            title_text="Threads",
-            row=1,
-            col=col,
-            showline=True,
-            linecolor="black",
-            linewidth=1,
-            mirror=True,
-            ticks="outside",
-            tickcolor="black",
-            showgrid=False,
-            zeroline=False,
-        )
-        fig.update_yaxes(
-            title_text="Speedup vs. 1 Thread",
-            row=1,
-            col=col,
-            showline=True,
-            linecolor="black",
-            linewidth=1,
-            mirror=True,
-            ticks="outside",
-            tickcolor="black",
-            showgrid=False,
-            zeroline=False,
-        )
+    fig.add_hline(
+        y=1.0,
+        line=dict(color="black", dash="dot", width=1),
+        row=1,
+        col=1,
+    )
+    y_min = 1.0
+    if all_values:
+        y_min = min(1.0, min(values.min() for values in all_values))
+    y_max = max(thread_counts) if thread_counts else 1
+    fig.update_xaxes(
+        title_text="Threads",
+        row=1,
+        col=1,
+        range=[min(thread_counts), max(thread_counts)] if thread_counts else None,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_yaxes(
+        title_text="Speedup vs. 1 Thread",
+        row=1,
+        col=1,
+        range=[y_min, y_max],
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
 
     fig.update_layout(
         title=dict(
@@ -555,13 +582,7 @@ def _plot_speedup_vs_threads(
         ),
         height=430,
         margin=dict(t=70, l=60, r=40, b=80),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=1.05,
-            x=1.0,
-            xanchor="right",
-        ),
+        showlegend=False,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="black"),

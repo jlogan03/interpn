@@ -174,10 +174,22 @@ pub fn interpn<T: Float + Send + Sync>(
         return Err(MAXDIMS_ERR);
     }
 
-    // Chunk for parallelism
-    let num_cores = rayon::current_num_threads()
-        .min(max_threads.unwrap_or(usize::MAX))
-        .max(1);
+    // Chunk for parallelism.
+    //
+    // By default, use only physical cores, because on most machines as of
+    // 2026, only half the available cores represent real compute capability due to
+    // the widespread adoption of hyperthreading.
+    //
+    // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
+    // single-threaded performance is usually faster due to a combination of threading overhead
+    // and memory page sizing.
+    let num_cores_physical = num_cpus::get_physical(); // Real cores
+    let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
+    let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
+    let num_cores = match max_threads {
+        Some(num_cores_requested) => num_cores_requested.min(num_cores_available),
+        None => num_cores_available,
+    };
     let n = out.len();
     let chunk = 1024.max(n / num_cores);
 
@@ -307,7 +319,7 @@ pub fn interpn_serial<T: Float>(
                 out,
             )?;
             if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.")
+                return Err("At least one observation point is outside the grid.");
             }
         }
         Ok(())
@@ -320,7 +332,7 @@ pub fn interpn_serial<T: Float>(
             let out = &mut bounds[..ndims];
             multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
             if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.")
+                return Err("At least one observation point is outside the grid.");
             }
         }
         Ok(())
