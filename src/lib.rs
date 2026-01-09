@@ -115,6 +115,15 @@ pub use one_dim::{
     linear::Linear1D, linear::LinearHoldLast1D,
 };
 
+#[cfg(feature = "par")]
+use rayon::{
+    iter::{IndexedParallelIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
+
+#[cfg(feature = "par")]
+use std::sync::Mutex;
+
 #[cfg(feature = "std")]
 pub mod utils;
 
@@ -124,13 +133,19 @@ pub(crate) mod testing;
 #[cfg(feature = "python")]
 pub mod python;
 
+/// Interpolant function for multi-dimensional methods.
+#[derive(Clone, Copy)]
 pub enum GridInterpMethod {
     Linear,
     Cubic,
 }
 
+/// Grid spacing category for multi-dimensional methods.
+#[derive(Clone, Copy)]
 pub enum GridKind {
+    /// Evenly-spaced points along each axis.
     Regular,
+    /// Un-evenly spaced points along each axis.
     Rectilinear,
 }
 
@@ -138,7 +153,79 @@ const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
 
-pub fn interpn<T: Float>(
+#[cfg(feature = "par")]
+pub fn interpn<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    method: GridInterpMethod,
+    assume_grid_kind: Option<GridKind>,
+    linearize_extrapolation: bool,
+    max_threads: Option<usize>,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    if ndims > MAXDIMS {
+        return Err(MAXDIMS_ERR);
+    }
+
+    // Chunk for parallelism
+    let num_cores = rayon::current_num_threads()
+        .max(1)
+        .min(max_threads.unwrap_or(usize::MAX));
+    let n = out.len();
+    let chunk = 1024.max(n / num_cores);
+
+    // Make a shared error indicator
+    let result: Mutex<Option<&'static str>> = Mutex::new(None);
+    let write_err = |msg: &'static str| {
+        let mut guard = result.lock().unwrap();
+        if guard.is_none() {
+            *guard = Some(msg);
+        }
+    };
+
+    // Run threaded
+    out.par_chunks_mut(chunk).enumerate().for_each(|(i, outc)| {
+        // Calculate the start and end of observation point chunks
+        let start = chunk * i;
+        let end = start + outc.len();
+
+        // Chunk observation points
+        let mut obs_slices: [&[T]; 8] = [&[]; 8];
+        for (j, o) in obs.iter().enumerate() {
+            let s = &o.get(start..end);
+            match s {
+                Some(s) => obs_slices[j] = s,
+                None => write_err("Dimension mismatch"),
+            };
+        }
+
+        // Do interpolations
+        let res_inner = interpn_serial(
+            grids,
+            vals,
+            &obs_slices[..ndims],
+            outc,
+            method,
+            assume_grid_kind,
+            linearize_extrapolation,
+        );
+
+        match res_inner {
+            Ok(()) => {}
+            Err(msg) => write_err(msg),
+        }
+    });
+
+    // Handle errors from threads
+    match *result.lock().unwrap() {
+        Some(msg) => Err(msg),
+        None => Ok(()),
+    }
+}
+
+pub fn interpn_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],
     obs: &[&[T]],
@@ -251,11 +338,8 @@ pub(crate) fn index_arr_fixed_dims<T: Copy, const N: usize>(
 ) -> T {
     let mut i = 0;
 
-    // unroll! {
-    //     for j < 7 in 0..N {
     for j in 0..N {
         i += loc[j] * dimprod[j];
-        // }
     }
 
     data[i]
