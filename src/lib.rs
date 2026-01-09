@@ -305,7 +305,10 @@ pub fn interpn_serial<T: Float>(
                 obs,
                 atol,
                 out,
-            )?
+            )?;
+            if bounds.iter().any(|x| *x) {
+                return Err("At least one observation point is outside the grid.")
+            }
         }
         Ok(())
     };
@@ -315,7 +318,10 @@ pub fn interpn_serial<T: Float>(
         if let Some(atol) = check_bounds_with_atol {
             let mut bounds = [false; MAXDIMS];
             let out = &mut bounds[..ndims];
-            multilinear::rectilinear::check_bounds(grids, obs, atol, out)?
+            multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
+            if bounds.iter().any(|x| *x) {
+                return Err("At least one observation point is outside the grid.")
+            }
         }
         Ok(())
     };

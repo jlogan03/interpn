@@ -11,6 +11,8 @@ BoolArray = NDArray[np.bool_]
 IntArray = NDArray[np.intp]
 
 __all__ = [
+    "interpn_f64",
+    "interpn_f32",
     "interpn_linear_regular_f64",
     "interpn_linear_regular_f32",
     "interpn_linear_rectilinear_f64",
@@ -28,6 +30,29 @@ __all__ = [
     "check_bounds_rectilinear_f64",
     "check_bounds_rectilinear_f32",
 ]
+
+def interpn_f64(
+    grids: Sequence[NDArrayF64],
+    vals: NDArrayF64,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+    method: str = "linear",
+    grid_kind: str | None = None,
+    linearize_extrapolation: bool = True,
+    check_bounds_with_atol: float | None = None,
+    max_threads: int | None = None,
+) -> None: ...
+def interpn_f32(
+    grids: Sequence[NDArrayF32],
+    vals: NDArrayF32,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+    method: str = "linear",
+    grid_kind: str | None = None,
+    linearize_extrapolation: bool = True,
+    check_bounds_with_atol: float | None = None,
+    max_threads: int | None = None,
+) -> None: ...
 
 def interpn_linear_regular_f64(
     dims: IntArray,

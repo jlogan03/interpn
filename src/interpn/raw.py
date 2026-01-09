@@ -4,6 +4,8 @@ Using these can yield some performance benefit at the expense of ergonomics.
 """
 
 from .interpn import (
+    interpn_f64,
+    interpn_f32,
     interpn_linear_regular_f64,
     interpn_linear_regular_f32,
     interpn_linear_rectilinear_f64,
@@ -23,6 +25,8 @@ from .interpn import (
 )
 
 __all__ = [
+    "interpn_f64",
+    "interpn_f32",
     "interpn_linear_regular_f64",
     "interpn_linear_regular_f32",
     "interpn_linear_rectilinear_f64",
