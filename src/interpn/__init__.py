@@ -87,7 +87,7 @@ def interpn(
         Interpolated values
     """
     # Allocate for the output if it is not supplied
-    out = out or np.zeros_like(obs[0])
+    out = out if out is not None else np.zeros_like(obs[0])
     outshape = out.shape
     out = out.ravel()  # Flat view without reallocating
 
@@ -130,9 +130,7 @@ def interpn(
             )
         case _:
             raise ValueError(
-                "Unsupported interpolation configuration:"
-                f" {dtype}, {method}"
+                f"Unsupported interpolation configuration: {dtype}, {method}"
             )
 
     return out.reshape(outshape)
-

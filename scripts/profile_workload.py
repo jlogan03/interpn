@@ -5,14 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from interpn import (
-    MulticubicRectilinear,
-    MulticubicRegular,
-    MultilinearRectilinear,
-    MultilinearRegular,
-    NearestRectilinear,
-    NearestRegular,
-)
+from interpn import interpn as interpn_fn
 
 _TARGET_COUNT = int(1e4)
 _OBSERVATION_COUNTS = (1, 3, 571, 2017)
@@ -34,12 +27,35 @@ def _observation_points(
     return points
 
 
-def _evaluate(interpolator, points: list[np.ndarray]) -> None:
-    # Without preallocated output
-    interpolator.eval(points)
-    # With preallocated output
+def _evaluate(
+    *,
+    grids: list[np.ndarray],
+    vals: np.ndarray,
+    points: list[np.ndarray],
+    method: str,
+    grid_kind: str,
+    max_threads: int | None,
+) -> None:
+    interpn_fn(
+        obs=points,
+        grids=grids,
+        vals=vals,
+        method=method,
+        grid_kind=grid_kind,
+        linearize_extrapolation=True,
+        max_threads=max_threads,
+    )
     out = np.empty_like(points[0])
-    interpolator.eval(points, out)
+    interpn_fn(
+        obs=points,
+        grids=grids,
+        vals=vals,
+        method=method,
+        grid_kind=grid_kind,
+        linearize_extrapolation=True,
+        out=out,
+        max_threads=max_threads,
+    )
 
 
 def main() -> None:
@@ -55,46 +71,37 @@ def main() -> None:
             ]
             mesh = np.meshgrid(*grids, indexing="ij")
             zgrid = rng.uniform(-1.0, 1.0, mesh[0].size).astype(dtype)
-            dims = [grid.size for grid in grids]
-            starts = np.array([grid[0] for grid in grids], dtype=dtype)
-            steps = np.array([grid[1] - grid[0] for grid in grids], dtype=dtype)
-
-            linear_regular = MultilinearRegular.new(dims, starts, steps, zgrid)
-            linear_rect = MultilinearRectilinear.new(grids_rect, zgrid)
-            cubic_regular = MulticubicRegular.new(
-                dims,
-                starts,
-                steps,
-                zgrid,
-                linearize_extrapolation=True,
+            cases = (
+                ("linear", "regular", grids),
+                ("linear", "rectilinear", grids_rect),
+                ("cubic", "regular", grids),
+                ("cubic", "rectilinear", grids_rect),
+                ("nearest", "regular", grids),
+                ("nearest", "rectilinear", grids_rect),
             )
-            cubic_rect = MulticubicRectilinear.new(
-                grids_rect,
-                zgrid,
-                linearize_extrapolation=True,
-            )
-            nearest_regular = NearestRegular.new(dims, starts, steps, zgrid)
-            nearest_rect = NearestRectilinear.new(grids_rect, zgrid)
 
             for nobs in _OBSERVATION_COUNTS:
                 nreps = max(int(_TARGET_COUNT / nobs), 1)
 
-                for interpolator in (
-                    linear_regular,
-                    linear_rect,
-                    cubic_regular,
-                    cubic_rect,
-                    nearest_regular,
-                    nearest_rect,
-                ):
-                    for _ in range(nreps):
-                        points = _observation_points(rng, ndims, nobs, dtype)
-                        _evaluate(interpolator, points)
+                for max_threads in (None, 1):
+                    for method, grid_kind, grids_in in cases:
+                        for _ in range(nreps):
+                            points = _observation_points(rng, ndims, nobs, dtype)
+                            _evaluate(
+                                grids=grids_in,
+                                vals=zgrid,
+                                points=points,
+                                method=method,
+                                grid_kind=grid_kind,
+                                max_threads=max_threads,
+                            )
 
-                    print(
-                        f"Completed {type(interpolator).__name__} "
-                        f"dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
-                    )
+                        mode = "parallel" if max_threads is None else "serial"
+                        print(
+                            f"Completed interpn method={method} grid={grid_kind} "
+                            f"dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs} "
+                            f"mode={mode}"
+                        )
 
 
 if __name__ == "__main__":
