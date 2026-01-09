@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 import interpn
 
 
-def test_multicubic_regular():
+@pytest.mark.parametrize("max_threads", [None, 1], ids=["parallel", "serial"])
+def test_multicubic_regular(max_threads):
     for dtype, tol in [(np.float64, 1e-12), (np.float32, 1e-6)]:
         x = np.linspace(0.0, 10.0, 7).astype(dtype)
         y = np.linspace(20.0, 30.0, 5).astype(dtype)
@@ -55,6 +57,7 @@ def test_multicubic_regular():
             vals=zgrid.flatten(),
             method="cubic",
             linearize_extrapolation=False,
+            max_threads=max_threads,
         )
         for i in range(out_helper.size):
             assert approx(out_helper[i], zf[i], dtype(tol))

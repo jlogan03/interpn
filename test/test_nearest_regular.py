@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import interpn
 
 
@@ -10,7 +11,8 @@ def _nearest_regular_index(value: float, start: float, step: float, size: int) -
     return min(loc if dt <= 0.5 else loc + 1, size - 1)
 
 
-def test_nearest_regular():
+@pytest.mark.parametrize("max_threads", [None, 1], ids=["parallel", "serial"])
+def test_nearest_regular(max_threads):
     for dtype in [np.float64, np.float32]:
         x = np.linspace(0.0, 6.0, 4).astype(dtype)
         y = np.linspace(-3.0, 3.0, 3).astype(dtype)
@@ -65,6 +67,7 @@ def test_nearest_regular():
             grids=grids,
             vals=zgrid.flatten(),
             method="nearest",
+            max_threads=max_threads,
         )
         np.testing.assert_array_equal(out_helper, expected)
 

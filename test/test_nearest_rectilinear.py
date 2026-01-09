@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import interpn
 
 
@@ -11,7 +12,8 @@ def _nearest_rectilinear_index(value: float, grid: np.ndarray) -> int:
     return idx if dt <= 0.5 else idx + 1
 
 
-def test_nearest_rectilinear():
+@pytest.mark.parametrize("max_threads", [None, 1], ids=["parallel", "serial"])
+def test_nearest_rectilinear(max_threads):
     for dtype in [np.float64, np.float32]:
         x = np.array([0.0, 1.0, 3.5, 4.0], dtype=dtype)
         y = np.array([-2.0, -0.5, 0.1], dtype=dtype)
@@ -54,6 +56,7 @@ def test_nearest_rectilinear():
             grids=grids,
             vals=zgrid.flatten(),
             method="nearest",
+            max_threads=max_threads,
         )
         np.testing.assert_array_equal(out_helper, expected)
 

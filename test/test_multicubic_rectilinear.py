@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 import interpn
 
 
-def test_multilinear_rectilinear():
+@pytest.mark.parametrize("max_threads", [None, 1], ids=["parallel", "serial"])
+def test_multilinear_rectilinear(max_threads):
     for dtype in [np.float64, np.float32]:
         x = np.linspace(0.0, 10.0, 5).astype(dtype)
         y = np.linspace(20.0, 30.0, 4).astype(dtype)
@@ -48,6 +50,7 @@ def test_multilinear_rectilinear():
             vals=zgrid.flatten(),
             method="cubic",
             linearize_extrapolation=False,
+            max_threads=max_threads,
         )
         for i in range(out_helper.size):
             assert out_helper[i] == zf[i]
