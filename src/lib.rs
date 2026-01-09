@@ -136,8 +136,12 @@ pub mod python;
 /// Interpolant function for multi-dimensional methods.
 #[derive(Clone, Copy)]
 pub enum GridInterpMethod {
+    /// Multi-linear interpolation.
     Linear,
+    /// Cubic Hermite spline interpolation.
     Cubic,
+    /// Nearest-neighbor interpolation.
+    Nearest,
 }
 
 /// Grid spacing category for multi-dimensional methods.
@@ -242,6 +246,8 @@ pub fn interpn_serial<T: Float>(
         return Err(MAXDIMS_ERR);
     }
 
+    // Resolve grid kind, checking the grid if
+    // the kind is not provided by the user.
     let kind = match assume_grid_kind {
         Some(GridKind::Regular) => GridKind::Regular,
         Some(GridKind::Rectilinear) => GridKind::Rectilinear,
@@ -304,6 +310,7 @@ pub fn interpn_serial<T: Float>(
         Ok(())
     };
 
+    // Bounds checks for rectilinear grid, if requested
     let maybe_check_bounds_rectilinear = |grids, obs| {
         if let Some(atol) = check_bounds_with_atol {
             let mut bounds = [false; MAXDIMS];
@@ -347,6 +354,22 @@ pub fn interpn_serial<T: Float>(
         (GridInterpMethod::Cubic, GridKind::Rectilinear) => {
             maybe_check_bounds_rectilinear(grids, obs)?;
             cubic::rectilinear::interpn(grids, vals, linearize_extrapolation, obs, out)
+        }
+        (GridInterpMethod::Nearest, GridKind::Regular) => {
+            let (dims, starts, steps) = get_regular_grid()?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            nearest::regular::interpn(
+                &dims[..ndims],
+                &starts[..ndims],
+                &steps[..ndims],
+                vals,
+                obs,
+                out,
+            )
+        }
+        (GridInterpMethod::Nearest, GridKind::Rectilinear) => {
+            maybe_check_bounds_rectilinear(grids, obs)?;
+            nearest::rectilinear::interpn(grids, vals, obs, out)
         }
     }
 }
