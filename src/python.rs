@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 use crate::multicubic;
 use crate::multilinear;
 use crate::nearest;
+use crate::{GridInterpMethod, GridKind};
 
 /// Maximum number of dimensions for linear interpn convenience methods
 const MAXDIMS: usize = 8;
@@ -35,6 +36,9 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     // Multicubic with rectilinear grid
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f32, m)?)?;
+    // Top-level interpn dispatch
+    m.add_function(wrap_pyfunction!(interpn_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_f32, m)?)?;
     Ok(())
 }
 
@@ -290,3 +294,66 @@ macro_rules! interpn_cubic_rectilinear_impl {
 
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f64, f64);
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f32, f32);
+
+fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
+    match method.to_ascii_lowercase().as_str() {
+        "linear" => Ok(GridInterpMethod::Linear),
+        "cubic" => Ok(GridInterpMethod::Cubic),
+        _ => Err(exceptions::PyValueError::new_err(
+            "`method` must be 'linear' or 'cubic'",
+        )),
+    }
+}
+
+fn parse_grid_kind(grid_kind: Option<&str>) -> Result<Option<GridKind>, PyErr> {
+    match grid_kind.map(|kind| kind.to_ascii_lowercase()) {
+        None => Ok(None),
+        Some(kind) => match kind.as_str() {
+            "regular" => Ok(Some(GridKind::Regular)),
+            "rectilinear" => Ok(Some(GridKind::Rectilinear)),
+            _ => Err(exceptions::PyValueError::new_err(
+                "`grid_kind` must be 'regular', 'rectilinear', or None",
+            )),
+        },
+    }
+}
+
+macro_rules! interpn_top_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        #[pyo3(signature = (grids, vals, obs, out, method="linear", grid_kind=None, linearize_extrapolation=true, max_threads=None))]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            vals: PyReadonlyArray1<$T>,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+            method: &str,
+            grid_kind: Option<&str>,
+            linearize_extrapolation: bool,
+            max_threads: Option<usize>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let method = parse_grid_interp_method(method)?;
+            let grid_kind = parse_grid_kind(grid_kind)?;
+
+            match crate::interpn(
+                grids,
+                vals.as_slice()?,
+                obs,
+                out.as_slice_mut()?,
+                method,
+                grid_kind,
+                linearize_extrapolation,
+                max_threads,
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_top_impl!(interpn_f64, f64);
+interpn_top_impl!(interpn_f32, f32);
