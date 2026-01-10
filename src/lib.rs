@@ -157,7 +157,6 @@ const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
 
-
 /// Evaluate multidimensional interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
@@ -175,14 +174,14 @@ const MAXDIMS_ERR: &str =
 ///
 /// While this method initializes the interpolator struct on every call, the overhead of doing this
 /// is minimal even when using it to evaluate one observation point at a time.
-/// 
+///
 /// Like most grid search algorithms (including in the standard library), the uniqueness and
 /// monotonicity of the grid is the responsibility of the user, because checking it is often much
 /// more expensive than the algorithm that we will perform on it. Behavior with ill-posed grids
 /// is undefined.
-/// 
+///
 /// #### Args:
-/// 
+///
 /// * `grids`: `N` slices of each axis' grid coordinates. Must be unique and monotonically increasing.
 /// * `vals`:  Flattened `N`-dimensional array of data values at each grid point in C-style order.
 ///          Must be the same length as the cartesian product of the grids, (n_x * n_y * ...).
@@ -265,7 +264,10 @@ pub fn interpn<T: Float + Send + Sync>(
             let s = &o.get(start..end);
             match s {
                 Some(s) => obs_slices[j] = s,
-                None => write_err("Dimension mismatch"),
+                None => {
+                    write_err("Dimension mismatch");
+                    return;
+                }
             };
         }
 
@@ -292,6 +294,44 @@ pub fn interpn<T: Float + Send + Sync>(
         Some(msg) => Err(msg),
         None => Ok(()),
     }
+}
+
+/// Allocating variant of [interpn].
+/// It is recommended to pre-allocate outputs and use the non-allocating variant
+/// whenever possible.
+#[cfg(feature = "par")]
+pub fn interpn_alloc<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: Option<Vec<T>>,
+    method: GridInterpMethod,
+    assume_grid_kind: Option<GridKind>,
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+    max_threads: Option<usize>,
+) -> Result<Vec<T>, &'static str> {
+    // Empty input -> empty output
+    if obs.len() == 0 {
+        return Ok(Vec::with_capacity(0));
+    }
+
+    // If output storage was not provided, build it now
+    let mut out = out.unwrap_or_else(|| vec![T::zero(); obs[0].len()]);
+
+    interpn(
+        grids,
+        vals,
+        obs,
+        &mut out,
+        method,
+        assume_grid_kind,
+        linearize_extrapolation,
+        check_bounds_with_atol,
+        max_threads,
+    )?;
+
+    Ok(out)
 }
 
 pub fn interpn_serial<T: Float>(
