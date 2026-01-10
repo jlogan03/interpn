@@ -53,7 +53,6 @@ def interpn_f32(
     check_bounds_with_atol: float | None = None,
     max_threads: int | None = None,
 ) -> None: ...
-
 def interpn_linear_regular_f64(
     dims: IntArray,
     starts: NDArrayF64,
