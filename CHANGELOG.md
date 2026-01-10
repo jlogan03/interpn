@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0 2026-01-10
+
+### Added
+
+* Rust
+  * Add top-level `interpn`, `interpn_alloc` and `interpn_serial` methods along with supporting enums for selecting methods
+  * Add `par` feature, enabled by default, that enables parallelism with rayon in `interpn` function
+  * Add lazy static for getting number of physical cores to advise thread chunk sizes
+
+### Changed
+
+* Rust
+  * Update deps
+* Python
+  * !Refactor `interpn` function
+    * Combine `check_bounds: bool` and `bounds_check_atol: float` to `check_bounds_with_atol: float | None`
+    * Add `max_threads: int | None` input to allow manually limiting parallelism
+    * Use rust top-level `interpn` function as backend for method selection, bounds checks, and parallelism
+
 ## 0.9.1 2025-12-31
 
 ### Changed

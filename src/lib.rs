@@ -363,6 +363,7 @@ pub fn interpn_alloc<T: Float + Send + Sync>(
     Ok(out)
 }
 
+/// Single-threaded, non-allocating variant of [interpn] available without `par` feature.
 pub fn interpn_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],

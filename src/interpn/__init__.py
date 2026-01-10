@@ -63,16 +63,19 @@ def interpn(
     """
     Evaluate an N-dimensional grid at the supplied observation points.
 
-    Performs some small allocations to prepare the inputs.
-    Use the persistent wrapper classes or raw bindings instead
-    to avoid this overhead entirely.
-
     Reallocates input arrays if and only if they are not contiguous yet.
+
+    Note: values must be defined in C-order, like made by
+    `numpy.meshgrid(*grids, indexing="ij")`. Values on meshgrids defined
+    in graphics-order without `indexing="ij"` will not have the desired effect.
+
+    If a pre-allocated output array is provided, the returned array is a
+    reference to that array.
 
     Args:
         obs: Observation coordinates, one array per dimension.
         grids: Grid axis coordinates, one array per dimension.
-        vals: Values defined on the full tensor-product grid.
+        vals: Values defined on the full cartesian-product grid.
         method: Interpolation kind, one of ``"linear"``, ``"cubic"``, or ``"nearest"``.
         out: Optional preallocated array that receives the result.
         linearize_extrapolation: Whether cubic extrapolation should fall back to
