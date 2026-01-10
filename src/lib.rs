@@ -157,6 +157,51 @@ const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
 
+
+/// Evaluate multidimensional interpolation on a regular grid in up to 8 dimensions.
+/// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
+///
+/// For lower dimensions, a fast flattened method is used. For higher dimensions, where that flattening
+/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
+/// recursion.
+/// The linear method uses the flattening for 1-6 dimensions, while
+/// flattened cubic methods are available up to 3 dimensions by default and up to 4 dimensions
+/// with the `deep_unroll` feature enabled.
+///
+/// This is a convenience function; best performance will be achieved by using the exact right
+/// number for the N parameter, as this will slightly reduce compute and storage overhead,
+/// and the underlying method can be extended to more than this function's limit of 8 dimensions.
+/// The limit of 8 dimensions was chosen for no more specific reason than to reduce unit test times.
+///
+/// While this method initializes the interpolator struct on every call, the overhead of doing this
+/// is minimal even when using it to evaluate one observation point at a time.
+/// 
+/// Like most grid search algorithms (including in the standard library), the uniqueness and
+/// monotonicity of the grid is the responsibility of the user, because checking it is often much
+/// more expensive than the algorithm that we will perform on it. Behavior with ill-posed grids
+/// is undefined.
+/// 
+/// #### Args:
+/// 
+/// * `grids`: `N` slices of each axis' grid coordinates. Must be unique and monotonically increasing.
+/// * `vals`:  Flattened `N`-dimensional array of data values at each grid point in C-style order.
+///          Must be the same length as the cartesian product of the grids, (n_x * n_y * ...).
+/// * `obs`:   `N` slices of Observation points where the interpolant should be evaluated.
+///          Must be of equal length.
+/// * `out`:   Pre-allocated output buffer to place the resulting values.
+///          Must  be the same length as each of the `obs` slices.
+/// * `method`: Choice of interpolant function.
+/// * `assume_grid_kind`: Whether to assume the grid is regular (evenly-spaced),
+///                     rectilinear (un-evenly spaced), or make no assumption.
+///                     If an assumption is provided, this bypasses a check of each
+///                     grid, which can be a major speedup in some cases.
+/// * `linearize_extrapolation`: Whether cubic methods should extrapolate linearly instead of the default
+///                            quadratic extrapolation. Linearization is recommended to prevent
+///                            the interpolant from diverging to extremes outside the grid.
+/// * `check_bounds_with_atol`: If provided, return an error if any observation points are outside the grid
+///                           by an amount exceeding the provided tolerance.
+/// * `max_threads`: If provided, limit number of threads used to at most this number. Otherwise,
+///                use a heuristic to choose the number that will provide the best throughput.
 #[cfg(feature = "par")]
 pub fn interpn<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -174,15 +219,21 @@ pub fn interpn<T: Float + Send + Sync>(
         return Err(MAXDIMS_ERR);
     }
 
+    // Resolve grid kind, checking the grid if the kind is not provided by the user.
+    // We do this once at the top level so that the work is not repeated by each thread.
+    let kind = resolve_grid_kind(assume_grid_kind, grids)?;
+
     // Chunk for parallelism.
     //
     // By default, use only physical cores, because on most machines as of
     // 2026, only half the available cores represent real compute capability due to
-    // the widespread adoption of hyperthreading.
+    // the widespread adoption of hyperthreading. If a larger number is requested for
+    // max_threads, that value is clamped to the total available threads so that we don't
+    // queue chunks unnecessarily.
     //
     // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
-    // single-threaded performance is usually faster due to a combination of threading overhead
-    // and memory page sizing.
+    // single-threaded performance is usually faster due to a combination of thread spawning overhead,
+    // memory page sizing, and improved vectorization over larger inputs.
     let num_cores_physical = num_cpus::get_physical(); // Real cores
     let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
     let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
@@ -225,7 +276,7 @@ pub fn interpn<T: Float + Send + Sync>(
             &obs_slices[..ndims],
             outc,
             method,
-            assume_grid_kind,
+            Some(kind),
             linearize_extrapolation,
             check_bounds_with_atol,
         );
@@ -258,34 +309,8 @@ pub fn interpn_serial<T: Float>(
         return Err(MAXDIMS_ERR);
     }
 
-    // Resolve grid kind, checking the grid if
-    // the kind is not provided by the user.
-    let kind = match assume_grid_kind {
-        Some(GridKind::Regular) => GridKind::Regular,
-        Some(GridKind::Rectilinear) => GridKind::Rectilinear,
-        None => {
-            // Check whether grid is regular
-            let mut is_regular = true;
-
-            for grid in grids.iter() {
-                if grid.len() < 2 {
-                    return Err("All grids must have at least two entries");
-                }
-                let step = grid[1] - grid[0];
-
-                if !grid.windows(2).all(|pair| pair[1] - pair[0] == step) {
-                    is_regular = false;
-                    break;
-                }
-            }
-
-            if is_regular {
-                GridKind::Regular
-            } else {
-                GridKind::Rectilinear
-            }
-        }
-    };
+    // Resolve grid kind, checking the grid if the kind is not provided by the user.
+    let kind = resolve_grid_kind(assume_grid_kind, grids)?;
 
     // Extract regular grid params
     let get_regular_grid = || {
@@ -390,6 +415,41 @@ pub fn interpn_serial<T: Float>(
             nearest::rectilinear::interpn(grids, vals, obs, out)
         }
     }
+}
+
+/// Figure out whether a grid is regular or rectilinear.
+fn resolve_grid_kind<T: Float>(
+    assume_grid_kind: Option<GridKind>,
+    grids: &[&[T]],
+) -> Result<GridKind, &'static str> {
+    let kind = match assume_grid_kind {
+        Some(GridKind::Regular) => GridKind::Regular,
+        Some(GridKind::Rectilinear) => GridKind::Rectilinear,
+        None => {
+            // Check whether grid is regular
+            let mut is_regular = true;
+
+            for grid in grids.iter() {
+                if grid.len() < 2 {
+                    return Err("All grids must have at least two entries");
+                }
+                let step = grid[1] - grid[0];
+
+                if !grid.windows(2).all(|pair| pair[1] - pair[0] == step) {
+                    is_regular = false;
+                    break;
+                }
+            }
+
+            if is_regular {
+                GridKind::Regular
+            } else {
+                GridKind::Rectilinear
+            }
+        }
+    };
+
+    Ok(kind)
 }
 
 /// Index a single value from an array

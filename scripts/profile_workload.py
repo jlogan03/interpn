@@ -12,7 +12,7 @@ import numpy as np
 from interpn import interpn as interpn_fn
 
 _TARGET_COUNT = int(1e4)
-_OBSERVATION_COUNTS = (1, 3, 571, 2017, int(1e6))
+_OBSERVATION_COUNTS = (1, 3, 571, 2017, int(1e4))
 _MAX_DIMS = 4
 _GRID_SIZE = 30
 
