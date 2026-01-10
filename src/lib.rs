@@ -122,7 +122,7 @@ use rayon::{
 };
 
 #[cfg(feature = "par")]
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 #[cfg(feature = "std")]
 pub mod utils;
@@ -156,6 +156,19 @@ pub enum GridKind {
 const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
+
+/// The number of physical cores present on the machine;
+/// initialized once, then never again, because each call involves some file I/O
+/// and allocations that can be slower than the function call that they support.
+/// 
+/// On subsequent accesses, each access is an atomic load without any waiting paths.
+/// 
+/// This lock can only be contended if multiple threads attempt access
+/// before it is initialized; in that case, the waiting threads may park
+/// until initialization is complete, which can cause ~20us delays
+/// on first access only.
+#[cfg(feature = "par")]
+static PHYSICAL_CORES: LazyLock<usize> = LazyLock::new(num_cpus::get_physical);
 
 /// Evaluate multidimensional interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
@@ -233,7 +246,7 @@ pub fn interpn<T: Float + Send + Sync>(
     // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
     // single-threaded performance is usually faster due to a combination of thread spawning overhead,
     // memory page sizing, and improved vectorization over larger inputs.
-    let num_cores_physical = num_cpus::get_physical(); // Real cores
+    let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
     let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
     let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
     let num_cores = match max_threads {
