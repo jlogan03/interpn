@@ -18,6 +18,7 @@ from interpn import (
     MulticubicRectilinear,
     NearestRegular,
     NearestRectilinear,
+    interpn as interpn_fn,
 )
 
 # Toggle SciPy/NumPy baselines via environment for PGO workloads.
@@ -50,6 +51,11 @@ def average_call_time(
 
 
 DASH_STYLES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"]
+THREAD_SPEEDUP_COLORS = {
+    "linear": "#1f77b4",
+    "cubic": "#ff7f0e",
+    "nearest": "#2ca02c",
+}
 
 
 def _normalized_line_style(index: int) -> str:
@@ -466,6 +472,196 @@ def _plot_speedup_vs_dims(
         fig.show()
 
 
+def _thread_counts() -> list[int]:
+    max_threads = os.cpu_count() or 1
+    max_threads = max(int(max_threads / 2), 1)  # Real threads, not hyperthreads
+    counts = []
+    threads = 1
+    while threads < max_threads:
+        counts.append(threads)
+        threads *= 2
+    counts.append(max_threads)
+    return sorted(set(counts))
+
+
+def _plot_speedup_vs_threads(
+    *,
+    thread_counts: list[int],
+    speedups: dict[str, dict[str, list[float]]],
+    nobs: int,
+    output_path: Path,
+) -> None:
+    fig = make_subplots(rows=1, cols=1)
+    dash_styles = [
+        _normalized_line_style(i)
+        for i in range(len(["linear", "cubic", "nearest"]) * 2)
+    ]
+    all_values = []
+    thread_arr = np.array(thread_counts)
+    series: list[tuple[str, np.ndarray]] = []
+    for grid_kind in ["regular", "rectilinear"]:
+        for method in ["linear", "cubic", "nearest"]:
+            values = speedups[grid_kind].get(method)
+            if not values:
+                continue
+            values_arr = np.array(values, dtype=float)
+            all_values.append(values_arr)
+            series.append((f"{method.title()} {grid_kind}", values_arr))
+    for _, values_arr in series:
+        ones = np.ones_like(values_arr)
+        fill_between(
+            fig,
+            x=thread_arr,
+            upper=np.maximum(values_arr, ones),
+            lower=np.minimum(values_arr, ones),
+            row=1,
+            col=1,
+            fillcolor="rgba(139, 196, 59, 0.25)",
+        )
+    for idx, (label, values_arr) in enumerate(series):
+        fig.add_trace(
+            go.Scatter(
+                x=thread_arr,
+                y=values_arr,
+                mode="lines+markers",
+                name=label,
+                line=dict(
+                    color="black",
+                    width=2,
+                    dash=dash_styles[idx],
+                ),
+                marker=dict(size=7, color="black"),
+                showlegend=False,
+            ),
+            row=1,
+            col=1,
+        )
+    fig.add_hline(
+        y=1.0,
+        line=dict(color="black", dash="dot", width=1),
+        row=1,
+        col=1,
+    )
+    y_min = 1.0
+    if all_values:
+        y_min = min(1.0, min(values.min() for values in all_values))
+    y_max = max(thread_counts) if thread_counts else 1
+    fig.update_xaxes(
+        title_text="Threads",
+        row=1,
+        col=1,
+        range=[min(thread_counts), max(thread_counts)] if thread_counts else None,
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+    fig.update_yaxes(
+        title_text="Speedup vs. 1 Thread",
+        row=1,
+        col=1,
+        range=[y_min, y_max],
+        showline=True,
+        linecolor="black",
+        linewidth=1,
+        mirror=True,
+        ticks="outside",
+        tickcolor="black",
+        showgrid=False,
+        zeroline=False,
+    )
+
+    fig.update_layout(
+        title=dict(
+            text=f"InterpN Thread Speedup ({nobs} Observation Points)",
+            y=0.98,
+            yanchor="top",
+        ),
+        height=430,
+        margin=dict(t=70, l=60, r=40, b=80),
+        showlegend=False,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="black"),
+    )
+    fig.write_image(str(output_path))
+    fig.write_html(
+        str(output_path.with_suffix(".html")),
+        include_plotlyjs="cdn",
+        full_html=False,
+    )
+    fig.show()
+
+
+def bench_thread_speedup_vs_threads():
+    nobs = 10_000_000
+    ndims = 2
+    ngrid = int(10e6**0.5)
+    rng = np.random.default_rng(17)
+
+    thread_counts = _thread_counts()
+    speedups: dict[str, dict[str, list[float]]] = {
+        "regular": {},
+        "rectilinear": {},
+    }
+
+    def make_grids(kind: str) -> list[NDArray]:
+        base = np.linspace(-1.0, 1.0, ngrid)
+        if kind == "regular":
+            return [base for _ in range(ndims)]
+        warped = base**3
+        return [warped for _ in range(ndims)]
+
+    for grid_kind in ["regular", "rectilinear"]:
+        grids = make_grids(grid_kind)
+        mesh = np.meshgrid(*grids, indexing="ij")
+        vals = (mesh[0] + 2.0 * mesh[1]).astype(np.float64)
+        vals_flat = vals.ravel()
+        obs = []
+        for grid in grids:
+            lo = grid[0]
+            hi = grid[-1]
+            span = hi - lo
+            obs.append(
+                rng.uniform(lo + 0.05 * span, hi - 0.05 * span, size=nobs).astype(
+                    np.float64
+                )
+            )
+        out = np.zeros_like(obs[0])
+
+        for method in ["linear", "cubic", "nearest"]:
+            timings = []
+            for threads in thread_counts:
+                timed = average_call_time(
+                    lambda points, threads=threads: interpn_fn(
+                        obs=points,
+                        grids=grids,
+                        vals=vals_flat,
+                        method=method,
+                        out=out,
+                        linearize_extrapolation=False,
+                        grid_kind=grid_kind,
+                        max_threads=threads,
+                    ),
+                    obs,
+                )
+                timings.append(timed)
+            baseline = timings[0]
+            speedups[grid_kind][method] = [baseline / t if t else 0.0 for t in timings]
+
+    output_path = Path(__file__).parent / f"../docs/speedup_vs_threads_{nobs}_obs.svg"
+    _plot_speedup_vs_threads(
+        thread_counts=thread_counts,
+        speedups=speedups,
+        nobs=nobs,
+        output_path=output_path,
+    )
+
+
 def bench_4_dims_1_obs():
     nbench = 30  # Bench iterations
     preallocate = False  # Whether to preallocate output array for InterpN
@@ -650,7 +846,7 @@ def bench_4_dims_1_obs():
 
 
 def bench_3_dims_n_obs_unordered():
-    for preallocate in [False, True]:
+    for preallocate in [True, False]:
         ndims = 3  # Number of grid dimensions
         ngrid = 20  # Size of grid on each dimension
 
@@ -790,7 +986,7 @@ def bench_3_dims_n_obs_unordered():
 
 
 def bench_4_dims_n_obs_unordered():
-    for preallocate in [False, True]:
+    for preallocate in [True, False]:
         ndims = 4  # Number of grid dimensions
         ngrid = 20  # Size of grid on each dimension
 
@@ -1077,6 +1273,7 @@ def bench_throughput_vs_dims():
 
 def main():
     bench_throughput_vs_dims()
+    bench_thread_speedup_vs_threads()
     bench_4_dims_1_obs()
     bench_4_dims_n_obs_unordered()
     bench_3_dims_n_obs_unordered()
