@@ -16,6 +16,7 @@
 * Python
   * !Refactor `interpn` function
     * Combine `check_bounds: bool` and `bounds_check_atol: float` to `check_bounds_with_atol: float | None`
+    * Replace `assume_regular` input with optional `grid_kind` to allow assuming either regular or rectilinear, or making no assumption
     * Add `max_threads: int | None` input to allow manually limiting parallelism
     * Use rust top-level `interpn` function as backend for method selection, bounds checks, and parallelism
 
