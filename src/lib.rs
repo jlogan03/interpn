@@ -160,9 +160,9 @@ const MAXDIMS_ERR: &str =
 /// The number of physical cores present on the machine;
 /// initialized once, then never again, because each call involves some file I/O
 /// and allocations that can be slower than the function call that they support.
-/// 
+///
 /// On subsequent accesses, each access is an atomic load without any waiting paths.
-/// 
+///
 /// This lock can only be contended if multiple threads attempt access
 /// before it is initialized; in that case, the waiting threads may park
 /// until initialization is complete, which can cause ~20us delays
@@ -256,56 +256,71 @@ pub fn interpn<T: Float + Send + Sync>(
     let n = out.len();
     let chunk = 1024.max(n / num_cores);
 
-    // Make a shared error indicator
-    let result: Mutex<Option<&'static str>> = Mutex::new(None);
-    let write_err = |msg: &'static str| {
-        let mut guard = result.lock().unwrap();
-        if guard.is_none() {
-            *guard = Some(msg);
+    // If there are enough points to justify it, run parallel
+    if chunk > 2 * n {
+        // Make a shared error indicator
+        let result: Mutex<Option<&'static str>> = Mutex::new(None);
+        let write_err = |msg: &'static str| {
+            let mut guard = result.lock().unwrap();
+            if guard.is_none() {
+                *guard = Some(msg);
+            }
+        };
+
+        // Run threaded
+        out.par_chunks_mut(chunk).enumerate().for_each(|(i, outc)| {
+            // Calculate the start and end of observation point chunks
+            let start = chunk * i;
+            let end = start + outc.len();
+
+            // Chunk observation points
+            let mut obs_slices: [&[T]; 8] = [&[]; 8];
+            for (j, o) in obs.iter().enumerate() {
+                let s = &o.get(start..end);
+                match s {
+                    Some(s) => obs_slices[j] = s,
+                    None => {
+                        write_err("Dimension mismatch");
+                        return;
+                    }
+                };
+            }
+
+            // Do interpolations
+            let res_inner = interpn_serial(
+                grids,
+                vals,
+                &obs_slices[..ndims],
+                outc,
+                method,
+                Some(kind),
+                linearize_extrapolation,
+                check_bounds_with_atol,
+            );
+
+            match res_inner {
+                Ok(()) => {}
+                Err(msg) => write_err(msg),
+            }
+        });
+
+        // Handle errors from threads
+        match *result.lock().unwrap() {
+            Some(msg) => Err(msg),
+            None => Ok(()),
         }
-    };
-
-    // Run threaded
-    out.par_chunks_mut(chunk).enumerate().for_each(|(i, outc)| {
-        // Calculate the start and end of observation point chunks
-        let start = chunk * i;
-        let end = start + outc.len();
-
-        // Chunk observation points
-        let mut obs_slices: [&[T]; 8] = [&[]; 8];
-        for (j, o) in obs.iter().enumerate() {
-            let s = &o.get(start..end);
-            match s {
-                Some(s) => obs_slices[j] = s,
-                None => {
-                    write_err("Dimension mismatch");
-                    return;
-                }
-            };
-        }
-
-        // Do interpolations
-        let res_inner = interpn_serial(
+    } else {
+        // If there are not enough points to justify parallelism, run serial
+        interpn_serial(
             grids,
             vals,
-            &obs_slices[..ndims],
-            outc,
+            obs,
+            out,
             method,
             Some(kind),
             linearize_extrapolation,
             check_bounds_with_atol,
-        );
-
-        match res_inner {
-            Ok(()) => {}
-            Err(msg) => write_err(msg),
-        }
-    });
-
-    // Handle errors from threads
-    match *result.lock().unwrap() {
-        Some(msg) => Err(msg),
-        None => Ok(()),
+        )
     }
 }
 
