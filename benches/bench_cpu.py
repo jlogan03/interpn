@@ -493,7 +493,8 @@ def _plot_speedup_vs_threads(
 ) -> None:
     fig = make_subplots(rows=1, cols=1)
     dash_styles = [
-        _normalized_line_style(i) for i in range(len(["linear", "cubic", "nearest"]) * 2)
+        _normalized_line_style(i)
+        for i in range(len(["linear", "cubic", "nearest"]) * 2)
     ]
     all_values = []
     thread_arr = np.array(thread_counts)
@@ -597,9 +598,9 @@ def _plot_speedup_vs_threads(
 
 
 def bench_thread_speedup_vs_threads():
-    nobs = 1_000_000
-    ndims = 3
-    ngrid = 20
+    nobs = 10_000_000
+    ndims = 2
+    ngrid = int(10e6**0.5)
     rng = np.random.default_rng(17)
 
     thread_counts = _thread_counts()
@@ -618,7 +619,7 @@ def bench_thread_speedup_vs_threads():
     for grid_kind in ["regular", "rectilinear"]:
         grids = make_grids(grid_kind)
         mesh = np.meshgrid(*grids, indexing="ij")
-        vals = (mesh[0] + 2.0 * mesh[1] - 0.5 * mesh[2]).astype(np.float64)
+        vals = (mesh[0] + 2.0 * mesh[1]).astype(np.float64)
         vals_flat = vals.ravel()
         obs = []
         for grid in grids:
@@ -650,11 +651,9 @@ def bench_thread_speedup_vs_threads():
                 )
                 timings.append(timed)
             baseline = timings[0]
-            speedups[grid_kind][method] = [
-                baseline / t if t else 0.0 for t in timings
-            ]
+            speedups[grid_kind][method] = [baseline / t if t else 0.0 for t in timings]
 
-    output_path = Path(__file__).parent / "../docs/speedup_vs_threads_1000000_obs.svg"
+    output_path = Path(__file__).parent / f"../docs/speedup_vs_threads_{nobs}_obs.svg"
     _plot_speedup_vs_threads(
         thread_counts=thread_counts,
         speedups=speedups,
@@ -847,7 +846,7 @@ def bench_4_dims_1_obs():
 
 
 def bench_3_dims_n_obs_unordered():
-    for preallocate in [False, True]:
+    for preallocate in [True, False]:
         ndims = 3  # Number of grid dimensions
         ngrid = 20  # Size of grid on each dimension
 
@@ -987,7 +986,7 @@ def bench_3_dims_n_obs_unordered():
 
 
 def bench_4_dims_n_obs_unordered():
-    for preallocate in [False, True]:
+    for preallocate in [True, False]:
         ndims = 4  # Number of grid dimensions
         ngrid = 20  # Size of grid on each dimension
 
@@ -1273,8 +1272,8 @@ def bench_throughput_vs_dims():
 
 
 def main():
-    bench_thread_speedup_vs_threads()
     bench_throughput_vs_dims()
+    bench_thread_speedup_vs_threads()
     bench_4_dims_1_obs()
     bench_4_dims_n_obs_unordered()
     bench_3_dims_n_obs_unordered()

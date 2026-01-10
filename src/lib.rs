@@ -231,34 +231,34 @@ pub fn interpn<T: Float + Send + Sync>(
     if ndims > MAXDIMS {
         return Err(MAXDIMS_ERR);
     }
+    let n = out.len();
 
     // Resolve grid kind, checking the grid if the kind is not provided by the user.
     // We do this once at the top level so that the work is not repeated by each thread.
     let kind = resolve_grid_kind(assume_grid_kind, grids)?;
 
-    // Chunk for parallelism.
-    //
-    // By default, use only physical cores, because on most machines as of
-    // 2026, only half the available cores represent real compute capability due to
-    // the widespread adoption of hyperthreading. If a larger number is requested for
-    // max_threads, that value is clamped to the total available threads so that we don't
-    // queue chunks unnecessarily.
-    //
-    // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
-    // single-threaded performance is usually faster due to a combination of thread spawning overhead,
-    // memory page sizing, and improved vectorization over larger inputs.
-    let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
-    let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
-    let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
-    let num_cores = match max_threads {
-        Some(num_cores_requested) => num_cores_requested.min(num_cores_available),
-        None => num_cores_available,
-    };
-    let n = out.len();
-    let chunk = MIN_CHUNK_SIZE.max(n / num_cores);
-
     // If there are enough points to justify it, run parallel
     if 2 * MIN_CHUNK_SIZE <= n {
+        // Chunk for parallelism.
+        //
+        // By default, use only physical cores, because on most machines as of
+        // 2026, only half the available cores represent real compute capability due to
+        // the widespread adoption of hyperthreading. If a larger number is requested for
+        // max_threads, that value is clamped to the total available threads so that we don't
+        // queue chunks unnecessarily.
+        //
+        // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
+        // single-threaded performance is usually faster due to a combination of thread spawning overhead,
+        // memory page sizing, and improved vectorization over larger inputs.
+        let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
+        let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
+        let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
+        let num_cores = match max_threads {
+            Some(num_cores_requested) => num_cores_requested.min(num_cores_available),
+            None => num_cores_available,
+        };
+        let chunk = MIN_CHUNK_SIZE.max(n / num_cores);
+
         // Make a shared error indicator
         let result: Mutex<Option<&'static str>> = Mutex::new(None);
         let write_err = |msg: &'static str| {
