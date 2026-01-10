@@ -156,6 +156,7 @@ pub enum GridKind {
 const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
+const MIN_CHUNK_SIZE: usize = 1024;
 
 /// The number of physical cores present on the machine;
 /// initialized once, then never again, because each call involves some file I/O
@@ -254,10 +255,10 @@ pub fn interpn<T: Float + Send + Sync>(
         None => num_cores_available,
     };
     let n = out.len();
-    let chunk = 1024.max(n / num_cores);
+    let chunk = MIN_CHUNK_SIZE.max(n / num_cores);
 
     // If there are enough points to justify it, run parallel
-    if chunk > 2 * n {
+    if 2 * MIN_CHUNK_SIZE <= n {
         // Make a shared error indicator
         let result: Mutex<Option<&'static str>> = Mutex::new(None);
         let write_err = |msg: &'static str| {
