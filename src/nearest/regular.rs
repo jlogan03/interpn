@@ -231,11 +231,6 @@ impl<'a, T: Float, const N: usize> NearestRegular<'a, T, N> {
     ///     integer value within the value type `T`
     #[inline]
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
-        // Check sizes
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
-
         // Initialize fixed-size intermediate storage.
         // Maybe counterintuitively, initializing this storage here on every usage
         // instead of once with the top level struct is a significant speedup

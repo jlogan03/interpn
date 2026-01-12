@@ -27,7 +27,6 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
-use super::MultilinearRectilinearRecursive;
 use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::Float;
@@ -72,8 +71,10 @@ pub fn interpn<T: Float>(
             .interp(obs.try_into().unwrap(), out),
         6 => MultilinearRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
             .interp(obs.try_into().unwrap(), out),
-        7 => MultilinearRectilinearRecursive::<'_, T, 7>::new(grids, vals)?.interp(obs, out),
-        8 => MultilinearRectilinearRecursive::<'_, T, 8>::new(grids, vals)?.interp(obs, out),
+        7 => MultilinearRectilinear::<'_, T, 7>::new(grids.try_into().unwrap(), vals)?
+            .interp(obs.try_into().unwrap(), out),
+        8 => MultilinearRectilinear::<'_, T, 8>::new(grids.try_into().unwrap(), vals)?
+            .interp(obs.try_into().unwrap(), out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),
@@ -174,12 +175,6 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
     /// * If any step sizes have zero or negative magnitude
     pub fn new(grids: &'a [&'a [T]; N], vals: &'a [T]) -> Result<Self, &'static str> {
         // Check dimensions
-        const {
-            assert!(
-                N > 0 && N < 7,
-                "Flattened method defined for 1-6 dimensions. For higher dimensions, use recursive method."
-            );
-        }
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims[..N].iter().product();
@@ -209,11 +204,6 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
     ///   * If the dimensionality of point or data does not match the grid
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
         let n = out.len();
-
-        // Make sure there are enough coordinate inputs for each dimension
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
 
         // Make sure the size of inputs and output match
         let size_matches = x.iter().all(|&xx| xx.len() == out.len());
@@ -274,51 +264,65 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
         const FP: usize = 2; // Footprint size
         let nverts = const { FP.pow(N as u32) }; // Total number of vertices
 
-        unroll! {
-            for i < 64 in 0..nverts { // const loop
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
                 // Index, interpolate, or pass on each level of the tree
                 for j in 0..N {
-
-                        // Most of these iterations will get optimized out
-                        if j == 0 { // const branch
-                            // At leaves, index values
-                            for k in 0..N {
-                                    // Bit pattern in an integer matches C-ordered array indexing
-                                    // so we can just use the vertex index to index into the array
-                                    // by selecting the appropriate bit from the index.
-                                    let offset: usize = (i & (1 << k)) >> k;
-                                    loc[k] = origin[k] + offset;
-                            }
-                            const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    // Most of these iterations will get optimized out
+                    if j == 0 {
+                        // const branch
+                        // At leaves, index values
+                        for k in 0..N {
+                            // Bit pattern in an integer matches C-ordered array indexing
+                            // so we can just use the vertex index to index into the array
+                            // by selecting the appropriate bit from the index.
+                            let offset: usize = ($i & (1 << k)) >> k;
+                            loc[k] = origin[k] + offset;
                         }
-                        else { // const branch
-                            // For other nodes, interpolate on child values
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    } else {
+                        // const branch
+                        // For other nodes, interpolate on child values
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
 
-                            let q: usize = FP.pow(j as u32);
-                            let level: bool =  (i + 1).is_multiple_of(q);
-                            let p: usize = ((i + 1) / q).saturating_sub(1) % FP;
+                        if level {
+                            // const branch
+                            let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
                             let ind: usize = j.saturating_sub(1);
+                            let x0 = self.grids[ind][origin[ind]];
+                            let x1 = self.grids[ind][origin[ind] + 1];
+                            let step = x1 - x0;
+                            let t = (x[ind] - x0) / step;
 
-                            if level { // const branch
-                                let x0 = self.grids[ind][origin[ind]];
-                                let x1 = self.grids[ind][origin[ind] + 1];
-                                let step = x1 - x0;
-                                let t = (x[ind] - x0) / step;
+                            let y0 = store[ind][0];
+                            let dy = store[ind][1] - y0;
 
-                                let y0 = store[ind][0];
-                                let dy = store[ind][1] - y0;
+                            #[cfg(not(feature = "fma"))]
+                            let interped = y0 + t * dy;
+                            #[cfg(feature = "fma")]
+                            let interped = t.mul_add(dy, y0);
 
-                                #[cfg(not(feature = "fma"))]
-                                let interped = y0 + t * dy;
-                                #[cfg(feature = "fma")]
-                                let interped = t.mul_add(dy, y0);
-
-                                store[j][p] = interped;
-                            }
+                            store[j][p] = interped;
                         }
-
+                    }
                 }
+            };
+        }
+
+        // Select flattened vs. looped implementation
+        if N <= 6 {
+            // For small numbers of dimensions, unroll at compile time
+            unroll! {
+                for i < 64 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i)
+                }
+            }
+        } else {
+            // For larger numbers of dimensions, execute the loop
+            for i in 0..nverts {
+                unroll_vertices_body!(i)
             }
         }
 
@@ -405,10 +409,10 @@ mod test {
     /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
-    fn test_interp_extrap_1d_to_6d() {
+    fn test_interp_extrap_1d_to_8d() {
         let mut rng = rng_fixed_seed();
 
-        for ndims in 1..=6 {
+        for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];
