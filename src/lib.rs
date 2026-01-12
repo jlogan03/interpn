@@ -522,17 +522,6 @@ fn resolve_grid_kind<T: Float>(
     Ok(kind)
 }
 
-/// Index a single value from an array
-#[inline]
-pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
-}
-
 /// Index a single value from an array with a known fixed number of dimensions
 #[inline]
 pub(crate) fn index_arr_fixed_dims<T: Copy, const N: usize>(

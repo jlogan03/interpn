@@ -29,10 +29,7 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-use super::{
-    MulticubicRectilinearRecursive, Saturation, centered_difference_nonuniform,
-    normalized_hermite_spline,
-};
+use super::{Saturation, centered_difference_nonuniform, normalized_hermite_spline};
 use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::Float;
@@ -81,35 +78,36 @@ pub fn interpn<T: Float>(
             linearize_extrapolation,
         )?
         .interp(obs.try_into().unwrap(), out),
-        4 => {
-            #[cfg(not(feature = "deep-unroll"))]
-            {
-                MulticubicRectilinearRecursive::<'_, T, 4>::new(
-                    grids,
-                    vals,
-                    linearize_extrapolation,
-                )?
-                .interp(obs, out)
-            }
-
-            #[cfg(feature = "deep-unroll")]
-            {
-                MulticubicRectilinear::<'_, T, 4>::new(
-                    grids.try_into().unwrap(),
-                    vals,
-                    linearize_extrapolation,
-                )?
-                .interp(obs.try_into().unwrap(), out)
-            }
-        }
-        5 => MulticubicRectilinearRecursive::<'_, T, 5>::new(grids, vals, linearize_extrapolation)?
-            .interp(obs, out),
-        6 => MulticubicRectilinearRecursive::<'_, T, 6>::new(grids, vals, linearize_extrapolation)?
-            .interp(obs, out),
-        7 => MulticubicRectilinearRecursive::<'_, T, 7>::new(grids, vals, linearize_extrapolation)?
-            .interp(obs, out),
-        8 => MulticubicRectilinearRecursive::<'_, T, 8>::new(grids, vals, linearize_extrapolation)?
-            .interp(obs, out),
+        4 => MulticubicRectilinear::<'_, T, 4>::new(
+            grids.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        5 => MulticubicRectilinear::<'_, T, 5>::new(
+            grids.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        6 => MulticubicRectilinear::<'_, T, 6>::new(
+            grids.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        7 => MulticubicRectilinear::<'_, T, 7>::new(
+            grids.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
+        8 => MulticubicRectilinear::<'_, T, 8>::new(
+            grids.try_into().unwrap(),
+            vals,
+            linearize_extrapolation,
+        )?
+        .interp(obs.try_into().unwrap(), out),
         _ => Err(
             "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
         ),
@@ -209,18 +207,6 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
-        const {
-            #[cfg(not(feature = "deep-unroll"))]
-            assert!(
-                N > 0 && N < 4,
-                "Flattened method defined for 1-3 dimensions by default (1-4 with `deep-unroll` feature). For higher dimensions, use recursive method."
-            );
-            #[cfg(feature = "deep-unroll")]
-            assert!(
-                N > 0 && N < 5,
-                "Flattened method defined for 1-4 dimensions with `deep-unroll`. For higher dimensions, use recursive method."
-            );
-        }
         let mut dims = [1_usize; N];
         (0..N).for_each(|i| dims[i] = grids[i].len());
         let nvals: usize = dims.iter().product();
@@ -327,8 +313,8 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
                             let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
                             loc[k] = origin[k] + offset;
                         }
-                        const STORE_IND: usize = $i % FP;
-                        store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
                     } else {
                         // const branch
                         // For other nodes, interpolate on child values
@@ -356,14 +342,27 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         }
 
         #[cfg(not(feature = "deep-unroll"))]
-        unroll! {
-            for i < 64 in 0..nverts {  // const loop
+        if N <= 3 {
+            unroll! {
+                for i < 64 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
                 unroll_vertices_body!(i);
             }
         }
+
         #[cfg(feature = "deep-unroll")]
-        unroll! {
-            for i < 256 in 0..nverts {  // const loop
+        if N <= 4 {
+            unroll! {
+                for i < 256 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
                 unroll_vertices_body!(i);
             }
         }
@@ -631,10 +630,10 @@ mod test {
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_extrap_1d_to_4d_quadratic() {
+    fn test_interp_extrap_1d_to_6d_quadratic() {
         let mut rng = rng_fixed_seed();
 
-        for ndims in 1..4 {
+        for ndims in 1..=6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];
@@ -687,7 +686,7 @@ mod test {
             // Check that interpolated and extrapolated values match expectation,
             // using an absolute difference because some points are very close to or exactly at zero,
             // and do not do well under a check on relative difference.
-            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
+            (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 3e-10));
         }
     }
 

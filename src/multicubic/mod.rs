@@ -47,14 +47,10 @@
 use num_traits::Float;
 
 pub mod rectilinear;
-pub mod rectilinear_recursive;
 pub mod regular;
-pub mod regular_recursive;
 
 pub use rectilinear::MulticubicRectilinear;
-pub use rectilinear_recursive::MulticubicRectilinearRecursive;
 pub use regular::MulticubicRegular;
-pub use regular_recursive::MulticubicRegularRecursive;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Saturation {
