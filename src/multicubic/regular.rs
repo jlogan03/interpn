@@ -289,7 +289,11 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
         // Make sure the size of inputs and output match
         let n = out.len();
-        for i in 0..N { if x[i].len() != n { return Err("Dimension mismatch") } }
+        for i in 0..N {
+            if x[i].len() != n {
+                return Err("Dimension mismatch");
+            }
+        }
 
         let mut tmp = [T::zero(); N];
         for i in 0..n {
