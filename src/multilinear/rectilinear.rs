@@ -203,13 +203,9 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
-        let n = out.len();
-
         // Make sure the size of inputs and output match
-        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
-        if !size_matches {
-            return Err("Dimension mismatch");
-        }
+        let n = out.len();
+        for i in 0..N { if x[i].len() != n { return Err("Dimension mismatch") } }
 
         let mut tmp = [T::zero(); N];
         for i in 0..n {
