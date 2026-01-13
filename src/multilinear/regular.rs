@@ -60,67 +60,20 @@ pub fn interpn<T: Float>(
         return Err("Dimension mismatch");
     }
 
-    match ndims {
-        1 => MultilinearRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => MultilinearRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => MultilinearRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => MultilinearRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        5 => MultilinearRegular::<'_, T, 5>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        6 => MultilinearRegular::<'_, T, 6>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        7 => MultilinearRegular::<'_, T, 7>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        8 => MultilinearRegular::<'_, T, 8>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
-    }?;
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            MultilinearRegular::<'_, T, N>::new(
+                dims.try_into().unwrap(),
+                starts.try_into().unwrap(),
+                steps.try_into().unwrap(),
+                vals,
+            )?
+            .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }

@@ -45,21 +45,15 @@ pub fn interpn<T: Float>(
     if grids.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
-    match ndims {
-        1 => NearestRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        2 => NearestRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        3 => NearestRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        4 => NearestRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        5 => NearestRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        6 => NearestRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        _ => Err("Dimension exceeds maximum (6)."),
-    }?;
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (6).",
+        [1, 2, 3, 4, 5, 6],
+        |N| {
+            NearestRectilinear::<'_, T, N>::new(grids.try_into().unwrap(), vals)?
+                .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }

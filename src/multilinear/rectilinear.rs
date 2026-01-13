@@ -58,27 +58,15 @@ pub fn interpn<T: Float>(
     if grids.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
-    match ndims {
-        1 => MultilinearRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        2 => MultilinearRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        3 => MultilinearRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        4 => MultilinearRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        5 => MultilinearRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        6 => MultilinearRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        7 => MultilinearRectilinear::<'_, T, 7>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        8 => MultilinearRectilinear::<'_, T, 8>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
-    }?;
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            MultilinearRectilinear::<'_, T, N>::new(grids.try_into().unwrap(), vals)?
+                .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }

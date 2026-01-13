@@ -90,6 +90,22 @@
 
 use num_traits::Float;
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! dispatch_ndims {
+    ($ndims:expr, $err:expr, [$($n:literal),+ $(,)?], |$N:ident| $body:expr $(,)?) => {{
+        match $ndims {
+            $(
+                $n => {
+                    const $N: usize = $n;
+                    $body
+                }
+            )+
+            _ => Err($err),
+        }
+    }};
+}
+
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 

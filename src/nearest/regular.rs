@@ -50,51 +50,20 @@ pub fn interpn<T: Float>(
         return Err("Dimension mismatch");
     }
 
-    match ndims {
-        1 => NearestRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => NearestRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => NearestRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => NearestRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        5 => NearestRegular::<'_, T, 5>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        6 => NearestRegular::<'_, T, 6>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        _ => Err("Dimension exceeds maximum (6)."),
-    }?;
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (6).",
+        [1, 2, 3, 4, 5, 6],
+        |N| {
+            NearestRegular::<'_, T, N>::new(
+                dims.try_into().unwrap(),
+                starts.try_into().unwrap(),
+                steps.try_into().unwrap(),
+                vals,
+            )?
+            .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }
