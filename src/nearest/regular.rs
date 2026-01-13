@@ -29,7 +29,7 @@
 use crate::index_arr_fixed_dims;
 use num_traits::{Float, NumCast};
 
-/// Evaluate nearest-neighbor interpolation on a regular grid in up to 6 dimensions.
+/// Evaluate nearest-neighbor interpolation on a regular grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
@@ -52,8 +52,8 @@ pub fn interpn<T: Float>(
 
     crate::dispatch_ndims!(
         ndims,
-        "Dimension exceeds maximum (6).",
-        [1, 2, 3, 4, 5, 6],
+        "Dimension exceeds maximum (8).",
+        [1, 2, 3, 4, 5, 6, 7, 8],
         |N| {
             NearestRegular::<'_, T, N>::new(
                 dims.try_into().unwrap(),
@@ -137,8 +137,8 @@ impl<'a, T: Float, const N: usize> NearestRegular<'a, T, N> {
         // Check dimensions
         const {
             assert!(
-                N > 0 && N < 7,
-                "Flattened method defined for 1-6 dimensions. For higher dimensions, use recursive method."
+                N > 0 && N < 9,
+                "Flattened method defined for 1-8 dimensions. For higher dimensions, use recursive method."
             );
         }
         crate::validate_regular_grid(&dims, &steps, vals)?;
@@ -288,8 +288,8 @@ mod test {
     /// Each test evaluates at 3^N locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow after about N=9.
     #[test]
-    fn test_interp_extrap_1d_to_6d() {
-        for n in 1..=6 {
+    fn test_interp_extrap_1d_to_8d() {
+        for n in 1..=8 {
             println!("Testing in {n} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; n];

@@ -27,7 +27,7 @@
 use crate::index_arr_fixed_dims;
 use num_traits::Float;
 
-/// Evaluate multicubic interpolation on a regular grid in up to 6 dimensions.
+/// Evaluate nearest-neighbor interpolation on a rectilinear grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
@@ -47,8 +47,8 @@ pub fn interpn<T: Float>(
     }
     crate::dispatch_ndims!(
         ndims,
-        "Dimension exceeds maximum (6).",
-        [1, 2, 3, 4, 5, 6],
+        "Dimension exceeds maximum (8).",
+        [1, 2, 3, 4, 5, 6, 7, 8],
         |N| {
             NearestRectilinear::<'_, T, N>::new(grids.try_into().unwrap(), vals)?
                 .interp(obs.try_into().unwrap(), out)
@@ -118,8 +118,8 @@ impl<'a, T: Float, const N: usize> NearestRectilinear<'a, T, N> {
         // Check dimensions
         const {
             assert!(
-                N > 0 && N < 7,
-                "Flattened method defined for 1-6 dimensions."
+                N > 0 && N < 9,
+                "Flattened method defined for 1-8 dimensions."
             );
         }
         let dims = crate::validate_rectilinear_grid(grids, vals)?;
@@ -284,10 +284,10 @@ mod test {
     /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
-    fn test_interp_extrap_1d_to_6d() {
+    fn test_interp_extrap_1d_to_8d() {
         let mut rng = rng_fixed_seed();
 
-        for ndims in 1..=6 {
+        for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];
