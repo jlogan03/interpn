@@ -128,22 +128,7 @@ impl<'a, T: Float, const N: usize> NearestRectilinear<'a, T, N> {
                 "Flattened method defined for 1-6 dimensions."
             );
         }
-        let mut dims = [1_usize; N];
-        (0..N).for_each(|i| dims[i] = grids[i].len());
-        let nvals: usize = dims[..N].iter().product();
-        if vals.len() != nvals {
-            return Err("Dimension mismatch");
-        };
-        // Check if any grids are degenerate
-        let degenerate = dims.iter().any(|&x| x < 2);
-        if degenerate {
-            return Err("All grids must have at least 2 entries");
-        };
-        // Check that at least the first two entries in each grid are monotonic
-        let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
-        if !monotonic_maybe {
-            return Err("All grids must be monotonically increasing");
-        };
+        let dims = crate::validate_rectilinear_grid(grids, vals)?;
 
         Ok(Self { grids, dims, vals })
     }

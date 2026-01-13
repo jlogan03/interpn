@@ -238,20 +238,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         vals: &'a [T],
     ) -> Result<Self, &'static str> {
         // Check dimensions
-        let nvals: usize = dims.iter().product();
-        if vals.len() != nvals {
-            return Err("Dimension mismatch");
-        }
-        // Make sure all dimensions have at least four entries
-        let degenerate = dims[..N].iter().any(|&x| x < 2);
-        if degenerate {
-            return Err("All grids must have at least two entries");
-        }
-        // Check if any dimensions have zero or negative step size
-        let steps_are_positive = steps.iter().all(|&x| x > T::zero());
-        if !steps_are_positive {
-            return Err("All grids must be monotonically increasing");
-        }
+        crate::validate_regular_grid(&dims, &steps, vals)?;
 
         Ok(Self {
             dims,

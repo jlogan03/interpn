@@ -158,6 +158,49 @@ const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
 const MIN_CHUNK_SIZE: usize = 1024;
 
+#[inline(always)]
+pub(crate) fn validate_regular_grid<T: Float, const N: usize>(
+    dims: &[usize; N],
+    steps: &[T; N],
+    vals: &[T],
+) -> Result<(), &'static str> {
+    let nvals: usize = dims.iter().product();
+    if vals.len() != nvals {
+        return Err("Dimension mismatch");
+    }
+    let degenerate = dims.iter().any(|&x| x < 2);
+    if degenerate {
+        return Err("All grids must have at least two entries");
+    }
+    let steps_are_positive = steps.iter().all(|&x| x > T::zero());
+    if !steps_are_positive {
+        return Err("All grids must be monotonically increasing");
+    }
+    Ok(())
+}
+
+#[inline(always)]
+pub(crate) fn validate_rectilinear_grid<T: Float, const N: usize>(
+    grids: &[&[T]; N],
+    vals: &[T],
+) -> Result<[usize; N], &'static str> {
+    let mut dims = [1_usize; N];
+    (0..N).for_each(|i| dims[i] = grids[i].len());
+    let nvals: usize = dims.iter().product();
+    if vals.len() != nvals {
+        return Err("Dimension mismatch");
+    }
+    let degenerate = dims.iter().any(|&x| x < 2);
+    if degenerate {
+        return Err("All grids must have at least 2 entries");
+    }
+    let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
+    if !monotonic_maybe {
+        return Err("All grids must be monotonically increasing");
+    }
+    Ok(dims)
+}
+
 /// The number of physical cores present on the machine;
 /// initialized once, then never again, because each call involves some file I/O
 /// and allocations that can be slower than the function call that they support.
