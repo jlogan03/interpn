@@ -6,17 +6,17 @@
 [Rust Docs](https://docs.rs/interpn/latest/interpn/)
 
 N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatible,
-prioritizing correctness, performance, and compatiblity with memory-constrained environments.
+prioritizing correctness, performance, and compatibility with memory-constrained environments.
 
 Available as a rust crate and python library.
 
 ## Features
 
-| Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization |
-|-----------------------------------|-----------------|---------------------|-----------------------|
-| Nearest-Neighbor                  |   ✅            |     ✅              | ✅                    |
-| Linear                            |   ✅            |     ✅              | ✅                    |
-| Cubic                             |   ✅            |     ✅              | ✅                    |
+| Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization | Thread Parallelism |
+|-----------------------------------|-----------------|---------------------|-----------------------| ------------------ |
+| Nearest-Neighbor                  |   ✅            |     ✅              | ✅                    | ✅                 |
+| Linear                            |   ✅            |     ✅              | ✅                    | ✅                 |
+| Cubic                             |   ✅            |     ✅              | ✅                    | ✅                 |
 
 The methods provided here, while more limited in scope than scipy's,
 
@@ -24,12 +24,17 @@ The methods provided here, while more limited in scope than scipy's,
 * use almost no RAM (and perform no heap allocations at all)
 * produce significantly improved floating-point error (by several orders of magnitude)
 * are json-serializable using Pydantic
-* can also be used easily in web, embedded and gpu applications via the Rust library
+* can also be used easily in web and embedded applications via the Rust library
 * are permissively licensed
 
 <br>
 
 <img src="./docs/speedup_vs_dims_1_obs_linear_inverted.svg" alt="">
+
+For larger jobs such as image processing, the non-allocating evaluation pattern results
+in a nearly-linear thread speedup, limited only by thread spawning overhead and memory bandwidth.
+
+<img src="./docs/speedup_vs_threads_10000000_obs_inverted.svg" alt="">
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
@@ -47,6 +52,9 @@ after installing this extra compiler dependency:
 ```bash
 rustup component add llvm-tools-preview
 ```
+
+An LLVM install matching the version used by rustc is also required for doing PGO;
+see the `./scripts/distr_pgo.sh` or CI workflows for the exact version.
 
 ## Rust Examples
 
