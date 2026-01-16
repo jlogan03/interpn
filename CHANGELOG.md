@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.11.0 2026-01-15
+
+### Changed
+
+* !Remove recursive implementations
+  * All dimensionalities now use const-generic bounded implementations
+  * For dimensions higher than const-unrolling limit, a run-time loop of the same form is used
+  * No notable change in performance for high dimensions
+  * No change to API for `::interpn` convenience functions
+  * All methods are now compatible with static analysis of memory usage via cargo-call-stack
+* Refactor internals to reduce duplication
+* Improve form of early bounds checks to be interpreted correctly by the compiler
+  * 30% speedup in some cases, no effect on most
+  * Bounds checks done via iterator do not always result in optimizing out panic branches
+* Test cubic methods in higher dimensions
+
 ## 0.10.0 2026-01-10
 
 ### Added
