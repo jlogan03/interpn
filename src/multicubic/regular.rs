@@ -58,79 +58,25 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    // Expanding out and using the specialized version for each size
-    // gives a substantial speedup for lower dimensionalities
-    // (4-5x speedup for 1-dim compared to using N=8)
+    // Check dimensionality
     let ndims = dims.len();
-    match ndims {
-        1 => MulticubicRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => MulticubicRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => MulticubicRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => MulticubicRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        5 => MulticubicRegular::<'_, T, 5>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        6 => MulticubicRegular::<'_, T, 6>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        7 => MulticubicRegular::<'_, T, 7>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        8 => MulticubicRegular::<'_, T, 8>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
-    }
+
+    // Dispatch to specialized implementation
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            MulticubicRegular::<'_, T, N>::new(
+                dims.try_into().unwrap(),
+                starts.try_into().unwrap(),
+                steps.try_into().unwrap(),
+                vals,
+                linearize_extrapolation,
+            )?
+            .interp(obs.try_into().unwrap(), out)
+        }
+    )
 }
 
 /// Evaluate interpolant, allocating a new Vec for the output.
