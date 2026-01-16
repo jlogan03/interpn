@@ -39,7 +39,7 @@ use num_traits::Float;
 ///
 /// For 1-4 dimensions with `deep-unroll` enabled (1-3 by default), a fast flattened method is used.
 /// For higher dimensions, where that flattening becomes impractical due to compile times and
-/// instruction size, evaluation defers to a bounded recursion.
+/// instruction size, evaluation defers to a run-time loop.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -164,10 +164,7 @@ pub use crate::multilinear::rectilinear::check_bounds;
 /// * O(4^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(4^ndims) for lower dimensions (unrolled), and O(N) otherwise.
 ///
 /// Timing
 /// * Timing determinism very tight, but is not exact due to the

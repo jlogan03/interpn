@@ -95,10 +95,7 @@ pub use crate::multilinear::regular::check_bounds;
 /// * O(2^N) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(N).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(N).
 ///
 /// Timing
 /// * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.

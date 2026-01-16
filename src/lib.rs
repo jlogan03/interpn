@@ -234,8 +234,8 @@ static PHYSICAL_CORES: LazyLock<usize> = LazyLock::new(num_cpus::get_physical);
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// For lower dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
+/// becomes impractical due to compile times and instruction size, evaluation defers to a run-time
+/// loop.
 /// The linear method uses the flattening for 1-6 dimensions, while
 /// flattened cubic methods are available up to 3 dimensions by default and up to 4 dimensions
 /// with the `deep_unroll` feature enabled.

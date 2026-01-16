@@ -194,10 +194,7 @@ pub use crate::multilinear::regular::check_bounds;
 /// * O(4^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(4^ndims) for lower dimensions (unrolled), and O(N) otherwise.
 ///
 /// Timing
 /// * Timing determinism very tight, but is not exact due to the

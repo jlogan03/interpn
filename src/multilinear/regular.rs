@@ -37,8 +37,8 @@ use num_traits::{Float, NumCast};
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// For 1-6 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
+/// becomes impractical due to compile times and instruction size, evaluation defers to a run-time
+/// loop.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -151,10 +151,7 @@ pub fn check_bounds<T: Float>(
 /// * O(2^N) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(N).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(2^ndims) for lower dimensions (unrolled), and O(N) otherwise.
 ///
 /// Timing
 /// * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
