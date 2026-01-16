@@ -55,11 +55,13 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
+    // Check dimensionality
     let ndims = dims.len();
     if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
 
+    // Dispatch to specialized implementation
     crate::dispatch_ndims!(
         ndims,
         "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",

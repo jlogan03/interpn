@@ -51,13 +51,13 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    // Expanding out and using the specialized version for each size
-    // gives a substantial speedup for lower dimensionalities
-    // (4-5x speedup for 1-dim compared to using N=8)
+    // Check dimensionality
     let ndims = grids.len();
     if grids.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
+
+    // Dispatch to specialized implementation
     crate::dispatch_ndims!(
         ndims,
         "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",

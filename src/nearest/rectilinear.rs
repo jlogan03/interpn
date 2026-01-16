@@ -41,10 +41,13 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
+    // Check dimensionality
     let ndims = grids.len();
     if grids.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
+
+    // Dispatch to specialized implementation
     crate::dispatch_ndims!(
         ndims,
         "Dimension exceeds maximum (8).",
