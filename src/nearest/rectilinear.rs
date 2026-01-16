@@ -27,7 +27,7 @@
 use crate::index_arr_fixed_dims;
 use num_traits::Float;
 
-/// Evaluate multicubic interpolation on a regular grid in up to 6 dimensions.
+/// Evaluate nearest-neighbor interpolation on a rectilinear grid in up to 8 dimensions.
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
@@ -41,25 +41,22 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
+    // Check dimensionality
     let ndims = grids.len();
     if grids.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
-    match ndims {
-        1 => NearestRectilinear::<'_, T, 1>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        2 => NearestRectilinear::<'_, T, 2>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        3 => NearestRectilinear::<'_, T, 3>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        4 => NearestRectilinear::<'_, T, 4>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        5 => NearestRectilinear::<'_, T, 5>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        6 => NearestRectilinear::<'_, T, 6>::new(grids.try_into().unwrap(), vals)?
-            .interp(obs.try_into().unwrap(), out),
-        _ => Err("Dimension exceeds maximum (6)."),
-    }?;
+
+    // Dispatch to specialized implementation
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8).",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            NearestRectilinear::<'_, T, N>::new(grids.try_into().unwrap(), vals)?
+                .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }
@@ -91,10 +88,7 @@ pub use crate::multilinear::rectilinear::check_bounds;
 /// * O(2^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(N).
 ///
 /// Timing
 /// * Timing determinism is very tight, but not guaranteed due to the use of a bisection search.
@@ -124,26 +118,11 @@ impl<'a, T: Float, const N: usize> NearestRectilinear<'a, T, N> {
         // Check dimensions
         const {
             assert!(
-                N > 0 && N < 7,
-                "Flattened method defined for 1-6 dimensions."
+                N > 0 && N < 9,
+                "Flattened method defined for 1-8 dimensions."
             );
         }
-        let mut dims = [1_usize; N];
-        (0..N).for_each(|i| dims[i] = grids[i].len());
-        let nvals: usize = dims[..N].iter().product();
-        if vals.len() != nvals {
-            return Err("Dimension mismatch");
-        };
-        // Check if any grids are degenerate
-        let degenerate = dims.iter().any(|&x| x < 2);
-        if degenerate {
-            return Err("All grids must have at least 2 entries");
-        };
-        // Check that at least the first two entries in each grid are monotonic
-        let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
-        if !monotonic_maybe {
-            return Err("All grids must be monotonically increasing");
-        };
+        let dims = crate::validate_rectilinear_grid(grids, vals)?;
 
         Ok(Self { grids, dims, vals })
     }
@@ -156,17 +135,12 @@ impl<'a, T: Float, const N: usize> NearestRectilinear<'a, T, N> {
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
-        let n = out.len();
-
-        // Make sure there are enough coordinate inputs for each dimension
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
-
         // Make sure the size of inputs and output match
-        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
-        if !size_matches {
-            return Err("Dimension mismatch");
+        let n = out.len();
+        for i in 0..N {
+            if x[i].len() != n {
+                return Err("Dimension mismatch");
+            }
         }
 
         let mut tmp = [T::zero(); N];
@@ -310,10 +284,10 @@ mod test {
     /// Each test evaluates at 3^ndims locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow after about ndims=9.
     #[test]
-    fn test_interp_extrap_1d_to_6d() {
+    fn test_interp_extrap_1d_to_8d() {
         let mut rng = rng_fixed_seed();
 
-        for ndims in 1..=6 {
+        for ndims in 1..=8 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; ndims];

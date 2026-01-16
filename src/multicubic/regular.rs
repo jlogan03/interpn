@@ -30,7 +30,7 @@
 //! let linearize_extrapolation = false;
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
-use super::{MulticubicRegularRecursive, Saturation, normalized_hermite_spline};
+use super::{Saturation, normalized_hermite_spline};
 use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
@@ -40,7 +40,7 @@ use num_traits::{Float, NumCast};
 ///
 /// For 1-4 dimensions with `deep-unroll` enabled (1-3 by default), a fast flattened method is used.
 /// For higher dimensions, where that flattening becomes impractical due to compile times and
-/// instruction size, evaluation defers to a bounded recursion.
+/// instruction size, evaluation defers to a run-time loop.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -58,97 +58,25 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
-    // Expanding out and using the specialized version for each size
-    // gives a substantial speedup for lower dimensionalities
-    // (4-5x speedup for 1-dim compared to using N=8)
+    // Check dimensionality
     let ndims = dims.len();
-    match ndims {
-        1 => MulticubicRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => MulticubicRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => MulticubicRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => {
-            // 4D cubic interpolation requires deep-unroll
-            #[cfg(not(feature = "deep-unroll"))]
-            {
-                MulticubicRegularRecursive::<'_, T, 4>::new(
-                    dims,
-                    starts,
-                    steps,
-                    vals,
-                    linearize_extrapolation,
-                )?
-                .interp(obs, out)
-            }
 
-            #[cfg(feature = "deep-unroll")]
-            {
-                MulticubicRegular::<'_, T, 4>::new(
-                    dims.try_into().unwrap(),
-                    starts.try_into().unwrap(),
-                    steps.try_into().unwrap(),
-                    vals,
-                    linearize_extrapolation,
-                )?
-                .interp(obs.try_into().unwrap(), out)
-            }
+    // Dispatch to specialized implementation
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            MulticubicRegular::<'_, T, N>::new(
+                dims.try_into().unwrap(),
+                starts.try_into().unwrap(),
+                steps.try_into().unwrap(),
+                vals,
+                linearize_extrapolation,
+            )?
+            .interp(obs.try_into().unwrap(), out)
         }
-        5 => MulticubicRegularRecursive::<'_, T, 5>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        6 => MulticubicRegularRecursive::<'_, T, 6>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        7 => MulticubicRegularRecursive::<'_, T, 7>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        8 => MulticubicRegularRecursive::<'_, T, 8>::new(
-            dims,
-            starts,
-            steps,
-            vals,
-            linearize_extrapolation,
-        )?
-        .interp(obs, out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
-    }
+    )
 }
 
 /// Evaluate interpolant, allocating a new Vec for the output.
@@ -212,10 +140,7 @@ pub use crate::multilinear::regular::check_bounds;
 /// * O(4^ndims) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(ndims).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(4^ndims) for lower dimensions (unrolled), and O(N) otherwise.
 ///
 /// Timing
 /// * Timing determinism very tight, but is not exact due to the
@@ -260,18 +185,6 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         // Check dimensions
-        const {
-            #[cfg(not(feature = "deep-unroll"))]
-            assert!(
-                N > 0 && N < 4,
-                "Flattened method defined for 1-3 dimensions by default (1-4 with `deep-unroll` feature). For higher dimensions, use recursive method."
-            );
-            #[cfg(feature = "deep-unroll")]
-            assert!(
-                N > 0 && N < 5,
-                "Flattened method defined for 1-4 dimensions with `deep-unroll`. For higher dimensions, use recursive method."
-            );
-        }
         let nvals: usize = dims.iter().product();
         if !(starts.len() == N && steps.len() == N && vals.len() == nvals && N > 0) {
             return Err("Dimension mismatch");
@@ -317,12 +230,12 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
-        let n = out.len();
-
         // Make sure the size of inputs and output match
-        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
-        if !size_matches {
-            return Err("Dimension mismatch");
+        let n = out.len();
+        for i in 0..N {
+            if x[i].len() != n {
+                return Err("Dimension mismatch");
+            }
         }
 
         let mut tmp = [T::zero(); N];
@@ -400,8 +313,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
                             let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
                             loc[k] = origin[k] + offset;
                         }
-                        const STORE_IND: usize = $i % FP;
-                        store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
                     } else {
                         // const branch
                         // For other nodes, interpolate on child values
@@ -427,14 +340,27 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
 
         #[cfg(not(feature = "deep-unroll"))]
-        unroll! {
-            for i < 64 in 0..nverts {  // const loop
+        if N <= 3 {
+            unroll! {
+                for i < 64 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
                 unroll_vertices_body!(i);
             }
         }
+
         #[cfg(feature = "deep-unroll")]
-        unroll! {
-            for i < 256 in 0..nverts {  // const loop
+        if N <= 4 {
+            unroll! {
+                for i < 256 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
                 unroll_vertices_body!(i);
             }
         }
@@ -706,8 +632,8 @@ mod test {
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition
     /// can reproduce an N-dimensional quadratic function exactly
     #[test]
-    fn test_interp_extrap_1d_to_4d_quadratic() {
-        for ndims in 1..=4 {
+    fn test_interp_extrap_1d_to_6d_quadratic() {
+        for ndims in 1..=6 {
             println!("Testing in {ndims} dims");
             // Interp grid
             let dims: Vec<usize> = vec![4; ndims];

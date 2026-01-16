@@ -29,7 +29,6 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
-use super::MultilinearRegularRecursive;
 use crate::index_arr_fixed_dims;
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
@@ -38,8 +37,8 @@ use num_traits::{Float, NumCast};
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// For 1-6 dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
+/// becomes impractical due to compile times and instruction size, evaluation defers to a run-time
+/// loop.
 ///
 /// This is a convenience function; best performance will be achieved by using the exact right
 /// number for the N parameter, as this will slightly reduce compute and storage overhead,
@@ -56,62 +55,27 @@ pub fn interpn<T: Float>(
     obs: &[&[T]],
     out: &mut [T],
 ) -> Result<(), &'static str> {
+    // Check dimensionality
     let ndims = dims.len();
     if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
         return Err("Dimension mismatch");
     }
 
-    match ndims {
-        1 => MultilinearRegular::<'_, T, 1>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        2 => MultilinearRegular::<'_, T, 2>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        3 => MultilinearRegular::<'_, T, 3>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        4 => MultilinearRegular::<'_, T, 4>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        5 => MultilinearRegular::<'_, T, 5>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        6 => MultilinearRegular::<'_, T, 6>::new(
-            dims.try_into().unwrap(),
-            starts.try_into().unwrap(),
-            steps.try_into().unwrap(),
-            vals,
-        )?
-        .interp(obs.try_into().unwrap(), out),
-        7 => MultilinearRegularRecursive::<'_, T, 7>::new(dims, starts, steps, vals)?
-            .interp(obs, out),
-        8 => MultilinearRegularRecursive::<'_, T, 8>::new(dims, starts, steps, vals)?
-            .interp(obs, out),
-        _ => Err(
-            "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        ),
-    }?;
+    // Dispatch to specialized implementation
+    crate::dispatch_ndims!(
+        ndims,
+        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        |N| {
+            MultilinearRegular::<'_, T, N>::new(
+                dims.try_into().unwrap(),
+                starts.try_into().unwrap(),
+                steps.try_into().unwrap(),
+                vals,
+            )?
+            .interp(obs.try_into().unwrap(), out)
+        }
+    )?;
 
     Ok(())
 }
@@ -189,10 +153,7 @@ pub fn check_bounds<T: Float>(
 /// * O(2^N) for interpolation and extrapolation in all regions.
 ///
 /// Memory Complexity
-/// * Peak stack usage is O(N), which is minimally O(N).
-/// * While evaluation is recursive, the recursion has constant
-///   max depth of N, which provides a guarantee on peak
-///   memory usage.
+/// * Peak stack usage is O(2^ndims) for lower dimensions (unrolled), and O(N) otherwise.
 ///
 /// Timing
 /// * Timing determinism is guaranteed to the extent that floating-point calculation timing is consistent.
@@ -229,26 +190,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         vals: &'a [T],
     ) -> Result<Self, &'static str> {
         // Check dimensions
-        const {
-            assert!(
-                N > 0 && N < 7,
-                "Flattened method defined for 1-6 dimensions. For higher dimensions, use recursive method."
-            );
-        }
-        let nvals: usize = dims.iter().product();
-        if vals.len() != nvals {
-            return Err("Dimension mismatch");
-        }
-        // Make sure all dimensions have at least four entries
-        let degenerate = dims[..N].iter().any(|&x| x < 2);
-        if degenerate {
-            return Err("All grids must have at least two entries");
-        }
-        // Check if any dimensions have zero or negative step size
-        let steps_are_positive = steps.iter().all(|&x| x > T::zero());
-        if !steps_are_positive {
-            return Err("All grids must be monotonically increasing");
-        }
+        crate::validate_regular_grid(&dims, &steps, vals)?;
 
         Ok(Self {
             dims,
@@ -266,11 +208,12 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     ///   * If the dimensionality of the point does not match the data
     ///   * If the dimensionality of point or data does not match the grid
     pub fn interp(&self, x: &[&[T]; N], out: &mut [T]) -> Result<(), &'static str> {
-        let n = out.len();
         // Make sure the size of inputs and output match
-        let size_matches = x.iter().all(|&xx| xx.len() == out.len());
-        if !size_matches {
-            return Err("Dimension mismatch");
+        let n = out.len();
+        for i in 0..N {
+            if x[i].len() != n {
+                return Err("Dimension mismatch");
+            }
         }
 
         let mut tmp = [T::zero(); N];
@@ -294,11 +237,6 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
     ///     integer value within the value type `T`
     #[inline]
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
-        // Check sizes
-        if x.len() != N {
-            return Err("Dimension mismatch");
-        }
-
         // Initialize fixed-size intermediate storage.
         // Maybe counterintuitively, initializing this storage here on every usage
         // instead of once with the top level struct is a significant speedup
@@ -342,46 +280,62 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         const FP: usize = 2; // Footprint size
         let nverts = const { FP.pow(N as u32) }; // Total number of vertices
 
-        unroll! {
-            for i < 64 in 0..nverts {  // const loop
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
                 // Index, interpolate, or pass on each level of the tree
                 for j in 0..N {
-
-                        // Most of these iterations will get optimized out
-                        if j == 0 { // const branch
-                            // At leaves, index values
-                            for k in 0..N {
-                                    // Bit pattern in an integer matches C-ordered array indexing
-                                    // so we can just use the vertex index to index into the array
-                                    // by selecting the appropriate bit from the index.
-                                    let offset: usize = (i & (1 << k)) >> k;
-                                    loc[k] = origin[k] + offset;
-                            }
-                            const STORE_IND: usize = i % FP;
-                            store[0][STORE_IND] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    // Most of these iterations will get optimized out
+                    if j == 0 {
+                        // const branch
+                        // At leaves, index values
+                        for k in 0..N {
+                            // Bit pattern in an integer matches C-ordered array indexing
+                            // so we can just use the vertex index to index into the array
+                            // by selecting the appropriate bit from the index.
+                            let offset: usize = ($i & (1 << k)) >> k;
+                            loc[k] = origin[k] + offset;
                         }
-                        else { // const branch
-                            // For other nodes, interpolate on child values
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    } else {
+                        // const branch
+                        // For other nodes, interpolate on child values
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
 
-                            let q: usize = FP.pow(j as u32);
-                            let level: bool =  (i + 1).is_multiple_of(q);
-                            let p: usize = ((i + 1) / q).saturating_sub(1) % FP;
+                        if level {
+                            // const branch
+                            let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
                             let ind: usize = j.saturating_sub(1);
 
-                            if level { // const branch
-                                let y0 = store[ind][0];
-                                let dy = store[ind][1] - y0;
-                                let t = dts[ind];
+                            let y0 = store[ind][0];
+                            let dy = store[ind][1] - y0;
+                            let t = dts[ind];
 
-                                #[cfg(not(feature = "fma"))]
-                                let interped = y0 + t * dy;
-                                #[cfg(feature = "fma")]
-                                let interped = t.mul_add(dy, y0);
+                            #[cfg(not(feature = "fma"))]
+                            let interped = y0 + t * dy;
+                            #[cfg(feature = "fma")]
+                            let interped = t.mul_add(dy, y0);
 
-                                store[j][p] = interped;
-                            }
+                            store[j][p] = interped;
                         }
+                    }
                 }
+            };
+        }
+
+        // Select flattened vs. looped implementation
+        if N <= 6 {
+            // For small numbers of dimensions, unroll at compile time
+            unroll! {
+                for i < 64 in 0..nverts {  // const loop
+                    unroll_vertices_body!(i)
+                }
+            }
+        } else {
+            // For larger numbers of dimensions, execute the loop
+            for i in 0..nverts {
+                unroll_vertices_body!(i)
             }
         }
 
@@ -428,8 +382,8 @@ mod test {
     /// Each test evaluates at 3^N locations, largely extrapolated in corner regions, so it
     /// rapidly becomes prohibitively slow after about N=9.
     #[test]
-    fn test_interp_extrap_1d_to_6d() {
-        for n in 1..=6 {
+    fn test_interp_extrap_1d_to_8d() {
+        for n in 1..=8 {
             println!("Testing in {n} dims");
             // Interp grid
             let dims: Vec<usize> = vec![2; n];

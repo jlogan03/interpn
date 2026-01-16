@@ -1,21 +1,22 @@
 # InterpN
 
+[Writeup](https://jlogan.dev/blog/#2025-11-10-interpn-fast-interpolation) |
 [Repo](https://github.com/jlogan03/interpn) |
 [Python Docs](https://interpnpy.readthedocs.io/en/latest/) |
 [Rust Docs](https://docs.rs/interpn/latest/interpn/)
 
-This library provides serializable N-dimensional interpolators
-backed by compute-heavy code written in Rust.
+N-dimensional interpolation/extrapolation methods, no-std and no-alloc compatible,
+prioritizing correctness, performance, and compatibility with memory-constrained environments.
 
-These methods perform zero allocation when evaluated (except, optionally, for the output).
-Because of this, they have minimal per-call overhead, and are particularly
-effective when examining small numbers of observation points. See the [performance](/perf) page for detailed benchmarks.
+Available as a rust crate and python library.
 
 ## Features
-| Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization |
-|-----------------------------------|-----------------|---------------------|-----------------------|
-| Linear                            |   ✅            |     ✅              | ✅                    |
-| Cubic                             |   ✅            |     ✅              | ✅                    |
+
+| Feature →<br>↓ Interpolant Method | Regular<br>Grid | Rectilinear<br>Grid | Json<br>Serialization | Thread Parallelism |
+|-----------------------------------|-----------------|---------------------|-----------------------| ------------------ |
+| Nearest-Neighbor                  |   ✅            |     ✅              | ✅                    | ✅                 |
+| Linear                            |   ✅            |     ✅              | ✅                    | ✅                 |
+| Cubic                             |   ✅            |     ✅              | ✅                    | ✅                 |
 
 The methods provided here, while more limited in scope than scipy's,
 
@@ -26,13 +27,14 @@ The methods provided here, while more limited in scope than scipy's,
 * can also be used easily in web and embedded applications via the Rust library
 * are permissively licensed
 
---8<--
-docs/speedup_vs_dims_1_obs_linear.html
---8<--
+<br>
 
---8<--
-docs/speedup_vs_dims_1_obs_cubic.html
---8<--
+<img src="./speedup_vs_dims_1_obs_linear_inverted.svg" alt="">
+
+For larger jobs such as image processing, the non-allocating evaluation pattern results
+in a nearly-linear thread speedup, limited only by thread spawning overhead and memory bandwidth.
+
+<img src="./speedup_vs_threads_10000000_obs_inverted.svg" alt="">
 
 See [here](https://interpnpy.readthedocs.io/en/latest/perf/) for more info about quality-of-fit, throughput, and memory usage.
 
@@ -44,13 +46,15 @@ pip install interpn
 
 ## Profile-Guided Optimization
 
-To build the extension with profile-guided optimization, do `uv run python ./scripts/run_pgo.py`
-after installing these extra compiler dependencies:
+To build the extension with profile-guided optimization, do `sh ./scripts/distr_pgo.sh`
+after installing this extra compiler dependency:
 
 ```bash
-cargo install cargo-pgo
 rustup component add llvm-tools-preview
 ```
+
+An LLVM install matching the version used by rustc is also required for doing PGO;
+see the `./scripts/distr_pgo.sh` or CI workflows for the exact version.
 
 ## Rust Examples
 
@@ -181,6 +185,7 @@ out2 = roundtrip_interpolator.eval(obs)
 # Check result from roundtrip serialized/deserialized interpolator
 assert np.all(out == out2)
 ```
+
 
 # License
 

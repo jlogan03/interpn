@@ -175,8 +175,8 @@ static PHYSICAL_CORES: LazyLock<usize> = LazyLock::new(num_cpus::get_physical);
 /// Assumes C-style ordering of vals (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
 ///
 /// For lower dimensions, a fast flattened method is used. For higher dimensions, where that flattening
-/// becomes impractical due to compile times and instruction size, evaluation defers to a bounded
-/// recursion.
+/// becomes impractical due to compile times and instruction size, evaluation defers to a run-time
+/// loop.
 /// The linear method uses the flattening for 1-6 dimensions, while
 /// flattened cubic methods are available up to 3 dimensions by default and up to 4 dimensions
 /// with the `deep_unroll` feature enabled.
@@ -522,17 +522,6 @@ fn resolve_grid_kind<T: Float>(
     Ok(kind)
 }
 
-/// Index a single value from an array
-#[inline]
-pub(crate) fn index_arr<T: Copy>(loc: &[usize], dimprod: &[usize], data: &[T]) -> T {
-    let mut i = 0;
-    for j in 0..dimprod.len() {
-        i += loc[j] * dimprod[j];
-    }
-
-    data[i]
-}
-
 /// Index a single value from an array with a known fixed number of dimensions
 #[inline]
 pub(crate) fn index_arr_fixed_dims<T: Copy, const N: usize>(
@@ -547,4 +536,68 @@ pub(crate) fn index_arr_fixed_dims<T: Copy, const N: usize>(
     }
 
     data[i]
+}
+
+/// Light-weight regular grid checks. Doing a more complete validation
+/// would break asymptotic scaling for evaluation.
+#[inline(always)]
+pub(crate) fn validate_regular_grid<T: Float, const N: usize>(
+    dims: &[usize; N],
+    steps: &[T; N],
+    vals: &[T],
+) -> Result<(), &'static str> {
+    let nvals: usize = dims.iter().product();
+    if vals.len() != nvals {
+        return Err("Dimension mismatch");
+    }
+    let degenerate = dims.iter().any(|&x| x < 2);
+    if degenerate {
+        return Err("All grids must have at least two entries");
+    }
+    let steps_are_positive = steps.iter().all(|&x| x > T::zero());
+    if !steps_are_positive {
+        return Err("All grids must be monotonically increasing");
+    }
+    Ok(())
+}
+
+/// Light-weight rectilinear grid checks. Doing a more complete validation
+/// would break asymptotic scaling for evaluation.
+#[inline(always)]
+pub(crate) fn validate_rectilinear_grid<T: Float, const N: usize>(
+    grids: &[&[T]; N],
+    vals: &[T],
+) -> Result<[usize; N], &'static str> {
+    let mut dims = [1_usize; N];
+    (0..N).for_each(|i| dims[i] = grids[i].len());
+    let nvals: usize = dims.iter().product();
+    if vals.len() != nvals {
+        return Err("Dimension mismatch");
+    }
+    let degenerate = dims.iter().any(|&x| x < 2);
+    if degenerate {
+        return Err("All grids must have at least 2 entries");
+    }
+    let monotonic_maybe = grids.iter().all(|&g| g[1] > g[0]);
+    if !monotonic_maybe {
+        return Err("All grids must be monotonically increasing");
+    }
+    Ok(dims)
+}
+
+/// Helper for dispatching to a generic method matching the input dimensionality.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! dispatch_ndims {
+    ($ndims:expr, $err:expr, [$($n:literal),+ $(,)?], |$N:ident| $body:expr $(,)?) => {{
+        match $ndims {
+            $(
+                $n => {
+                    const $N: usize = $n;
+                    $body
+                }
+            )+
+            _ => Err($err),
+        }
+    }};
 }
