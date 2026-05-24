@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from interpn import (
+    MultiBsplineRegular,
     MultilinearRectilinear,
     MultilinearRegular,
     MulticubicRegular,
@@ -20,6 +21,8 @@ from interpn import (
     NearestRegular,
     NearestRectilinear,
 )
+
+MULTIBSPLINE_LABEL = "InterpN MultiBsplineRegular"
 
 
 def bench_eval_mem_vs_dims():
@@ -29,6 +32,7 @@ def bench_eval_mem_vs_dims():
         "InterpN MultilinearRegular": [],
         "InterpN MultilinearRectilinear": [],
         "InterpN MulticubicRegular": [],
+        MULTIBSPLINE_LABEL: [],
         "InterpN MulticubicRectilinear": [],
         "InterpN NearestRegular": [],
         "InterpN NearestRectilinear": [],
@@ -57,7 +61,10 @@ def bench_eval_mem_vs_dims():
         rectilinear_interpn = MultilinearRectilinear.new(grids, zgrid)
         regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
         cubic_regular_interpn = MulticubicRegular.new(dims, starts, steps, zgrid)
+        bspline_regular_interpn = MultiBsplineRegular.new(dims, starts, steps, zgrid)
         cubic_rectilinear_interpn = MulticubicRectilinear.new(grids, zgrid)
+        nearest_regular_interpn = NearestRegular.new(dims, starts, steps, zgrid)
+        nearest_rectilinear_interpn = NearestRectilinear.new(grids, zgrid)
 
         m = max(int(float(nobs) ** (1.0 / ndims) + 2), 2)
 
@@ -76,10 +83,13 @@ def bench_eval_mem_vs_dims():
         interps = {
             "Scipy RegularGridInterpolator Linear": rectilinear_sp,
             "Scipy RegularGridInterpolator Cubic": cubic_rectilinear_sp,
-            "InterpN MultilinearRegular": lambda p: regular_interpn.eval,
-            "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval,
-            "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval,
-            "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval,
+            "InterpN MultilinearRegular": regular_interpn.eval,
+            "InterpN MultilinearRectilinear": rectilinear_interpn.eval,
+            "InterpN MulticubicRegular": cubic_regular_interpn.eval,
+            MULTIBSPLINE_LABEL: bspline_regular_interpn.eval,
+            "InterpN MulticubicRectilinear": cubic_rectilinear_interpn.eval,
+            "InterpN NearestRegular": nearest_regular_interpn.eval,
+            "InterpN NearestRectilinear": nearest_rectilinear_interpn.eval,
         }
 
         # Interpolation in random order
@@ -91,7 +101,10 @@ def bench_eval_mem_vs_dims():
             "InterpN MultilinearRegular": points_interpn,
             "InterpN MultilinearRectilinear": points_interpn,
             "InterpN MulticubicRegular": points_interpn,
+            MULTIBSPLINE_LABEL: points_interpn,
             "InterpN MulticubicRectilinear": points_interpn,
+            "InterpN NearestRegular": points_interpn,
+            "InterpN NearestRectilinear": points_interpn,
         }
 
         for name, func in interps.items():
@@ -108,7 +121,10 @@ def bench_eval_mem_vs_dims():
             "InterpN MultilinearRegular": "Linear",
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
+            MULTIBSPLINE_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
+            "InterpN NearestRegular": "Linear",
+            "InterpN NearestRectilinear": "Linear",
         }
 
     dash_styles = ["dot", "solid", "dash", "dashdot", "longdashdot"]
