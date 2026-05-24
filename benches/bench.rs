@@ -4,7 +4,7 @@ use criterion::*;
 use gridgen::*;
 use interpn::{
     Linear1D, LinearHoldLast1D, MultilinearRegular, NearestRectilinear, NearestRegular,
-    RectilinearGrid1D, RegularGrid1D, multicubic, multilinear, nearest,
+    RectilinearGrid1D, RegularGrid1D, multibspline, multicubic, multilinear, nearest,
     one_dim::{
         Interp1D,
         hold::{Left1D, Nearest1D},
@@ -97,6 +97,112 @@ macro_rules! bench_interp_specific {
                     black_box({
                         multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out)
                             .unwrap()
+                    })
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Bspline Regular {}x{}D Precomputed Coeffs, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                // Interpolation grid
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                // Observation grid
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = match $kind {
+                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                };
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let mut out = vec![0.0; size];
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let coeff_len =
+                    multibspline::MultiBsplineRegular::<f64, $ndims>::coeff_storage_len(dims);
+                let scratch_len =
+                    multibspline::MultiBsplineRegular::<f64, $ndims>::construction_scratch_len(
+                        dims,
+                    );
+                let mut coeffs = vec![0.0; coeff_len];
+                let mut scratch = vec![0.0; scratch_len];
+                multibspline::regular::coefficients(dims, &z, &mut coeffs, &mut scratch).unwrap();
+
+                b.iter(|| {
+                    black_box({
+                        multibspline::regular::interpn(
+                            &dims, &starts, &steps, &coeffs, false, &obs, &mut out,
+                        )
+                        .unwrap()
+                    })
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Bspline Regular {}x{}D With Construction, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                // Interpolation grid
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                // Observation grid
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = match $kind {
+                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
+                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
+                };
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs = (&obs[..]).try_into().unwrap();
+                let mut out = vec![0.0; size];
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let coeff_len =
+                    multibspline::MultiBsplineRegular::<f64, $ndims>::coeff_storage_len(dims);
+                let scratch_len =
+                    multibspline::MultiBsplineRegular::<f64, $ndims>::construction_scratch_len(
+                        dims,
+                    );
+                let mut coeffs = vec![0.0; coeff_len];
+                let mut scratch = vec![0.0; scratch_len];
+
+                b.iter(|| {
+                    black_box({
+                        let interpolator: multibspline::MultiBsplineRegular<'_, _, $ndims> =
+                            multibspline::MultiBsplineRegular::from_values_with_workspace(
+                                dims,
+                                starts,
+                                steps,
+                                &z,
+                                &mut coeffs,
+                                &mut scratch,
+                                false,
+                            )
+                            .unwrap();
+                        interpolator.interp(obs, &mut out).unwrap()
                     })
                 });
             },
