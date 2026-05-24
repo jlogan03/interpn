@@ -1,7 +1,7 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a regular grid.
 
 use super::Saturation;
-use crate::index_arr_fixed_dims;
+use crate::{index_arr_fixed_dims, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -261,10 +261,9 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
 
         for i in 0..N {
             (origin[i], sat[i]) = self.get_loc(x[i], i)?;
-            let index_one_loc = self.starts[i]
-                + self.steps[i]
-                    * <T as NumCast>::from(origin[i] + 1)
-                        .ok_or("Unrepresentable coordinate value")?;
+            let origin_f =
+                <T as NumCast>::from(origin[i] + 1).ok_or("Unrepresentable coordinate value")?;
+            let index_one_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
             dts[i] = (x[i] - index_one_loc) / self.steps[i];
         }
 
@@ -543,7 +542,7 @@ fn interp_inner<T: Float>(
             let ghost = low_ghost(vals);
             if linearize_extrapolation {
                 let (y, k) = low_endpoint_value_slope(vals, ghost);
-                y + k * t
+                mul_add(k, t, y)
             } else {
                 cubic_bspline(ghost, vals[0], vals[1], vals[2], t)
             }
@@ -558,7 +557,7 @@ fn interp_inner<T: Float>(
             let ghost = high_ghost(vals);
             if linearize_extrapolation {
                 let (y, k) = high_endpoint_value_slope(vals, ghost);
-                y + k * (t - T::one())
+                mul_add(k, t - T::one(), y)
             } else {
                 cubic_bspline(vals[1], vals[2], vals[3], ghost, t)
             }
@@ -571,30 +570,26 @@ fn cubic_bspline<T: Float>(c0: T, c1: T, c2: T, c3: T, t: T) -> T {
     let one = T::one();
     let two = one + one;
     let three = two + one;
-    let four = two + two;
     let six = three + three;
 
-    let t2 = t * t;
-    let t3 = t2 * t;
+    let a0 = c0 + (two + two) * c1 + c2;
+    let a1 = three * (c2 - c0);
+    let a2 = three * (c0 - two * c1 + c2);
+    let a3 = c3 - c0 + three * (c1 - c2);
 
-    let w0 = (one - three * t + three * t2 - t3) / six;
-    let w1 = (four - six * t2 + three * t3) / six;
-    let w2 = (one + three * t + three * t2 - three * t3) / six;
-    let w3 = t3 / six;
-
-    c0 * w0 + c1 * w1 + c2 * w2 + c3 * w3
+    mul_add(mul_add(mul_add(a3, t, a2), t, a1), t, a0) / six
 }
 
 #[inline]
 fn low_ghost<T: Float>(vals: &[T; 4]) -> T {
     let three = T::one() + T::one() + T::one();
-    three * vals[0] - three * vals[1] + vals[2]
+    mul_add(three, vals[0] - vals[1], vals[2])
 }
 
 #[inline]
 fn high_ghost<T: Float>(vals: &[T; 4]) -> T {
     let three = T::one() + T::one() + T::one();
-    vals[1] - three * vals[2] + three * vals[3]
+    mul_add(three, vals[3] - vals[2], vals[1])
 }
 
 /// Return endpoint value and dimensionless endpoint slope for low-side
@@ -626,7 +621,7 @@ fn low_endpoint_value_slope<T: Float>(vals: &[T; 4], ghost: T) -> (T, T) {
     let two = one + one;
     let four = two + two;
     let six = four + two;
-    let y = (ghost + four * vals[0] + vals[1]) / six;
+    let y = mul_add(four, vals[0], ghost + vals[1]) / six;
     let k = (vals[1] - ghost) / two;
     (y, k)
 }
@@ -660,7 +655,7 @@ fn high_endpoint_value_slope<T: Float>(vals: &[T; 4], ghost: T) -> (T, T) {
     let two = one + one;
     let four = two + two;
     let six = four + two;
-    let y = (vals[2] + four * vals[3] + ghost) / six;
+    let y = mul_add(four, vals[3], vals[2] + ghost) / six;
     let k = (ghost - vals[2]) / two;
     (y, k)
 }

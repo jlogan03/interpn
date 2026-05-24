@@ -27,7 +27,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
-use crate::index_arr_fixed_dims;
+use crate::{index_arr_fixed_dims, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::Float;
 
@@ -269,10 +269,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
                             let y0 = store[ind][0];
                             let dy = store[ind][1] - y0;
 
-                            #[cfg(not(feature = "fma"))]
-                            let interped = y0 + t * dy;
-                            #[cfg(feature = "fma")]
-                            let interped = t.mul_add(dy, y0);
+                            let interped = mul_add(t, dy, y0);
 
                             store[j][p] = interped;
                         }
@@ -306,10 +303,7 @@ impl<'a, T: Float, const N: usize> MultilinearRectilinear<'a, T, N> {
 
         let y0 = store[ind][0];
         let dy = store[ind][1] - y0;
-        #[cfg(not(feature = "fma"))]
-        let interped = y0 + t * dy;
-        #[cfg(feature = "fma")]
-        let interped = t.mul_add(dy, y0);
+        let interped = mul_add(t, dy, y0);
         Ok(interped)
     }
 

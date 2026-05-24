@@ -90,6 +90,8 @@
 
 use num_traits::Float;
 
+pub(crate) mod scalar;
+
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 

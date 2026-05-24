@@ -26,7 +26,7 @@
 //! // Do interpolation, allocating for the output for convenience
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, &obs).unwrap();
 //! ```
-use crate::index_arr_fixed_dims;
+use crate::{index_arr_fixed_dims, scalar::mul_add};
 use num_traits::{Float, NumCast};
 
 /// Evaluate nearest-neighbor interpolation on a regular grid in up to 8 dimensions.
@@ -220,10 +220,7 @@ impl<'a, T: Float, const N: usize> NearestRegular<'a, T, N> {
                 <T as NumCast>::from(origin).ok_or("Unrepresentable coordinate value")?;
 
             // Calculate normalized delta locations
-            #[cfg(not(feature = "fma"))]
-            let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
-            #[cfg(feature = "fma")]
-            let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
+            let index_zero_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
 
             let dt = (x[i] - index_zero_loc) / self.steps[i];
 

@@ -31,7 +31,7 @@
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 use super::{Saturation, normalized_hermite_spline};
-use crate::index_arr_fixed_dims;
+use crate::{index_arr_fixed_dims, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -476,10 +476,7 @@ fn interp_inner<T: Float>(
 
             let k0 = -(vals[2] - vals[0]) / two;
 
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
+            let k1 = mul_add(two, dy, -k0); // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -497,22 +494,12 @@ fn interp_inner<T: Float>(
 
             let k0 = -(vals[2] - vals[0]) / two;
 
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
+            let k1 = mul_add(two, dy, -k0); // Natural spline boundary condition
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                #[cfg(not(feature = "fma"))]
-                {
-                    y1 + k1 * (t - one)
-                }
-                #[cfg(feature = "fma")]
-                {
-                    k1.mul_add(t - one, y1)
-                }
+                mul_add(k1, t - one, y1)
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }
@@ -531,10 +518,7 @@ fn interp_inner<T: Float>(
 
             let k0 = (vals[3] - vals[1]) / two;
 
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
+            let k1 = mul_add(two, dy, -k0); // Natural spline boundary condition
 
             normalized_hermite_spline(t, y0, dy, k0, k1)
         }
@@ -553,22 +537,12 @@ fn interp_inner<T: Float>(
 
             let k0 = (vals[3] - vals[1]) / two;
 
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
+            let k1 = mul_add(two, dy, -k0); // Natural spline boundary condition
 
             // If we are linearizing the interpolant under extrapolation,
             // hold the last slope outside the grid
             if linearize_extrapolation {
-                #[cfg(not(feature = "fma"))]
-                {
-                    y1 + k1 * (t - one)
-                }
-                #[cfg(feature = "fma")]
-                {
-                    k1.mul_add(t - one, y1)
-                }
+                mul_add(k1, t - one, y1)
             } else {
                 normalized_hermite_spline(t, y0, dy, k0, k1)
             }

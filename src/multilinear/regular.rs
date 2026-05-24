@@ -29,7 +29,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Repeated_linear_interpolation
-use crate::index_arr_fixed_dims;
+use crate::{index_arr_fixed_dims, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -268,10 +268,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                 <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
 
             // Calculate normalized delta locations
-            #[cfg(not(feature = "fma"))]
-            let index_zero_loc = self.starts[i] + self.steps[i] * origin_f;
-            #[cfg(feature = "fma")]
-            let index_zero_loc = self.steps[i].mul_add(origin_f, self.starts[i]);
+            let index_zero_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
 
             dts[i] = (x[i] - index_zero_loc) / self.steps[i];
         }
@@ -312,10 +309,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
                             let dy = store[ind][1] - y0;
                             let t = dts[ind];
 
-                            #[cfg(not(feature = "fma"))]
-                            let interped = y0 + t * dy;
-                            #[cfg(feature = "fma")]
-                            let interped = t.mul_add(dy, y0);
+                            let interped = mul_add(t, dy, y0);
 
                             store[j][p] = interped;
                         }
@@ -343,10 +337,7 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let y0 = store[N - 1][0];
         let dy = store[N - 1][1] - y0;
         let t = dts[N - 1];
-        #[cfg(not(feature = "fma"))]
-        let interped = y0 + t * dy;
-        #[cfg(feature = "fma")]
-        let interped = t.mul_add(dy, y0);
+        let interped = mul_add(t, dy, y0);
         Ok(interped)
     }
 
