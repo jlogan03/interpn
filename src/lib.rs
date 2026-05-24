@@ -96,6 +96,9 @@ pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 pub mod multicubic;
 pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
 
+pub mod multibspline;
+pub use multibspline::MultiBsplineRegular;
+
 pub mod linear {
     pub use crate::multilinear::rectilinear;
     pub use crate::multilinear::regular;

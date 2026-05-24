@@ -7,7 +7,7 @@ from scipy.interpolate import RegularGridInterpolator
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from interpn import MulticubicRegular, MulticubicRectilinear
+from interpn import MulticubicRegular, MulticubicRectilinear, MultiBsplineRegular
 
 
 def _step(x: np.ndarray) -> np.ndarray:
@@ -76,10 +76,14 @@ if __name__ == "__main__":
                 y_interpn = MulticubicRegular.new(
                     dims, starts, steps, ydata, linearize_extrapolation=False
                 ).eval([xinterp])
+                y_bspline = MultiBsplineRegular.new(
+                    dims, starts, steps, ydata, linearize_extrapolation=False
+                ).eval([xinterp])
             else:
                 y_interpn = MulticubicRectilinear.new(
                     [xdata], ydata, linearize_extrapolation=False
                 ).eval([xinterp])
+                y_bspline = None
 
             y_sp = RegularGridInterpolator(
                 [xdata], ydata, bounds_error=None, fill_value=None, method="cubic"
@@ -119,6 +123,22 @@ if __name__ == "__main__":
             )
             legend_tracker.add("InterpN")
 
+            if y_bspline is not None:
+                fig_1d.add_trace(
+                    go.Scatter(
+                        x=xinterp,
+                        y=y_bspline,
+                        mode="lines",
+                        line=dict(color="#1f77b4", width=2, dash="dash"),
+                        name="MultiBspline",
+                        legendgroup="multibspline",
+                        showlegend="MultiBspline" not in legend_tracker,
+                    ),
+                    row=1,
+                    col=col,
+                )
+                legend_tracker.add("MultiBspline")
+
             fig_1d.add_trace(
                 go.Scatter(
                     x=xinterp,
@@ -150,6 +170,21 @@ if __name__ == "__main__":
                 col=col,
             )
             legend_tracker.add("InterpN Error")
+            if y_bspline is not None:
+                fig_1d.add_trace(
+                    go.Scatter(
+                        x=xinterp,
+                        y=y_bspline - truth,
+                        mode="lines",
+                        line=dict(color="#1f77b4", width=2, dash="dash"),
+                        name="MultiBspline Error",
+                        legendgroup="multibspline_err",
+                        showlegend="MultiBspline Error" not in legend_tracker,
+                    ),
+                    row=2,
+                    col=col,
+                )
+                legend_tracker.add("MultiBspline Error")
             fig_1d.add_trace(
                 go.Scatter(
                     x=xinterp,
@@ -190,11 +225,15 @@ if __name__ == "__main__":
             showgrid=False,
             zeroline=False,
         )
+        title_methods = (
+            "InterpN vs. MultiBspline vs. Scipy"
+            if kind == "Regular"
+            else "InterpN vs. Scipy"
+        )
         fig_1d.update_layout(
             title=dict(
                 text=(
-                    "Comparison — InterpN  vs. Scipy"
-                    f" w/ Cubic Interpolant<br>{kind} Grid"
+                    f"Comparison — {title_methods} w/ Cubic Interpolant<br>{kind} Grid"
                 ),
                 y=0.97,
                 yanchor="top",
@@ -247,6 +286,13 @@ if __name__ == "__main__":
                 .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
                 .reshape(xinterpmesh.shape)
             )
+            z_bspline = (
+                MultiBsplineRegular.new(
+                    dims, starts, steps, zmesh, linearize_extrapolation=False
+                )
+                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
+                .reshape(xinterpmesh.shape)
+            )
         else:
             z_interpn = (
                 MulticubicRectilinear.new(
@@ -255,37 +301,44 @@ if __name__ == "__main__":
                 .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
                 .reshape(xinterpmesh.shape)
             )
+            z_bspline = None
 
         z_sp = RegularGridInterpolator(
             [xdata, ydata], zmesh, bounds_error=None, fill_value=None, method="cubic"
         )((xinterpmesh, yinterpmesh))
 
+        ncols_2d = 4 if z_bspline is not None else 3
+        top_specs = [{"type": "heatmap"}] * ncols_2d
+        bottom_specs = [{"type": "heatmap"}] * ncols_2d
+        top_data = [
+            (zinterp, "Truth"),
+            (z_interpn, "InterpN"),
+        ]
+        if z_bspline is not None:
+            top_data.append((z_bspline, "MultiBspline"))
+        top_data.append((z_sp, "Scipy"))
+        bottom_data = [
+            (z_interpn - zinterp, "Error, InterpN"),
+        ]
+        if z_bspline is not None:
+            bottom_data.append((z_bspline - zinterp, "Error, MultiBspline"))
+        bottom_data.append((z_sp - zinterp, "Error, Scipy"))
+        subplot_titles_2d = [name for _, name in top_data] + [
+            "",
+            *[name for _, name in bottom_data],
+        ]
+
         fig_2d = make_subplots(
             rows=2,
-            cols=3,
-            specs=[[{"type": "heatmap"}] * 3, [{"type": "heatmap"}] * 3],
-            subplot_titles=[
-                "Truth",
-                "InterpN",
-                "Scipy",
-                "",
-                "Error, InterpN",
-                "Error, Scipy",
-            ],
+            cols=ncols_2d,
+            specs=[top_specs, bottom_specs],
+            subplot_titles=subplot_titles_2d,
             horizontal_spacing=0.06,
             vertical_spacing=0.18,
         )
 
-        colorbar_x_top = {1: 1.02, 2: 1.09, 3: 1.16}
-        for col, (z_data, title) in enumerate(
-            [
-                (zinterp, "Truth"),
-                (z_interpn, "InterpN"),
-                (z_sp, "Scipy"),
-            ],
-            start=1,
-        ):
-            showscale = col == 3
+        for col, (z_data, title) in enumerate(top_data, start=1):
+            showscale = col == ncols_2d
             fig_2d.add_trace(
                 go.Heatmap(
                     x=xinterp,
@@ -339,36 +392,20 @@ if __name__ == "__main__":
                 col=col,
             )
 
-        fig_2d.add_shape(
-            type="rect",
-            x0=-3.0,
-            x1=3.0,
-            y0=-3.0,
-            y1=3.0,
-            line=dict(color="white"),
-            row=2,
-            col=2,
-        )
-        fig_2d.add_shape(
-            type="rect",
-            x0=-3.0,
-            x1=3.0,
-            y0=-3.0,
-            y1=3.0,
-            line=dict(color="white"),
-            row=2,
-            col=3,
-        )
+        for col in range(2, ncols_2d + 1):
+            fig_2d.add_shape(
+                type="rect",
+                x0=-3.0,
+                x1=3.0,
+                y0=-3.0,
+                y1=3.0,
+                line=dict(color="white"),
+                row=2,
+                col=col,
+            )
 
-        colorbar_x_bottom = {2: 1.02, 3: 1.09}
-        for col, (z_data, name) in enumerate(
-            [
-                (z_interpn - zinterp, "Error, InterpN"),
-                (z_sp - zinterp, "Error, Scipy"),
-            ],
-            start=2,
-        ):
-            showscale = col == 3
+        for col, (z_data, name) in enumerate(bottom_data, start=2):
+            showscale = col == ncols_2d
             fig_2d.add_trace(
                 go.Heatmap(
                     x=xinterp,
@@ -383,7 +420,7 @@ if __name__ == "__main__":
             )
 
         for row in (1, 2):
-            for col in (1, 2, 3):
+            for col in range(1, ncols_2d + 1):
                 fig_2d.update_xaxes(
                     showticklabels=False,
                     title_text="",
@@ -437,8 +474,11 @@ if __name__ == "__main__":
             ),
             font=dict(color="black"),
         )
-        for row, col in [(1, 1), (1, 2), (1, 3), (2, 2), (2, 3)]:
-            x_name = _axis_name("x", row, col, 3)
+        scale_axes = [(1, col) for col in range(1, ncols_2d + 1)] + [
+            (2, col) for col in range(2, ncols_2d + 1)
+        ]
+        for row, col in scale_axes:
+            x_name = _axis_name("x", row, col, ncols_2d)
             fig_2d.update_yaxes(
                 scaleanchor=x_name,
                 scaleratio=1,
