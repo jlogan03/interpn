@@ -14,6 +14,9 @@ from interpn import (
     MultiBsplineRectilinear,
 )
 
+INTERPN_CUBIC_LABEL = "InterpN Cubic"
+INTERPN_BSPLINE_LABEL = "InterpN B-Spline"
+
 
 def _step(x: np.ndarray) -> np.ndarray:
     y = np.ones_like(x)
@@ -121,14 +124,14 @@ if __name__ == "__main__":
                     y=y_interpn,
                     mode="lines",
                     line=dict(color="black", width=2),
-                    name="InterpN",
+                    name=INTERPN_CUBIC_LABEL,
                     legendgroup="interpn",
-                    showlegend="InterpN" not in legend_tracker,
+                    showlegend=INTERPN_CUBIC_LABEL not in legend_tracker,
                 ),
                 row=1,
                 col=col,
             )
-            legend_tracker.add("InterpN")
+            legend_tracker.add(INTERPN_CUBIC_LABEL)
 
             if y_bspline is not None:
                 fig_1d.add_trace(
@@ -137,14 +140,14 @@ if __name__ == "__main__":
                         y=y_bspline,
                         mode="lines",
                         line=dict(color="#1f77b4", width=2, dash="dash"),
-                        name="MultiBspline",
+                        name=INTERPN_BSPLINE_LABEL,
                         legendgroup="multibspline",
-                        showlegend="MultiBspline" not in legend_tracker,
+                        showlegend=INTERPN_BSPLINE_LABEL not in legend_tracker,
                     ),
                     row=1,
                     col=col,
                 )
-                legend_tracker.add("MultiBspline")
+                legend_tracker.add(INTERPN_BSPLINE_LABEL)
 
             fig_1d.add_trace(
                 go.Scatter(
@@ -169,14 +172,14 @@ if __name__ == "__main__":
                     y=y_interpn - truth,
                     mode="lines",
                     line=dict(color="black", width=2),
-                    name="InterpN Error",
+                    name=f"{INTERPN_CUBIC_LABEL} Error",
                     legendgroup="interpn_err",
-                    showlegend="InterpN Error" not in legend_tracker,
+                    showlegend=f"{INTERPN_CUBIC_LABEL} Error" not in legend_tracker,
                 ),
                 row=2,
                 col=col,
             )
-            legend_tracker.add("InterpN Error")
+            legend_tracker.add(f"{INTERPN_CUBIC_LABEL} Error")
             if y_bspline is not None:
                 fig_1d.add_trace(
                     go.Scatter(
@@ -184,14 +187,15 @@ if __name__ == "__main__":
                         y=y_bspline - truth,
                         mode="lines",
                         line=dict(color="#1f77b4", width=2, dash="dash"),
-                        name="MultiBspline Error",
+                        name=f"{INTERPN_BSPLINE_LABEL} Error",
                         legendgroup="multibspline_err",
-                        showlegend="MultiBspline Error" not in legend_tracker,
+                        showlegend=f"{INTERPN_BSPLINE_LABEL} Error"
+                        not in legend_tracker,
                     ),
                     row=2,
                     col=col,
                 )
-                legend_tracker.add("MultiBspline Error")
+                legend_tracker.add(f"{INTERPN_BSPLINE_LABEL} Error")
             fig_1d.add_trace(
                 go.Scatter(
                     x=xinterp,
@@ -232,7 +236,7 @@ if __name__ == "__main__":
             showgrid=False,
             zeroline=False,
         )
-        title_methods = "InterpN vs. MultiBspline vs. Scipy"
+        title_methods = f"{INTERPN_CUBIC_LABEL} vs. {INTERPN_BSPLINE_LABEL} vs. Scipy"
         fig_1d.update_layout(
             title=dict(
                 text=(
@@ -321,16 +325,16 @@ if __name__ == "__main__":
         bottom_specs = [{"type": "heatmap"}] * ncols_2d
         top_data = [
             (zinterp, "Truth"),
-            (z_interpn, "InterpN"),
+            (z_interpn, INTERPN_CUBIC_LABEL),
         ]
         if z_bspline is not None:
-            top_data.append((z_bspline, "MultiBspline"))
+            top_data.append((z_bspline, INTERPN_BSPLINE_LABEL))
         top_data.append((z_sp, "Scipy"))
         bottom_data = [
-            (z_interpn - zinterp, "Error, InterpN"),
+            (z_interpn - zinterp, f"Error, {INTERPN_CUBIC_LABEL}"),
         ]
         if z_bspline is not None:
-            bottom_data.append((z_bspline - zinterp, "Error, MultiBspline"))
+            bottom_data.append((z_bspline - zinterp, f"Error, {INTERPN_BSPLINE_LABEL}"))
         bottom_data.append((z_sp - zinterp, "Error, Scipy"))
         subplot_titles_2d = [name for _, name in top_data] + [
             "",

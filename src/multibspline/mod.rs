@@ -10,6 +10,12 @@ pub mod regular;
 pub use rectilinear::MultiBsplineRectilinear;
 pub use regular::MultiBsplineRegular;
 
+// `usize::max` is not const-stable on this MSRV, so use a local helper in
+// const scratch-sizing methods.
+pub(crate) const fn max_usize(a: usize, b: usize) -> usize {
+    if a > b { a } else { b }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Saturation {
     None,

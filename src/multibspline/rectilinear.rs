@@ -1,7 +1,7 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a
 //! rectilinear grid.
 
-use super::Saturation;
+use super::{Saturation, max_usize};
 use crate::{index_arr_fixed_dims, interp_math::dot4, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::Float;
@@ -84,6 +84,51 @@ pub fn coefficients<T: Float, const N: usize>(
     Ok(())
 }
 
+/// Construct cubic B-spline coefficients from nodal values on a rectilinear
+/// grid, solving independent coefficient slabs in parallel.
+///
+/// This is the nonallocating parallel construction path. The `scratch` buffer
+/// must have length at least
+/// [`MultiBsplineRectilinear::parallel_construction_scratch_len`] for the
+/// provided dimensions and `max_threads`.
+///
+/// Parallelism is applied one axis at a time. For each axis, the coefficient
+/// tensor is divided into contiguous slabs that can be written independently.
+/// In C-style memory order, the leading axis forms a single slab and falls back
+/// to the serial solve for that axis.
+#[cfg(feature = "par")]
+pub fn coefficients_par<T: Float + Send + Sync, const N: usize>(
+    grids: &[&[T]; N],
+    vals: &[T],
+    coeffs: &mut [T],
+    scratch: &mut [T],
+    max_threads: usize,
+) -> Result<(), &'static str> {
+    let dims = dims_from_grids(grids);
+    check_dims(grids, coeffs)?;
+    if vals.len() != coeffs.len() {
+        return Err("Dimension mismatch");
+    }
+
+    let scratch_len =
+        MultiBsplineRectilinear::<T, N>::parallel_construction_scratch_len(dims, max_threads);
+    if scratch_len == 0 || scratch.len() < scratch_len {
+        return Err("Scratch buffer is too small");
+    }
+
+    coeffs.copy_from_slice(vals);
+
+    let mut dimprod = [1_usize; N];
+    populate_dimprod(dims, &mut dimprod);
+
+    let tasks = max_threads.max(1).min(rayon::current_num_threads()).max(1);
+    for axis in 0..N {
+        solve_axis_par(grids, dims, dimprod, axis, coeffs, scratch, tasks)?;
+    }
+
+    Ok(())
+}
+
 /// An N-dimensional cubic B-spline interpolator / extrapolator on a
 /// rectilinear grid.
 pub struct MultiBsplineRectilinear<'a, T: Float, const N: usize> {
@@ -153,6 +198,52 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         }
     }
 
+    /// Number of scratch values required to construct coefficients with
+    /// [`coefficients_par`] using at most `max_threads` worker tasks.
+    ///
+    /// Returns zero if any dimension is invalid for this interpolator, if
+    /// `N == 0`, or if the scratch length overflows `usize`.
+    #[cfg(feature = "par")]
+    pub const fn parallel_construction_scratch_len(dims: [usize; N], max_threads: usize) -> usize {
+        if N == 0 {
+            return 0;
+        }
+
+        let max_threads = max_usize(max_threads, 1);
+        let mut max_scratch = 0_usize;
+        let mut prefix_slabs = 1_usize;
+        let mut axis = 0;
+        while axis < N {
+            if dims[axis] < 4 {
+                return 0;
+            }
+
+            let tasks = if prefix_slabs < max_threads {
+                prefix_slabs
+            } else {
+                max_threads
+            };
+            let scratch = match dims[axis].checked_mul(2) {
+                Some(v) => match v.checked_mul(tasks) {
+                    Some(v) => v,
+                    None => return 0,
+                },
+                None => return 0,
+            };
+            if scratch > max_scratch {
+                max_scratch = scratch;
+            }
+
+            match prefix_slabs.checked_mul(dims[axis]) {
+                Some(v) => prefix_slabs = v,
+                None => return 0,
+            }
+            axis += 1;
+        }
+
+        max_scratch
+    }
+
     /// Build an interpolator from precomputed coefficients.
     pub fn new(
         grids: &'a [&'a [T]; N],
@@ -180,6 +271,25 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         linearize_extrapolation: bool,
     ) -> Result<Self, &'static str> {
         coefficients(grids, vals, coeffs, scratch)?;
+        Self::new(grids, coeffs, linearize_extrapolation)
+    }
+
+    /// Build coefficients from nodal values using caller-provided storage and a
+    /// caller-provided parallel construction scratch buffer, then return a
+    /// borrowed interpolator over those coefficients.
+    #[cfg(feature = "par")]
+    pub fn from_values_with_workspace_par(
+        grids: &'a [&'a [T]; N],
+        vals: &[T],
+        coeffs: &'a mut [T],
+        scratch: &mut [T],
+        max_threads: usize,
+        linearize_extrapolation: bool,
+    ) -> Result<Self, &'static str>
+    where
+        T: Send + Sync,
+    {
+        coefficients_par(grids, vals, coeffs, scratch, max_threads)?;
         Self::new(grids, coeffs, linearize_extrapolation)
     }
 
@@ -363,6 +473,102 @@ fn solve_axis<T: Float, const N: usize>(
     for line in 0..nlines {
         let base = line_base_index(dims, dimprod, axis, line);
         solve_line(grids[axis], base, stride, coeffs, upper, rhs)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "par")]
+fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
+    grids: &[&[T]; N],
+    dims: [usize; N],
+    dimprod: [usize; N],
+    axis: usize,
+    coeffs: &mut [T],
+    scratch: &mut [T],
+    max_tasks: usize,
+) -> Result<(), &'static str> {
+    let n = dims[axis];
+    let stride = dimprod[axis];
+    let slab_len = n * stride;
+    let nslabs = coeffs.len() / slab_len;
+    let tasks = max_tasks.min(nslabs).max(1);
+    let scratch_len = 2 * n * tasks;
+    let scratch = &mut scratch[..scratch_len];
+
+    if tasks == 1 {
+        let (upper, rhs) = scratch.split_at_mut(n);
+        solve_axis_slabs(grids[axis], coeffs, slab_len, stride, upper, rhs)
+    } else {
+        solve_axis_slabs_par(grids[axis], coeffs, slab_len, stride, scratch, tasks)
+    }
+}
+
+#[cfg(feature = "par")]
+fn solve_axis_slabs_par<T: Float + Send + Sync>(
+    grid: &[T],
+    coeffs: &mut [T],
+    slab_len: usize,
+    stride: usize,
+    scratch: &mut [T],
+    tasks: usize,
+) -> Result<(), &'static str> {
+    let nslabs = coeffs.len() / slab_len;
+    if tasks <= 1 || nslabs <= 1 {
+        let n = grid.len();
+        let (upper, rhs) = scratch.split_at_mut(n);
+        return solve_axis_slabs(grid, coeffs, slab_len, stride, upper, rhs);
+    }
+
+    let left_slabs = nslabs / 2;
+    let left_tasks = tasks / 2;
+    let right_tasks = tasks - left_tasks;
+
+    let n = grid.len();
+    let coeff_split = left_slabs * slab_len;
+    let scratch_split = 2 * n * left_tasks;
+    let (left_coeffs, right_coeffs) = coeffs.split_at_mut(coeff_split);
+    let (left_scratch, right_scratch) = scratch.split_at_mut(scratch_split);
+
+    let (left, right) = rayon::join(
+        || {
+            solve_axis_slabs_par(
+                grid,
+                left_coeffs,
+                slab_len,
+                stride,
+                left_scratch,
+                left_tasks,
+            )
+        },
+        || {
+            solve_axis_slabs_par(
+                grid,
+                right_coeffs,
+                slab_len,
+                stride,
+                right_scratch,
+                right_tasks,
+            )
+        },
+    );
+    left?;
+    right
+}
+
+#[cfg(feature = "par")]
+fn solve_axis_slabs<T: Float>(
+    grid: &[T],
+    coeffs: &mut [T],
+    slab_len: usize,
+    stride: usize,
+    upper: &mut [T],
+    rhs: &mut [T],
+) -> Result<(), &'static str> {
+    for slab in coeffs.chunks_mut(slab_len) {
+        for base in 0..stride {
+            solve_line(grid, base, stride, slab, upper, rhs)?;
+        }
     }
 
     Ok(())
@@ -788,10 +994,74 @@ mod test {
             MultiBsplineRectilinear::<f64, 2>::construction_scratch_len([4, 5]),
             10
         );
+        #[cfg(feature = "par")]
+        assert_eq!(
+            MultiBsplineRectilinear::<f64, 2>::parallel_construction_scratch_len([4, 5], 4),
+            40
+        );
         assert_eq!(
             MultiBsplineRectilinear::<f64, 2>::coeff_storage_len([3, 5]),
             0
         );
+        #[cfg(feature = "par")]
+        assert_eq!(
+            MultiBsplineRectilinear::<f64, 2>::parallel_construction_scratch_len([4, 5], 0),
+            MultiBsplineRectilinear::<f64, 2>::parallel_construction_scratch_len([4, 5], 1)
+        );
+    }
+
+    #[cfg(feature = "par")]
+    #[test]
+    fn test_parallel_coefficients_match_serial() {
+        let dims = [5_usize, 6, 7];
+        let xs: Vec<Vec<f64>> = (0..3)
+            .map(|i| {
+                (0..dims[i])
+                    .map(|j| -1.0 + i as f64 + j as f64 * 0.31 + (j as f64).powi(2) * 0.03)
+                    .collect()
+            })
+            .collect();
+        let grids: Vec<&[f64]> = xs.iter().map(|x| &x[..]).collect();
+        let grids_ref: &[&[f64]; 3] = grids.as_slice().try_into().unwrap();
+        let grid = meshgrid((0..3).map(|i| &xs[i]).collect());
+        let vals: Vec<f64> = grid
+            .iter()
+            .map(|x| {
+                x.iter()
+                    .enumerate()
+                    .map(|(i, v)| (i as f64 + 0.5) * v.sin() + v * v)
+                    .sum()
+            })
+            .collect();
+
+        let nvals = MultiBsplineRectilinear::<f64, 3>::coeff_storage_len(dims);
+        let serial_scratch_len = MultiBsplineRectilinear::<f64, 3>::construction_scratch_len(dims);
+        let parallel_scratch_len =
+            MultiBsplineRectilinear::<f64, 3>::parallel_construction_scratch_len(dims, 4);
+
+        let mut serial_coeffs = vec![0.0; nvals];
+        let mut serial_scratch = vec![0.0; serial_scratch_len];
+        coefficients(grids_ref, &vals, &mut serial_coeffs, &mut serial_scratch).unwrap();
+
+        let mut parallel_coeffs = vec![0.0; nvals];
+        let mut parallel_scratch = vec![0.0; parallel_scratch_len];
+        coefficients_par(
+            grids_ref,
+            &vals,
+            &mut parallel_coeffs,
+            &mut parallel_scratch,
+            4,
+        )
+        .unwrap();
+
+        for i in 0..nvals {
+            assert!(
+                (serial_coeffs[i] - parallel_coeffs[i]).abs() < 1e-12,
+                "coefficient mismatch at {i}: {} vs {}",
+                serial_coeffs[i],
+                parallel_coeffs[i]
+            );
+        }
     }
 
     #[test]
