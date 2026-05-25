@@ -442,9 +442,10 @@ fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
     match method.to_ascii_lowercase().as_str() {
         "linear" => Ok(GridInterpMethod::Linear),
         "cubic" => Ok(GridInterpMethod::Cubic),
+        "bspline" | "b-spline" => Ok(GridInterpMethod::Bspline),
         "nearest" => Ok(GridInterpMethod::Nearest),
         _ => Err(exceptions::PyValueError::new_err(
-            "`method` must be 'linear', 'cubic', or 'nearest'",
+            "`method` must be 'linear', 'cubic', 'bspline', or 'nearest'",
         )),
     }
 }

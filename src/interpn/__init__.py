@@ -57,7 +57,7 @@ def interpn(
     grids: Sequence[NDArray],
     vals: NDArray,
     *,
-    method: Literal["linear", "cubic", "nearest"] = "linear",
+    method: Literal["linear", "cubic", "bspline", "b-spline", "nearest"] = "linear",
     out: NDArray | None = None,
     linearize_extrapolation: bool = True,
     grid_kind: Literal["regular", "rectilinear"] | None = None,
@@ -80,7 +80,8 @@ def interpn(
         obs: Observation coordinates, one array per dimension.
         grids: Grid axis coordinates, one array per dimension.
         vals: Values defined on the full cartesian-product grid.
-        method: Interpolation kind, one of ``"linear"``, ``"cubic"``, or ``"nearest"``.
+        method: Interpolation kind, one of ``"linear"``, ``"cubic"``,
+            ``"bspline"``, or ``"nearest"``.
         out: Optional preallocated array that receives the result.
         linearize_extrapolation: Whether cubic extrapolation should fall back to
             linear behaviour outside the grid bounds.

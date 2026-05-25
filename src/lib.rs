@@ -140,12 +140,14 @@ pub(crate) mod testing;
 pub mod python;
 
 /// Interpolant function for multi-dimensional methods.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GridInterpMethod {
     /// Multi-linear interpolation.
     Linear,
     /// Cubic Hermite spline interpolation.
     Cubic,
+    /// Cubic B-spline interpolation.
+    Bspline,
     /// Nearest-neighbor interpolation.
     Nearest,
 }
@@ -162,6 +164,7 @@ pub enum GridKind {
 const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
+#[cfg(feature = "par")]
 const MIN_CHUNK_SIZE: usize = 1024;
 
 /// The number of physical cores present on the machine;
@@ -256,13 +259,21 @@ pub fn interpn<T: Float + Send + Sync>(
         // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
         // single-threaded performance is usually faster due to a combination of thread spawning overhead,
         // memory page sizing, and improved vectorization over larger inputs.
-        let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
-        let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
-        let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
-        let num_cores = match max_threads {
-            Some(num_cores_requested) => num_cores_requested.min(num_cores_available),
-            None => num_cores_available,
-        };
+        let num_cores = parallel_thread_count(max_threads);
+
+        if method == GridInterpMethod::Bspline {
+            return interpn_bspline_par(
+                grids,
+                vals,
+                obs,
+                out,
+                kind,
+                linearize_extrapolation,
+                check_bounds_with_atol,
+                num_cores,
+            );
+        }
+
         let chunk = MIN_CHUNK_SIZE.max(n / num_cores);
 
         // Make a shared error indicator
@@ -331,6 +342,244 @@ pub fn interpn<T: Float + Send + Sync>(
     }
 }
 
+#[cfg(feature = "par")]
+fn parallel_thread_count(max_threads: Option<usize>) -> usize {
+    let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
+    let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
+    let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
+    match max_threads {
+        Some(num_cores_requested) => num_cores_requested.max(1).min(num_cores_available),
+        None => num_cores_available,
+    }
+}
+
+#[cfg(feature = "par")]
+fn interpn_bspline_par<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    kind: GridKind,
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+    num_threads: usize,
+) -> Result<(), &'static str> {
+    match kind {
+        GridKind::Regular => interpn_bspline_regular_par(
+            grids,
+            vals,
+            obs,
+            out,
+            linearize_extrapolation,
+            check_bounds_with_atol,
+            num_threads,
+        ),
+        GridKind::Rectilinear => interpn_bspline_rectilinear_par(
+            grids,
+            vals,
+            obs,
+            out,
+            linearize_extrapolation,
+            check_bounds_with_atol,
+            num_threads,
+        ),
+    }
+}
+
+#[cfg(feature = "par")]
+fn interpn_bspline_regular_par<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+    num_threads: usize,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    let (dims, starts, steps) = regular_grid_params(grids)?;
+    maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
+
+    crate::dispatch_ndims!(ndims, MAXDIMS_ERR, [1, 2, 3, 4, 5, 6, 7, 8], |N| {
+        let dims_arr: [usize; N] = dims[..ndims].try_into().unwrap();
+        let nvals = MultiBsplineRegular::<T, N>::coeff_storage_len(dims_arr);
+        let scratch_len =
+            MultiBsplineRegular::<T, N>::parallel_construction_scratch_len(dims_arr, num_threads);
+        if nvals == 0 || scratch_len == 0 {
+            return Err("Dimension mismatch");
+        }
+
+        let mut coeffs = vec![T::zero(); nvals];
+        let mut scratch = vec![T::zero(); scratch_len];
+        multibspline::regular::coefficients_par(
+            dims_arr,
+            vals,
+            &mut coeffs,
+            &mut scratch,
+            num_threads,
+        )?;
+
+        interpn_bspline_regular_parallel_eval(
+            &dims[..ndims],
+            &starts[..ndims],
+            &steps[..ndims],
+            &coeffs,
+            linearize_extrapolation,
+            obs,
+            out,
+            num_threads,
+        )
+    })
+}
+
+#[cfg(feature = "par")]
+fn interpn_bspline_rectilinear_par<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+    num_threads: usize,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
+
+    crate::dispatch_ndims!(ndims, MAXDIMS_ERR, [1, 2, 3, 4, 5, 6, 7, 8], |N| {
+        let grids_arr: &[&[T]; N] = grids.try_into().unwrap();
+        let dims = grids_arr.map(|grid| grid.len());
+        let nvals = MultiBsplineRectilinear::<T, N>::coeff_storage_len(dims);
+        let scratch_len =
+            MultiBsplineRectilinear::<T, N>::parallel_construction_scratch_len(dims, num_threads);
+        if nvals == 0 || scratch_len == 0 {
+            return Err("Dimension mismatch");
+        }
+
+        let mut coeffs = vec![T::zero(); nvals];
+        let mut scratch = vec![T::zero(); scratch_len];
+        multibspline::rectilinear::coefficients_par(
+            grids_arr,
+            vals,
+            &mut coeffs,
+            &mut scratch,
+            num_threads,
+        )?;
+
+        interpn_bspline_rectilinear_parallel_eval(
+            grids,
+            &coeffs,
+            linearize_extrapolation,
+            obs,
+            out,
+            num_threads,
+        )
+    })
+}
+
+#[cfg(feature = "par")]
+fn interpn_bspline_regular_parallel_eval<T: Float + Send + Sync>(
+    dims: &[usize],
+    starts: &[T],
+    steps: &[T],
+    coeffs: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+    out: &mut [T],
+    num_threads: usize,
+) -> Result<(), &'static str> {
+    let ndims = dims.len();
+    let chunk = MIN_CHUNK_SIZE.max(out.len() / num_threads.max(1));
+    let result: Mutex<Option<&'static str>> = Mutex::new(None);
+    let write_err = |msg: &'static str| {
+        let mut guard = result.lock().unwrap();
+        if guard.is_none() {
+            *guard = Some(msg);
+        }
+    };
+
+    out.par_chunks_mut(chunk).enumerate().for_each(|(i, outc)| {
+        let start = chunk * i;
+        let end = start + outc.len();
+        let mut obs_slices: [&[T]; 8] = [&[]; 8];
+        for (j, o) in obs.iter().enumerate() {
+            match o.get(start..end) {
+                Some(s) => obs_slices[j] = s,
+                None => {
+                    write_err("Dimension mismatch");
+                    return;
+                }
+            }
+        }
+
+        if let Err(msg) = multibspline::regular::interpn(
+            dims,
+            starts,
+            steps,
+            coeffs,
+            linearize_extrapolation,
+            &obs_slices[..ndims],
+            outc,
+        ) {
+            write_err(msg);
+        }
+    });
+
+    match *result.lock().unwrap() {
+        Some(msg) => Err(msg),
+        None => Ok(()),
+    }
+}
+
+#[cfg(feature = "par")]
+fn interpn_bspline_rectilinear_parallel_eval<T: Float + Send + Sync>(
+    grids: &[&[T]],
+    coeffs: &[T],
+    linearize_extrapolation: bool,
+    obs: &[&[T]],
+    out: &mut [T],
+    num_threads: usize,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    let chunk = MIN_CHUNK_SIZE.max(out.len() / num_threads.max(1));
+    let result: Mutex<Option<&'static str>> = Mutex::new(None);
+    let write_err = |msg: &'static str| {
+        let mut guard = result.lock().unwrap();
+        if guard.is_none() {
+            *guard = Some(msg);
+        }
+    };
+
+    out.par_chunks_mut(chunk).enumerate().for_each(|(i, outc)| {
+        let start = chunk * i;
+        let end = start + outc.len();
+        let mut obs_slices: [&[T]; 8] = [&[]; 8];
+        for (j, o) in obs.iter().enumerate() {
+            match o.get(start..end) {
+                Some(s) => obs_slices[j] = s,
+                None => {
+                    write_err("Dimension mismatch");
+                    return;
+                }
+            }
+        }
+
+        if let Err(msg) = multibspline::rectilinear::interpn(
+            grids,
+            coeffs,
+            linearize_extrapolation,
+            &obs_slices[..ndims],
+            outc,
+        ) {
+            write_err(msg);
+        }
+    });
+
+    match *result.lock().unwrap() {
+        Some(msg) => Err(msg),
+        None => Ok(()),
+    }
+}
+
 /// Allocating variant of [interpn].
 /// It is recommended to pre-allocate outputs and use the non-allocating variant
 /// whenever possible.
@@ -388,62 +637,11 @@ pub fn interpn_serial<T: Float>(
     // Resolve grid kind, checking the grid if the kind is not provided by the user.
     let kind = resolve_grid_kind(assume_grid_kind, grids)?;
 
-    // Extract regular grid params
-    let get_regular_grid = || {
-        let mut dims = [0_usize; MAXDIMS];
-        let mut starts = [T::zero(); MAXDIMS];
-        let mut steps = [T::zero(); MAXDIMS];
-
-        for (i, grid) in grids.iter().enumerate() {
-            if grid.len() < 2 {
-                return Err("All grids must have at least two entries");
-            }
-            dims[i] = grid.len();
-            starts[i] = grid[0];
-            steps[i] = grid[1] - grid[0];
-        }
-
-        Ok((dims, starts, steps))
-    };
-
-    // Bounds checks for regular grid, if requested
-    let maybe_check_bounds_regular = |dims: &[usize], starts: &[T], steps: &[T], obs: &[&[T]]| {
-        if let Some(atol) = check_bounds_with_atol {
-            let mut bounds = [false; MAXDIMS];
-            let out = &mut bounds[..ndims];
-            multilinear::regular::check_bounds(
-                &dims[..ndims],
-                &starts[..ndims],
-                &steps[..ndims],
-                obs,
-                atol,
-                out,
-            )?;
-            if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.");
-            }
-        }
-        Ok(())
-    };
-
-    // Bounds checks for rectilinear grid, if requested
-    let maybe_check_bounds_rectilinear = |grids, obs| {
-        if let Some(atol) = check_bounds_with_atol {
-            let mut bounds = [false; MAXDIMS];
-            let out = &mut bounds[..ndims];
-            multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
-            if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.");
-            }
-        }
-        Ok(())
-    };
-
     // Select lower-level method
     match (method, kind) {
         (GridInterpMethod::Linear, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             linear::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -454,12 +652,12 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Linear, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             linear::rectilinear::interpn(grids, vals, obs, out)
         }
         (GridInterpMethod::Cubic, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             cubic::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -471,12 +669,28 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Cubic, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             cubic::rectilinear::interpn(grids, vals, linearize_extrapolation, obs, out)
         }
+        (GridInterpMethod::Bspline, GridKind::Regular) => interpn_bspline_regular_serial(
+            grids,
+            vals,
+            obs,
+            out,
+            linearize_extrapolation,
+            check_bounds_with_atol,
+        ),
+        (GridInterpMethod::Bspline, GridKind::Rectilinear) => interpn_bspline_rectilinear_serial(
+            grids,
+            vals,
+            obs,
+            out,
+            linearize_extrapolation,
+            check_bounds_with_atol,
+        ),
         (GridInterpMethod::Nearest, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             nearest::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -487,10 +701,162 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Nearest, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             nearest::rectilinear::interpn(grids, vals, obs, out)
         }
     }
+}
+
+fn regular_grid_params<T: Float>(
+    grids: &[&[T]],
+) -> Result<([usize; MAXDIMS], [T; MAXDIMS], [T; MAXDIMS]), &'static str> {
+    let mut dims = [0_usize; MAXDIMS];
+    let mut starts = [T::zero(); MAXDIMS];
+    let mut steps = [T::zero(); MAXDIMS];
+
+    for (i, grid) in grids.iter().enumerate() {
+        if grid.len() < 2 {
+            return Err("All grids must have at least two entries");
+        }
+        dims[i] = grid.len();
+        starts[i] = grid[0];
+        steps[i] = grid[1] - grid[0];
+    }
+
+    Ok((dims, starts, steps))
+}
+
+fn maybe_check_bounds_regular<T: Float>(
+    dims: &[usize; MAXDIMS],
+    starts: &[T; MAXDIMS],
+    steps: &[T; MAXDIMS],
+    obs: &[&[T]],
+    ndims: usize,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    if let Some(atol) = check_bounds_with_atol {
+        let mut bounds = [false; MAXDIMS];
+        let out = &mut bounds[..ndims];
+        multilinear::regular::check_bounds(
+            &dims[..ndims],
+            &starts[..ndims],
+            &steps[..ndims],
+            obs,
+            atol,
+            out,
+        )?;
+        if bounds.iter().any(|x| *x) {
+            return Err("At least one observation point is outside the grid.");
+        }
+    }
+    Ok(())
+}
+
+fn maybe_check_bounds_rectilinear<T: Float>(
+    grids: &[&[T]],
+    obs: &[&[T]],
+    ndims: usize,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    if let Some(atol) = check_bounds_with_atol {
+        let mut bounds = [false; MAXDIMS];
+        let out = &mut bounds[..ndims];
+        multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
+        if bounds.iter().any(|x| *x) {
+            return Err("At least one observation point is outside the grid.");
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn interpn_bspline_regular_serial<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    let (dims, starts, steps) = regular_grid_params(grids)?;
+    maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
+
+    crate::dispatch_ndims!(ndims, MAXDIMS_ERR, [1, 2, 3, 4, 5, 6, 7, 8], |N| {
+        let dims: [usize; N] = dims[..ndims].try_into().unwrap();
+        let starts: [T; N] = starts[..ndims].try_into().unwrap();
+        let steps: [T; N] = steps[..ndims].try_into().unwrap();
+        let nvals = MultiBsplineRegular::<T, N>::coeff_storage_len(dims);
+        let scratch_len = MultiBsplineRegular::<T, N>::construction_scratch_len(dims);
+        if nvals == 0 || scratch_len == 0 {
+            return Err("Dimension mismatch");
+        }
+
+        let mut coeffs = vec![T::zero(); nvals];
+        let mut scratch = vec![T::zero(); scratch_len];
+        multibspline::regular::coefficients(dims, vals, &mut coeffs, &mut scratch)?;
+        multibspline::regular::interpn(
+            &dims,
+            &starts,
+            &steps,
+            &coeffs,
+            linearize_extrapolation,
+            obs,
+            out,
+        )
+    })
+}
+
+#[cfg(not(feature = "std"))]
+fn interpn_bspline_regular_serial<T: Float>(
+    _grids: &[&[T]],
+    _vals: &[T],
+    _obs: &[&[T]],
+    _out: &mut [T],
+    _linearize_extrapolation: bool,
+    _check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    Err("B-spline construction in top-level interpn requires the std feature")
+}
+
+#[cfg(feature = "std")]
+fn interpn_bspline_rectilinear_serial<T: Float>(
+    grids: &[&[T]],
+    vals: &[T],
+    obs: &[&[T]],
+    out: &mut [T],
+    linearize_extrapolation: bool,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    let ndims = grids.len();
+    maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
+
+    crate::dispatch_ndims!(ndims, MAXDIMS_ERR, [1, 2, 3, 4, 5, 6, 7, 8], |N| {
+        let grids: &[&[T]; N] = grids.try_into().unwrap();
+        let dims = grids.map(|grid| grid.len());
+        let nvals = MultiBsplineRectilinear::<T, N>::coeff_storage_len(dims);
+        let scratch_len = MultiBsplineRectilinear::<T, N>::construction_scratch_len(dims);
+        if nvals == 0 || scratch_len == 0 {
+            return Err("Dimension mismatch");
+        }
+
+        let mut coeffs = vec![T::zero(); nvals];
+        let mut scratch = vec![T::zero(); scratch_len];
+        multibspline::rectilinear::coefficients(grids, vals, &mut coeffs, &mut scratch)?;
+        multibspline::rectilinear::interpn(grids, &coeffs, linearize_extrapolation, obs, out)
+    })
+}
+
+#[cfg(not(feature = "std"))]
+fn interpn_bspline_rectilinear_serial<T: Float>(
+    _grids: &[&[T]],
+    _vals: &[T],
+    _obs: &[&[T]],
+    _out: &mut [T],
+    _linearize_extrapolation: bool,
+    _check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    Err("B-spline construction in top-level interpn requires the std feature")
 }
 
 /// Figure out whether a grid is regular or rectilinear.
@@ -589,6 +955,112 @@ pub(crate) fn validate_rectilinear_grid<T: Float, const N: usize>(
         return Err("All grids must be monotonically increasing");
     }
     Ok(dims)
+}
+
+#[cfg(all(test, feature = "std", feature = "par"))]
+mod top_level_tests {
+    use super::*;
+    use crate::utils::meshgrid;
+
+    #[test]
+    fn test_top_level_bspline_regular_matches_serial_in_parallel_branch() {
+        let x: Vec<f64> = (0..6).map(|i| -1.0 + i as f64 * 0.4).collect();
+        let y: Vec<f64> = (0..7).map(|i| 0.5 + i as f64 * 0.3).collect();
+        let grids = [&x[..], &y[..]];
+        let grid = meshgrid(vec![&x, &y]);
+        let vals: Vec<f64> = grid
+            .iter()
+            .map(|p| p[0].sin() + p[1] * p[1] - 0.2 * p[0] * p[1])
+            .collect();
+
+        let nobs = 3000;
+        let xobs: Vec<f64> = (0..nobs).map(|i| -1.2 + (i % 100) as f64 * 0.025).collect();
+        let yobs: Vec<f64> = (0..nobs).map(|i| 0.3 + (i % 75) as f64 * 0.03).collect();
+        let obs = [&xobs[..], &yobs[..]];
+
+        let mut serial = vec![0.0; nobs];
+        interpn_serial(
+            &grids,
+            &vals,
+            &obs,
+            &mut serial,
+            GridInterpMethod::Bspline,
+            Some(GridKind::Regular),
+            true,
+            None,
+        )
+        .unwrap();
+
+        let mut parallel = vec![0.0; nobs];
+        interpn(
+            &grids,
+            &vals,
+            &obs,
+            &mut parallel,
+            GridInterpMethod::Bspline,
+            Some(GridKind::Regular),
+            true,
+            None,
+            Some(2),
+        )
+        .unwrap();
+
+        for i in 0..nobs {
+            assert!((serial[i] - parallel[i]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_top_level_bspline_rectilinear_matches_serial_in_parallel_branch() {
+        let x: Vec<f64> = (0..6)
+            .map(|i| -1.0 + i as f64 * 0.35 + (i as f64).powi(2) * 0.01)
+            .collect();
+        let y: Vec<f64> = (0..7)
+            .map(|i| 0.5 + i as f64 * 0.28 + (i as f64).powi(2) * 0.015)
+            .collect();
+        let grids = [&x[..], &y[..]];
+        let grid = meshgrid(vec![&x, &y]);
+        let vals: Vec<f64> = grid
+            .iter()
+            .map(|p| p[0].sin() + p[1] * p[1] - 0.2 * p[0] * p[1])
+            .collect();
+
+        let nobs = 3000;
+        let xobs: Vec<f64> = (0..nobs).map(|i| -1.2 + (i % 100) as f64 * 0.025).collect();
+        let yobs: Vec<f64> = (0..nobs).map(|i| 0.3 + (i % 75) as f64 * 0.03).collect();
+        let obs = [&xobs[..], &yobs[..]];
+
+        let mut serial = vec![0.0; nobs];
+        interpn_serial(
+            &grids,
+            &vals,
+            &obs,
+            &mut serial,
+            GridInterpMethod::Bspline,
+            Some(GridKind::Rectilinear),
+            true,
+            None,
+        )
+        .unwrap();
+
+        let mut parallel = vec![0.0; nobs];
+        interpn(
+            &grids,
+            &vals,
+            &obs,
+            &mut parallel,
+            GridInterpMethod::Bspline,
+            Some(GridKind::Rectilinear),
+            true,
+            None,
+            Some(2),
+        )
+        .unwrap();
+
+        for i in 0..nobs {
+            assert!((serial[i] - parallel[i]).abs() < 1e-12);
+        }
+    }
 }
 
 /// Helper for dispatching to a generic method matching the input dimensionality.

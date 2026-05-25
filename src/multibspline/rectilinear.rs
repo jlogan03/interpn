@@ -1,7 +1,9 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a
 //! rectilinear grid.
 
-use super::{Saturation, max_usize};
+use super::Saturation;
+#[cfg(feature = "par")]
+use super::max_usize;
 use crate::{index_arr_fixed_dims, interp_math::dot4, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::Float;
