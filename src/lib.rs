@@ -229,6 +229,11 @@ static PHYSICAL_CORES: LazyLock<usize> = LazyLock::new(num_cpus::get_physical);
 ///                           by an amount exceeding the provided tolerance.
 /// * `max_threads`: If provided, limit number of threads used to at most this number. Otherwise,
 ///                use a heuristic to choose the number that will provide the best throughput.
+///
+/// For [`GridInterpMethod::Bspline`], this top-level convenience API constructs
+/// the B-spline coefficient tensor before evaluation. When the parallel branch
+/// is selected, coefficient construction is also parallelized and is performed
+/// exactly once before splitting evaluation across output chunks.
 #[cfg(feature = "par")]
 pub fn interpn<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -266,6 +271,10 @@ pub fn interpn<T: Float + Send + Sync>(
         // memory page sizing, and improved vectorization over larger inputs.
         let num_cores = parallel_thread_count(max_threads);
 
+        // B-spline evaluation needs coefficients derived from the full tensor.
+        // Build those once here, then share the immutable coefficient tensor
+        // across evaluation chunks. Calling `interpn_serial` from each output
+        // chunk would rebuild coefficients once per chunk and dominate runtime.
         if method == GridInterpMethod::Bspline {
             return interpn_bspline_par(
                 grids,
@@ -347,6 +356,10 @@ pub fn interpn<T: Float + Send + Sync>(
     }
 }
 
+/// Resolve the effective parallelism cap used by top-level threaded dispatch.
+///
+/// The caller-facing `max_threads` is clamped to at least one thread and no more
+/// than the smaller of Rayon worker count and physical core count.
 #[cfg(feature = "par")]
 fn parallel_thread_count(max_threads: Option<usize>) -> usize {
     let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
@@ -358,6 +371,10 @@ fn parallel_thread_count(max_threads: Option<usize>) -> usize {
     }
 }
 
+/// Dispatch top-level B-spline interpolation to the grid-specific parallel path.
+///
+/// This exists outside the generic chunked evaluator because B-splines require a
+/// global coefficient solve before point evaluation can begin.
 #[cfg(feature = "par")]
 fn interpn_bspline_par<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -391,6 +408,11 @@ fn interpn_bspline_par<T: Float + Send + Sync>(
     }
 }
 
+/// Top-level parallel regular-grid B-spline interpolation.
+///
+/// Coefficients are allocated and solved once using the parallel coefficient
+/// builder, then the resulting immutable coefficient tensor is evaluated across
+/// output chunks.
 #[cfg(feature = "par")]
 fn interpn_bspline_regular_par<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -437,6 +459,11 @@ fn interpn_bspline_regular_par<T: Float + Send + Sync>(
     })
 }
 
+/// Top-level parallel rectilinear-grid B-spline interpolation.
+///
+/// The nonuniform coefficient solve depends on the complete grid along each
+/// axis, so construction is separated from evaluation and run once before
+/// chunking observations.
 #[cfg(feature = "par")]
 fn interpn_bspline_rectilinear_par<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -481,6 +508,10 @@ fn interpn_bspline_rectilinear_par<T: Float + Send + Sync>(
     })
 }
 
+/// Evaluate a precomputed regular-grid B-spline tensor over output chunks.
+///
+/// The coefficient buffer is immutable during this phase, so each Rayon worker
+/// only needs a disjoint output slice and borrowed observation slices.
 #[cfg(feature = "par")]
 fn interpn_bspline_regular_parallel_eval<T: Float + Send + Sync>(
     dims: &[usize],
@@ -535,6 +566,10 @@ fn interpn_bspline_regular_parallel_eval<T: Float + Send + Sync>(
     }
 }
 
+/// Evaluate a precomputed rectilinear-grid B-spline tensor over output chunks.
+///
+/// Grid slices and coefficients are shared read-only between workers; each
+/// worker writes only its own output chunk.
 #[cfg(feature = "par")]
 fn interpn_bspline_rectilinear_parallel_eval<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -624,6 +659,11 @@ pub fn interpn_alloc<T: Float + Send + Sync>(
 }
 
 /// Single-threaded, non-allocating variant of [interpn] available without `par` feature.
+///
+/// For [`GridInterpMethod::Bspline`], this convenience layer must allocate
+/// coefficient and scratch buffers when `std` is available. Users who need a
+/// strictly nonallocating B-spline path should call the lower-level
+/// `multibspline::{regular, rectilinear}` APIs with caller-provided storage.
 pub fn interpn_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],
@@ -712,6 +752,11 @@ pub fn interpn_serial<T: Float>(
     }
 }
 
+/// Extract regular-grid dimensions, starts, and steps from rectilinear-style
+/// grid slices.
+///
+/// This keeps top-level dispatch paths consistent while still allowing callers
+/// to pass grids in the same shape for all methods.
 fn regular_grid_params<T: Float>(
     grids: &[&[T]],
 ) -> Result<([usize; MAXDIMS], [T; MAXDIMS], [T; MAXDIMS]), &'static str> {
@@ -731,6 +776,10 @@ fn regular_grid_params<T: Float>(
     Ok((dims, starts, steps))
 }
 
+/// Run the optional top-level bounds check for regular-grid dispatch.
+///
+/// Bounds checking is kept outside the lower-level method calls so B-spline
+/// construction is not performed if the observations are already invalid.
 fn maybe_check_bounds_regular<T: Float>(
     dims: &[usize; MAXDIMS],
     starts: &[T; MAXDIMS],
@@ -757,6 +806,7 @@ fn maybe_check_bounds_regular<T: Float>(
     Ok(())
 }
 
+/// Run the optional top-level bounds check for rectilinear-grid dispatch.
 fn maybe_check_bounds_rectilinear<T: Float>(
     grids: &[&[T]],
     obs: &[&[T]],
@@ -775,6 +825,10 @@ fn maybe_check_bounds_rectilinear<T: Float>(
 }
 
 #[cfg(feature = "std")]
+/// Serial top-level regular-grid B-spline interpolation.
+///
+/// This allocates coefficient and scratch buffers for the convenience API,
+/// builds coefficients once, and then evaluates the precomputed tensor.
 fn interpn_bspline_regular_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],
@@ -825,6 +879,10 @@ fn interpn_bspline_regular_serial<T: Float>(
 }
 
 #[cfg(feature = "std")]
+/// Serial top-level rectilinear-grid B-spline interpolation.
+///
+/// This mirrors the regular-grid path but uses the nonuniform coefficient solve
+/// before evaluating the precomputed tensor.
 fn interpn_bspline_rectilinear_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],

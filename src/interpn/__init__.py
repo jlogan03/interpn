@@ -88,6 +88,10 @@ def interpn(
         vals: Values defined on the full cartesian-product grid.
         method: Interpolation kind, one of ``"linear"``, ``"cubic"``,
             ``"bspline"``, or ``"nearest"``.
+            The B-spline option constructs coefficients inside this convenience
+            call before evaluation; use ``MultiBsplineRegular`` or
+            ``MultiBsplineRectilinear`` directly when coefficients should be
+            reused across calls.
         out: Optional preallocated array that receives the result.
         linearize_extrapolation: Whether cubic extrapolation should fall back to
             linear behaviour outside the grid bounds.

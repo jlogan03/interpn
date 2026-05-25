@@ -114,6 +114,10 @@ pub fn coefficients<T: Float, const N: usize>(
 /// tensor is divided into contiguous slabs that can be written independently.
 /// In C-style memory order, the leading axis forms a single slab and falls back
 /// to the serial solve for that axis.
+///
+/// `max_threads` is clamped to at least one worker and to the current Rayon
+/// pool size. The function does not allocate; each worker borrows its own
+/// tridiagonal `upper` and `rhs` slices from `scratch`.
 #[cfg(feature = "par")]
 pub fn coefficients_par<T: Float + Send + Sync, const N: usize>(
     dims: [usize; N],
@@ -222,6 +226,15 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
     /// Number of scratch values required to construct coefficients with
     /// [`coefficients_par`] using at most `max_threads` worker tasks.
     ///
+    /// The returned length is the maximum per-axis scratch requirement for the
+    /// slab decomposition used by [`coefficients_par`], not simply
+    /// `construction_scratch_len(dims) * max_threads`. In C-style memory order,
+    /// an axis can only use as many independent contiguous slabs as there are
+    /// prefix elements before that axis, so early axes may require less scratch
+    /// than the requested thread count.
+    ///
+    /// A `max_threads` value of zero is treated as one worker.
+    ///
     /// Returns zero if any dimension is invalid for this interpolator, if
     /// `N == 0`, or if the scratch length overflows `usize`.
     #[cfg(feature = "par")]
@@ -321,6 +334,11 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
     /// Build coefficients from nodal values using caller-provided storage and a
     /// caller-provided parallel construction scratch buffer, then return a
     /// borrowed interpolator over those coefficients.
+    ///
+    /// This preserves the borrowed, nonallocating Rust API while allowing
+    /// coefficient construction to use Rayon. The caller owns `coeffs` for the
+    /// lifetime of the returned interpolator and owns `scratch` only during
+    /// construction.
     #[cfg(feature = "par")]
     pub fn from_values_with_workspace_par(
         dims: [usize; N],
