@@ -30,7 +30,11 @@
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
 use super::Saturation;
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{
+    index_arr_fixed_dims,
+    interp_math::{dot4, hermite_basis},
+    scalar::mul_add,
+};
 use crunchy::unroll;
 use num_traits::Float;
 
@@ -529,22 +533,6 @@ fn high_weights<T: Float>(t: T, h12_over_h23: T, linearize_extrapolation: bool) 
     }
 }
 
-#[inline]
-fn hermite_basis<T: Float>(t: T) -> [T; 4] {
-    let one = T::one();
-    let two = one + one;
-    let three = two + one;
-    let t2 = t * t;
-    let t3 = t2 * t;
-
-    [
-        mul_add(two, t3, mul_add(-three, t2, one)),
-        mul_add(t, mul_add(t, t - two, one), T::zero()),
-        mul_add(-two, t3, three * t2),
-        mul_add(t2, t - one, T::zero()),
-    ]
-}
-
 /// Second-order central difference weights on a nonuniform grid per
 ///
 /// A. E. P. Veldman and K. Rinzema, "Playing with nonuniform grids".
@@ -570,19 +558,6 @@ fn centered_difference_weights<T: Float>(h01: T, h12: T) -> [T; 3] {
     let c = h12 / denom;
 
     [-c / h01, mul_add(c, T::one() / h01, -a / h12), a / h12]
-}
-
-#[inline]
-fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
-    mul_add(
-        weights[3],
-        vals[3],
-        mul_add(
-            weights[2],
-            vals[2],
-            mul_add(weights[1], vals[1], weights[0] * vals[0]),
-        ),
-    )
 }
 
 #[cfg(test)]

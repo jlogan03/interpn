@@ -90,6 +90,7 @@
 
 use num_traits::Float;
 
+pub(crate) mod interp_math;
 pub(crate) mod scalar;
 
 pub mod multilinear;

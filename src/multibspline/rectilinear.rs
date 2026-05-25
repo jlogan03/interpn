@@ -2,7 +2,7 @@
 //! rectilinear grid.
 
 use super::Saturation;
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{index_arr_fixed_dims, interp_math::dot4, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::Float;
 
@@ -529,19 +529,6 @@ fn interp_weights<T: Float>(
         Saturation::InsideHigh => high_boundary_weights(grid, x, false),
         Saturation::OutsideHigh => high_boundary_weights(grid, x, linearize_extrapolation),
     }
-}
-
-#[inline]
-fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
-    mul_add(
-        weights[3],
-        vals[3],
-        mul_add(
-            weights[2],
-            vals[2],
-            mul_add(weights[1], vals[1], weights[0] * vals[0]),
-        ),
-    )
 }
 
 #[inline]

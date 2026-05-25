@@ -31,7 +31,10 @@
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
 use super::Saturation;
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{
+    index_arr_fixed_dims,
+    interp_math::{dot4, hermite_basis},
+};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -524,29 +527,6 @@ fn high_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
             h01 + h10 / two + (one + one / two) * h11,
         ]
     }
-}
-
-#[inline]
-fn hermite_basis<T: Float>(t: T) -> [T; 4] {
-    let one = T::one();
-    let two = one + one;
-    let three = two + one;
-    let t2 = t * t;
-    let t3 = t2 * t;
-
-    [
-        mul_add(two, t3, mul_add(-three, t2, one)),
-        mul_add(t, mul_add(t, t - two, one), T::zero()),
-        mul_add(-two, t3, three * t2),
-        mul_add(t2, t - one, T::zero()),
-    ]
-}
-
-#[inline]
-fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
-    let lo = mul_add(weights[1], vals[1], weights[0] * vals[0]);
-    let hi = mul_add(weights[3], vals[3], weights[2] * vals[2]);
-    lo + hi
 }
 
 #[cfg(test)]

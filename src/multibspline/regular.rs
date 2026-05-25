@@ -1,7 +1,7 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a regular grid.
 
 use super::Saturation;
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{index_arr_fixed_dims, interp_math::dot4, scalar::mul_add};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -607,19 +607,6 @@ fn high_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
         (two + two) / six,
         one / six + u / two,
     ]
-}
-
-#[inline]
-fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
-    mul_add(
-        weights[3],
-        vals[3],
-        mul_add(
-            weights[2],
-            vals[2],
-            mul_add(weights[1], vals[1], weights[0] * vals[0]),
-        ),
-    )
 }
 
 #[cfg(test)]
