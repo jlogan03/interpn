@@ -76,6 +76,12 @@ def interpn(
     If a pre-allocated output array is provided, the returned array is a
     reference to that array.
 
+    Note that, unlike the other methods, `bspline` requires coefficient storage in
+    addition to the raw data points and performs a linear solve during initialization
+    to generate those coefficients. As a result, it can be much slower than the
+    other methods, especially when used for large grids with a small number of
+    target points.
+
     Args:
         obs: Observation coordinates, one array per dimension.
         grids: Grid axis coordinates, one array per dimension.

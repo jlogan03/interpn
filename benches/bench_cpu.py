@@ -62,8 +62,10 @@ DASH_STYLES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"]
 THREAD_SPEEDUP_COLORS = {
     "linear": "#1f77b4",
     "cubic": "#ff7f0e",
+    "bspline": "#9467bd",
     "nearest": "#2ca02c",
 }
+THREAD_SPEEDUP_METHODS = ["linear", "cubic", "bspline", "nearest"]
 
 
 def _normalized_line_style(index: int) -> str:
@@ -520,21 +522,21 @@ def _plot_speedup_vs_threads(
 ) -> None:
     fig = make_subplots(rows=1, cols=1)
     dash_styles = [
-        _normalized_line_style(i)
-        for i in range(len(["linear", "cubic", "nearest"]) * 2)
+        _normalized_line_style(i) for i in range(len(THREAD_SPEEDUP_METHODS) * 2)
     ]
     all_values = []
     thread_arr = np.array(thread_counts)
-    series: list[tuple[str, np.ndarray]] = []
+    series: list[tuple[str, str, np.ndarray]] = []
     for grid_kind in ["regular", "rectilinear"]:
-        for method in ["linear", "cubic", "nearest"]:
+        for method in THREAD_SPEEDUP_METHODS:
             values = speedups[grid_kind].get(method)
             if not values:
                 continue
             values_arr = np.array(values, dtype=float)
             all_values.append(values_arr)
-            series.append((f"{method.title()} {grid_kind}", values_arr))
-    for _, values_arr in series:
+            method_label = "B-Spline" if method == "bspline" else method.title()
+            series.append((f"{method_label} {grid_kind}", method, values_arr))
+    for _, _, values_arr in series:
         ones = np.ones_like(values_arr)
         fill_between(
             fig,
@@ -545,7 +547,7 @@ def _plot_speedup_vs_threads(
             col=1,
             fillcolor="rgba(139, 196, 59, 0.25)",
         )
-    for idx, (label, values_arr) in enumerate(series):
+    for idx, (label, method, values_arr) in enumerate(series):
         fig.add_trace(
             go.Scatter(
                 x=thread_arr,
@@ -553,12 +555,12 @@ def _plot_speedup_vs_threads(
                 mode="lines+markers",
                 name=label,
                 line=dict(
-                    color="black",
+                    color=THREAD_SPEEDUP_COLORS[method],
                     width=2,
                     dash=dash_styles[idx],
                 ),
-                marker=dict(size=7, color="black"),
-                showlegend=False,
+                marker=dict(size=7, color=THREAD_SPEEDUP_COLORS[method]),
+                showlegend=True,
             ),
             row=1,
             col=1,
@@ -609,8 +611,15 @@ def _plot_speedup_vs_threads(
             yanchor="top",
         ),
         height=430,
-        margin=dict(t=70, l=60, r=40, b=80),
-        showlegend=False,
+        margin=dict(t=70, l=60, r=170, b=80),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            x=1.02,
+            xanchor="left",
+        ),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="black"),
@@ -660,7 +669,7 @@ def bench_thread_speedup_vs_threads():
             )
         out = np.zeros_like(obs[0])
 
-        for method in ["linear", "cubic", "nearest"]:
+        for method in THREAD_SPEEDUP_METHODS:
             timings = []
             for threads in thread_counts:
                 timed = average_call_time(
