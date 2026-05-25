@@ -7,7 +7,12 @@ from scipy.interpolate import RegularGridInterpolator
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from interpn import MulticubicRegular, MulticubicRectilinear, MultiBsplineRegular
+from interpn import (
+    MulticubicRegular,
+    MulticubicRectilinear,
+    MultiBsplineRegular,
+    MultiBsplineRectilinear,
+)
 
 
 def _step(x: np.ndarray) -> np.ndarray:
@@ -83,7 +88,9 @@ if __name__ == "__main__":
                 y_interpn = MulticubicRectilinear.new(
                     [xdata], ydata, linearize_extrapolation=False
                 ).eval([xinterp])
-                y_bspline = None
+                y_bspline = MultiBsplineRectilinear.new(
+                    [xdata], ydata, linearize_extrapolation=False
+                ).eval([xinterp])
 
             y_sp = RegularGridInterpolator(
                 [xdata], ydata, bounds_error=None, fill_value=None, method="cubic"
@@ -225,11 +232,7 @@ if __name__ == "__main__":
             showgrid=False,
             zeroline=False,
         )
-        title_methods = (
-            "InterpN vs. MultiBspline vs. Scipy"
-            if kind == "Regular"
-            else "InterpN vs. Scipy"
-        )
+        title_methods = "InterpN vs. MultiBspline vs. Scipy"
         fig_1d.update_layout(
             title=dict(
                 text=(
@@ -301,7 +304,13 @@ if __name__ == "__main__":
                 .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
                 .reshape(xinterpmesh.shape)
             )
-            z_bspline = None
+            z_bspline = (
+                MultiBsplineRectilinear.new(
+                    [xdata, ydata], zmesh, linearize_extrapolation=False
+                )
+                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
+                .reshape(xinterpmesh.shape)
+            )
 
         z_sp = RegularGridInterpolator(
             [xdata, ydata], zmesh, bounds_error=None, fill_value=None, method="cubic"
