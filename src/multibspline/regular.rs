@@ -252,7 +252,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         let mut origin = [0_usize; N];
         let mut sat = [Saturation::None; N];
-        let mut dts = [T::zero(); N];
+        let mut weights = [[T::zero(); FP]; N];
         let mut dimprod = [1_usize; N];
         let mut loc = [0_usize; N];
         let mut store = [[T::zero(); FP]; N];
@@ -264,7 +264,8 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
             let origin_f =
                 <T as NumCast>::from(origin[i] + 1).ok_or("Unrepresentable coordinate value")?;
             let index_one_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
-            dts[i] = (x[i] - index_one_loc) / self.steps[i];
+            let t = (x[i] - index_one_loc) / self.steps[i];
+            weights[i] = interp_weights(t, sat[i], self.linearize_extrapolation);
         }
 
         let nverts = const { FP.pow(N as u32) };
@@ -286,14 +287,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
                         let ind: usize = j.saturating_sub(1);
 
                         if level {
-                            let interped = interp_inner::<T>(
-                                &store[ind],
-                                dts[ind],
-                                sat[ind],
-                                self.linearize_extrapolation,
-                            );
-
-                            store[j][p] = interped;
+                            store[j][p] = dot4(weights[ind], store[ind]);
                         }
                     }
                 }
@@ -326,12 +320,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
             }
         }
 
-        Ok(interp_inner::<T>(
-            &store[N - 1],
-            dts[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        ))
+        Ok(dot4(weights[N - 1], store[N - 1]))
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -524,140 +513,113 @@ fn solve_line<T: Float>(
 }
 
 #[inline]
-fn interp_inner<T: Float>(
-    vals: &[T; 4],
-    t: T,
-    sat: Saturation,
-    linearize_extrapolation: bool,
-) -> T {
+fn interp_weights<T: Float>(t: T, sat: Saturation, linearize_extrapolation: bool) -> [T; 4] {
     match sat {
-        Saturation::None => cubic_bspline(vals[0], vals[1], vals[2], vals[3], t),
-        Saturation::InsideLow => {
-            let t = t + T::one();
-            let ghost = low_ghost(vals);
-            cubic_bspline(ghost, vals[0], vals[1], vals[2], t)
-        }
-        Saturation::OutsideLow => {
-            let t = t + T::one();
-            let ghost = low_ghost(vals);
-            if linearize_extrapolation {
-                let (y, k) = low_endpoint_value_slope(vals, ghost);
-                mul_add(k, t, y)
-            } else {
-                cubic_bspline(ghost, vals[0], vals[1], vals[2], t)
-            }
-        }
-        Saturation::InsideHigh => {
-            let t = t - T::one();
-            let ghost = high_ghost(vals);
-            cubic_bspline(vals[1], vals[2], vals[3], ghost, t)
-        }
-        Saturation::OutsideHigh => {
-            let t = t - T::one();
-            let ghost = high_ghost(vals);
-            if linearize_extrapolation {
-                let (y, k) = high_endpoint_value_slope(vals, ghost);
-                mul_add(k, t - T::one(), y)
-            } else {
-                cubic_bspline(vals[1], vals[2], vals[3], ghost, t)
-            }
-        }
+        Saturation::None => cubic_bspline_weights(t),
+        Saturation::InsideLow => low_boundary_weights(t + T::one(), false),
+        Saturation::OutsideLow => low_boundary_weights(t + T::one(), linearize_extrapolation),
+        Saturation::InsideHigh => high_boundary_weights(t - T::one(), false),
+        Saturation::OutsideHigh => high_boundary_weights(t - T::one(), linearize_extrapolation),
     }
 }
 
 #[inline]
-fn cubic_bspline<T: Float>(c0: T, c1: T, c2: T, c3: T, t: T) -> T {
+fn cubic_bspline_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
     let three = two + one;
     let six = three + three;
 
-    let a0 = c0 + (two + two) * c1 + c2;
-    let a1 = three * (c2 - c0);
-    let a2 = three * (c0 - two * c1 + c2);
-    let a3 = c3 - c0 + three * (c1 - c2);
-
-    mul_add(mul_add(mul_add(a3, t, a2), t, a1), t, a0) / six
+    let t2 = t * t;
+    let t3 = t2 * t;
+    [
+        (one - three * t + three * t2 - t3) / six,
+        ((two + two) - six * t2 + three * t3) / six,
+        (one + three * t + three * t2 - three * t3) / six,
+        t3 / six,
+    ]
 }
 
 #[inline]
-fn low_ghost<T: Float>(vals: &[T; 4]) -> T {
+fn low_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        low_linearized_boundary_weights(t)
+    } else {
+        cubic_bspline_weights(t)
+    };
+
+    // The low-side ghost coefficient is 3*c0 - 3*c1 + c2. Fold the
+    // ghost's contribution into the four stored coefficients.
     let three = T::one() + T::one() + T::one();
-    mul_add(three, vals[0] - vals[1], vals[2])
+    [
+        mul_add(three, raw[0], raw[1]),
+        mul_add(-three, raw[0], raw[2]),
+        raw[0] + raw[3],
+        T::zero(),
+    ]
 }
 
 #[inline]
-fn high_ghost<T: Float>(vals: &[T; 4]) -> T {
+fn high_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        high_linearized_boundary_weights(t)
+    } else {
+        cubic_bspline_weights(t)
+    };
+
+    // The high-side ghost coefficient is c1 - 3*c2 + 3*c3. Fold the
+    // ghost's contribution into the four stored coefficients.
     let three = T::one() + T::one() + T::one();
-    mul_add(three, vals[3] - vals[2], vals[1])
+    [
+        T::zero(),
+        raw[0] + raw[3],
+        mul_add(-three, raw[3], raw[1]),
+        mul_add(three, raw[3], raw[2]),
+    ]
 }
 
-/// Return endpoint value and dimensionless endpoint slope for low-side
-/// linearized extrapolation.
-///
-/// For the low boundary segment, the coefficients are:
-///
-/// ```text
-/// [c[-1], c[0], c[1], c[2]]
-/// ```
-///
-/// The cubic B-spline basis derivatives at `t = 0` are:
-///
-/// ```text
-/// w0'(0) = -1/2
-/// w1'(0) = 0
-/// w2'(0) = 1/2
-/// w3'(0) = 0
-/// ```
-///
-/// Therefore, with dimensionless coordinate `t`:
-///
-/// ```text
-/// dy/dt at x[0] = (c[1] - c[-1]) / 2
-///                = (-3c[0] + 4c[1] - c[2]) / 2
-/// ```
-fn low_endpoint_value_slope<T: Float>(vals: &[T; 4], ghost: T) -> (T, T) {
+#[inline]
+fn low_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
-    let four = two + two;
-    let six = four + two;
-    let y = mul_add(four, vals[0], ghost + vals[1]) / six;
-    let k = (vals[1] - ghost) / two;
-    (y, k)
+    let three = two + one;
+    let six = three + three;
+
+    [
+        one / six - t / two,
+        (two + two) / six,
+        one / six + t / two,
+        T::zero(),
+    ]
 }
 
-/// Return endpoint value and dimensionless endpoint slope for high-side
-/// linearized extrapolation.
-///
-/// For the high boundary segment, the coefficients are:
-///
-/// ```text
-/// [c[n - 3], c[n - 2], c[n - 1], c[n]]
-/// ```
-///
-/// The cubic B-spline basis derivatives at `t = 1` are:
-///
-/// ```text
-/// w0'(1) = 0
-/// w1'(1) = -1/2
-/// w2'(1) = 0
-/// w3'(1) = 1/2
-/// ```
-///
-/// Therefore, with dimensionless coordinate `t`:
-///
-/// ```text
-/// dy/dt at x[n - 1] = (c[n] - c[n - 2]) / 2
-///                    = (c[n - 3] - 4c[n - 2] + 3c[n - 1]) / 2
-/// ```
-fn high_endpoint_value_slope<T: Float>(vals: &[T; 4], ghost: T) -> (T, T) {
+#[inline]
+fn high_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
-    let four = two + two;
-    let six = four + two;
-    let y = mul_add(four, vals[3], vals[2] + ghost) / six;
-    let k = (ghost - vals[2]) / two;
-    (y, k)
+    let three = two + one;
+    let six = three + three;
+    let u = t - one;
+
+    [
+        T::zero(),
+        one / six - u / two,
+        (two + two) / six,
+        one / six + u / two,
+    ]
+}
+
+#[inline]
+fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
+    mul_add(
+        weights[3],
+        vals[3],
+        mul_add(
+            weights[2],
+            vals[2],
+            mul_add(weights[1], vals[1], weights[0] * vals[0]),
+        ),
+    )
 }
 
 #[cfg(test)]

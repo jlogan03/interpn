@@ -206,6 +206,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         let mut origin = [0_usize; N];
         let mut span = [0_usize; N];
         let mut sat = [Saturation::None; N];
+        let mut weights = [[T::zero(); FP]; N];
         let mut dimprod = [1_usize; N];
         let mut loc = [0_usize; N];
         let mut store = [[T::zero(); FP]; N];
@@ -214,6 +215,13 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
 
         for i in 0..N {
             (origin[i], span[i], sat[i]) = self.get_loc(x[i], i);
+            weights[i] = interp_weights(
+                self.grids[i],
+                span[i],
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+            );
         }
 
         let nverts = const { FP.pow(N as u32) };
@@ -235,16 +243,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
                         let ind: usize = j.saturating_sub(1);
 
                         if level {
-                            let interped = interp_inner(
-                                self.grids[ind],
-                                store[ind],
-                                span[ind],
-                                x[ind],
-                                sat[ind],
-                                self.linearize_extrapolation,
-                            );
-
-                            store[j][p] = interped;
+                            store[j][p] = dot4(weights[ind], store[ind]);
                         }
                     }
                 }
@@ -277,14 +276,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
             }
         }
 
-        Ok(interp_inner(
-            self.grids[N - 1],
-            store[N - 1],
-            span[N - 1],
-            x[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        ))
+        Ok(dot4(weights[N - 1], store[N - 1]))
     }
 
     /// Return the stored coefficient origin, knot span, and saturation region.
@@ -523,53 +515,19 @@ fn last_row<T: Float>(grid: &[T], y_prev: T, y_last: T) -> (T, T, T, T) {
 }
 
 #[inline]
-fn interp_inner<T: Float>(
+fn interp_weights<T: Float>(
     grid: &[T],
-    vals: [T; 4],
     span: usize,
     x: T,
     sat: Saturation,
     linearize_extrapolation: bool,
-) -> T {
+) -> [T; 4] {
     match sat {
-        Saturation::None => {
-            let weights = basis_span_weights(grid, span, x);
-            dot4(weights, vals)
-        }
-        Saturation::InsideLow => {
-            let ghost = low_ghost(grid, &vals);
-            let weights = basis_span_weights(grid, 0, x);
-            dot4(weights, [ghost, vals[0], vals[1], vals[2]])
-        }
-        Saturation::OutsideLow => {
-            let ghost = low_ghost(grid, &vals);
-            let coeffs = [ghost, vals[0], vals[1], vals[2]];
-            if linearize_extrapolation {
-                let (y, k) = endpoint_value_slope(grid, 0, grid[0], coeffs);
-                mul_add(k, x - grid[0], y)
-            } else {
-                let weights = basis_span_weights(grid, 0, x);
-                dot4(weights, coeffs)
-            }
-        }
-        Saturation::InsideHigh => {
-            let n = grid.len();
-            let ghost = high_ghost(grid, &vals);
-            let weights = basis_span_weights(grid, n - 2, x);
-            dot4(weights, [vals[1], vals[2], vals[3], ghost])
-        }
-        Saturation::OutsideHigh => {
-            let n = grid.len();
-            let ghost = high_ghost(grid, &vals);
-            let coeffs = [vals[1], vals[2], vals[3], ghost];
-            if linearize_extrapolation {
-                let (y, k) = endpoint_value_slope(grid, n - 2, grid[n - 1], coeffs);
-                mul_add(k, x - grid[n - 1], y)
-            } else {
-                let weights = basis_span_weights(grid, n - 2, x);
-                dot4(weights, coeffs)
-            }
-        }
+        Saturation::None => basis_span_weights(grid, span, x),
+        Saturation::InsideLow => low_boundary_weights(grid, x, false),
+        Saturation::OutsideLow => low_boundary_weights(grid, x, linearize_extrapolation),
+        Saturation::InsideHigh => high_boundary_weights(grid, x, false),
+        Saturation::OutsideHigh => high_boundary_weights(grid, x, linearize_extrapolation),
     }
 }
 
@@ -586,11 +544,61 @@ fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {
     )
 }
 
+#[inline]
+fn low_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        linearized_boundary_weights(grid, 0, grid[0], x)
+    } else {
+        basis_span_weights(grid, 0, x)
+    };
+    let p = low_ghost_coeffs(grid);
+
+    [
+        mul_add(raw[0], p[0], raw[1]),
+        mul_add(raw[0], p[1], raw[2]),
+        mul_add(raw[0], p[2], raw[3]),
+        T::zero(),
+    ]
+}
+
+#[inline]
+fn high_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
+    let n = grid.len();
+    let raw = if linearize_extrapolation {
+        linearized_boundary_weights(grid, n - 2, grid[n - 1], x)
+    } else {
+        basis_span_weights(grid, n - 2, x)
+    };
+    let s = high_ghost_coeffs(grid);
+
+    [
+        T::zero(),
+        mul_add(raw[3], s[0], raw[0]),
+        mul_add(raw[3], s[1], raw[1]),
+        mul_add(raw[3], s[2], raw[2]),
+    ]
+}
+
+#[inline]
+fn linearized_boundary_weights<T: Float>(grid: &[T], span: usize, endpoint: T, x: T) -> [T; 4] {
+    let weights = basis_span_weights(grid, span, endpoint);
+    let derivs = basis_span_weight_derivatives(grid, span, endpoint);
+    let dx = x - endpoint;
+    [
+        mul_add(dx, derivs[0], weights[0]),
+        mul_add(dx, derivs[1], weights[1]),
+        mul_add(dx, derivs[2], weights[2]),
+        mul_add(dx, derivs[3], weights[3]),
+    ]
+}
+
+#[cfg(test)]
 fn low_ghost<T: Float>(grid: &[T], vals: &[T; 4]) -> T {
     let p = low_ghost_coeffs(grid);
     mul_add(p[2], vals[2], mul_add(p[1], vals[1], p[0] * vals[0]))
 }
 
+#[cfg(test)]
 fn high_ghost<T: Float>(grid: &[T], vals: &[T; 4]) -> T {
     let s = high_ghost_coeffs(grid);
     mul_add(s[2], vals[3], mul_add(s[1], vals[2], s[0] * vals[1]))
@@ -604,12 +612,6 @@ fn low_ghost_coeffs<T: Float>(grid: &[T]) -> [T; 3] {
 fn high_ghost_coeffs<T: Float>(grid: &[T]) -> [T; 3] {
     let q = span_weight_third_derivatives(grid, grid.len() - 2);
     [-q[0] / q[3], -q[1] / q[3], -q[2] / q[3]]
-}
-
-fn endpoint_value_slope<T: Float>(grid: &[T], span: usize, x: T, coeffs: [T; 4]) -> (T, T) {
-    let weights = basis_span_weights(grid, span, x);
-    let derivs = basis_span_weight_derivatives(grid, span, x);
-    (dot4(weights, coeffs), dot4(derivs, coeffs))
 }
 
 fn span_weight_third_derivatives<T: Float>(grid: &[T], span: usize) -> [T; 4] {
