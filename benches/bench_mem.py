@@ -25,6 +25,18 @@ from interpn import (
 
 MULTIBSPLINE_LABEL = "InterpN MultiBsplineRegular"
 MULTIBSPLINE_RECTILINEAR_LABEL = "InterpN MultiBsplineRectilinear"
+MULTICUBIC_LABELS = {
+    "InterpN MulticubicRegular",
+    "InterpN MulticubicRectilinear",
+}
+
+
+def _legend_name(label: str) -> str:
+    if label in MULTICUBIC_LABELS:
+        return "InterpN Cubic"
+    if label in {MULTIBSPLINE_LABEL, MULTIBSPLINE_RECTILINEAR_LABEL}:
+        return "InterpN B-Spline"
+    return label
 
 
 def bench_eval_mem_vs_dims():
@@ -159,7 +171,7 @@ def bench_eval_mem_vs_dims():
                         dash=dash_styles[idx % len(dash_styles)],
                     ),
                     opacity=0.5 if idx == 0 else 1.0,
-                    name=label,
+                    name=_legend_name(label),
                     showlegend=col == 1,
                 ),
                 row=1,

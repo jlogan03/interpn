@@ -34,6 +34,10 @@ TARGET_SAMPLE_SECONDS = 2.0
 MAX_TIMER_LOOPS = 1_000_000_000
 MULTIBSPLINE_LABEL = "InterpN MultiBsplineRegular"
 MULTIBSPLINE_RECTILINEAR_LABEL = "InterpN MultiBsplineRectilinear"
+MULTICUBIC_LABELS = {
+    "InterpN MulticubicRegular",
+    "InterpN MulticubicRectilinear",
+}
 
 
 def average_call_time(
@@ -69,8 +73,10 @@ def _normalized_line_style(index: int) -> str:
 def _normalized_legend_name(label: str) -> str:
     if label.startswith("Scipy RegularGridInterpolator"):
         return "Scipy"
+    if label in MULTICUBIC_LABELS:
+        return "InterpN Cubic"
     if label in {MULTIBSPLINE_LABEL, MULTIBSPLINE_RECTILINEAR_LABEL}:
-        return label
+        return "InterpN B-Spline"
     if label.startswith("InterpN"):
         return "InterpN"
     return label
@@ -292,7 +298,7 @@ def _plot_throughput_vs_dims(
                     line=dict(color="black", width=2, dash=_normalized_line_style(idx)),
                     marker=dict(symbol="square" if is_baseline else "circle", size=8),
                     opacity=1.0 if is_baseline else 1.0,
-                    name=label,
+                    name=_normalized_legend_name(label),
                     showlegend=True,
                     legendgroup=kind,
                     legendgrouptitle_text=kind,
@@ -416,7 +422,7 @@ def _plot_speedup_vs_dims(
                     mode="lines",
                     line=dict(color="black", width=3, dash=_normalized_line_style(idx)),
                     marker=dict(symbol="circle", size=8),
-                    name=name,
+                    name=_normalized_legend_name(name),
                     showlegend=True,
                 ),
                 row=1,
