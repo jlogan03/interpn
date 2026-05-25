@@ -147,6 +147,11 @@ pub enum GridInterpMethod {
     /// Cubic Hermite spline interpolation.
     Cubic,
     /// Cubic B-spline interpolation.
+    /// Unlike the other variants, this one requires coefficient storage in addition
+    /// to the raw data points and performs a linear solve during initialization
+    /// to generate those coefficients. As a result, it can be much slower than the
+    /// other methods, especially when used for large grids with a small number of
+    /// target points.
     Bspline,
     /// Nearest-neighbor interpolation.
     Nearest,
