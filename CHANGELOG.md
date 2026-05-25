@@ -13,6 +13,7 @@
 * !Add `Bspline` variant of `InterpMethod` enum
 * Add B-spline methods for regular and rectilinear grids
   * Tridiagonal coeff solve using preallocated scratch space, optionally parallelized
+  * Use same BCs as Hermite methods (zero third derivative) for reduced ringing and graceful transition to linearized extrapolation
 
 ## 0.11.0 2026-01-15
 
