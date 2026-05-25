@@ -380,6 +380,21 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     }
 }
 
+/// Calculate one-dimensional interpolation weights for a fixed grid cell.
+///
+/// For cases on the interior, use two slopes from a nonuniform-grid centered
+/// difference and two values as the Hermite boundary conditions.
+///
+/// For locations near an edge, take one centered difference for the inside
+/// derivative, then impose a natural spline boundary condition on the
+/// derivative at the edge, meaning the third derivative q'''(t) = 0 at the
+/// last grid point. This produces a quadratic in the last cell, reducing wobble
+/// that would be caused by enforcing the use of a cubic function where there is
+/// not enough information to support it.
+///
+/// The returned weights multiply the four local values directly. This keeps the
+/// same interpolant as the direct Hermite evaluation, but lets the N-dimensional
+/// reduction reuse the weights for every child group on the same axis.
 #[inline]
 fn interp_weights<T: Float>(
     grid_cell: &[T; 4],
@@ -391,6 +406,11 @@ fn interp_weights<T: Float>(
 
     match sat {
         Saturation::None => {
+            //       |-> t
+            // --|---|---|---|--
+            //         x
+            //
+            // This is the nominal case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
@@ -407,6 +427,11 @@ fn interp_weights<T: Float>(
             ]
         }
         Saturation::InsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            //     x
+            //
+            // Flip direction to maintain symmetry with the InsideHigh case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
             let t = -(x - grid_cell[1]) / h01;
@@ -414,6 +439,11 @@ fn interp_weights<T: Float>(
             low_weights(t, h12 / h01, false)
         }
         Saturation::OutsideLow => {
+            //   t <-|
+            // --|---|---|---|--
+            // x
+            //
+            // Flip direction to maintain symmetry with the OutsideHigh case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
             let t = -(x - grid_cell[1]) / h01;
@@ -421,6 +451,9 @@ fn interp_weights<T: Float>(
             low_weights(t, h12 / h01, linearize_extrapolation)
         }
         Saturation::InsideHigh => {
+            //           |-> t
+            // --|---|---|---|--
+            //             x
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
             let t = (x - grid_cell[2]) / h23;
@@ -428,6 +461,9 @@ fn interp_weights<T: Float>(
             high_weights(t, h12 / h23, false)
         }
         Saturation::OutsideHigh => {
+            //           |-> t
+            // --|---|---|---|--
+            //                 x
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
             let t = (x - grid_cell[2]) / h23;
@@ -443,6 +479,8 @@ fn low_weights<T: Float>(t: T, h12_over_h01: T, linearize_extrapolation: bool) -
     let two = one + one;
     let k0 = centered_difference_weights(one, h12_over_h01);
 
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
     if linearize_extrapolation {
         let s = t - one;
         [
@@ -469,6 +507,8 @@ fn high_weights<T: Float>(t: T, h12_over_h23: T, linearize_extrapolation: bool) 
     let two = one + one;
     let k0 = centered_difference_weights(h12_over_h23, one);
 
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
     if linearize_extrapolation {
         let s = t - one;
         [
@@ -505,6 +545,24 @@ fn hermite_basis<T: Float>(t: T) -> [T; 4] {
     ]
 }
 
+/// Second-order central difference weights on a nonuniform grid per
+///
+/// A. E. P. Veldman and K. Rinzema, "Playing with nonuniform grids".
+/// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
+///
+/// Method B, which is essentially a distance-weighted average of the forward
+/// and backward differences s.t. the closer points have more influence on the
+/// derivative estimate.
+///
+/// The returned weights multiply `[y0, y1, y2]` and produce the same result as:
+///
+/// ```text
+/// a = h01 / (h01 + h12)
+/// b = (y2 - y1) / h12
+/// c = h12 / (h12 + h01)
+/// d = (y1 - y0) / h01
+/// derivative = a * b + c * d
+/// ```
 #[inline]
 fn centered_difference_weights<T: Float>(h01: T, h12: T) -> [T; 3] {
     let denom = h01 + h12;
