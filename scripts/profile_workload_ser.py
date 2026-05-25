@@ -6,6 +6,8 @@ from __future__ import annotations
 import numpy as np
 
 from interpn import (
+    MultiBsplineRectilinear,
+    MultiBsplineRegular,
     MulticubicRectilinear,
     MulticubicRegular,
     MultilinearRectilinear,
@@ -68,7 +70,19 @@ def main() -> None:
                 zgrid,
                 linearize_extrapolation=True,
             )
+            bspline_regular = MultiBsplineRegular.new(
+                dims,
+                starts,
+                steps,
+                zgrid,
+                linearize_extrapolation=True,
+            )
             cubic_rect = MulticubicRectilinear.new(
+                grids_rect,
+                zgrid,
+                linearize_extrapolation=True,
+            )
+            bspline_rect = MultiBsplineRectilinear.new(
                 grids_rect,
                 zgrid,
                 linearize_extrapolation=True,
@@ -83,7 +97,9 @@ def main() -> None:
                     linear_regular,
                     linear_rect,
                     cubic_regular,
+                    bspline_regular,
                     cubic_rect,
+                    bspline_rect,
                     nearest_regular,
                     nearest_rect,
                 ):
