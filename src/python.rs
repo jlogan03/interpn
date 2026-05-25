@@ -42,6 +42,11 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f32, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_bspline_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_bspline_regular_f32, m)?)?;
+    // MultiBspline with rectilinear grid
+    m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_bspline_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_bspline_rectilinear_f32, m)?)?;
     // Top-level interpn dispatch
     m.add_function(wrap_pyfunction!(interpn_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_f32, m)?)?;
@@ -367,6 +372,71 @@ macro_rules! interpn_bspline_regular_impl {
 
 interpn_bspline_regular_impl!(interpn_bspline_regular_f64, f64);
 interpn_bspline_regular_impl!(interpn_bspline_regular_f32, f32);
+
+macro_rules! coefficients_bspline_rectilinear_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            vals: PyReadonlyArray1<$T>,
+            mut coeffs: PyReadwriteArray1<$T>,
+            mut scratch: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            let ndims = grids.len();
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    multibspline::rectilinear::coefficients::<$T, N>(
+                        grids.try_into().unwrap(),
+                        vals.as_slice()?,
+                        coeffs.as_slice_mut()?,
+                        scratch.as_slice_mut()?,
+                    )
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f64, f64);
+coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f32, f32);
+
+macro_rules! interpn_bspline_rectilinear_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            coeffs: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            match multibspline::rectilinear::interpn(
+                grids,
+                coeffs.as_slice()?,
+                linearize_extrapolation,
+                obs,
+                out.as_slice_mut()?,
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_bspline_rectilinear_impl!(interpn_bspline_rectilinear_f64, f64);
+interpn_bspline_rectilinear_impl!(interpn_bspline_rectilinear_f32, f32);
 
 fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
     match method.to_ascii_lowercase().as_str() {

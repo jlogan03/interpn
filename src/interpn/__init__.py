@@ -24,6 +24,7 @@ if _PYDANTIC_FOUND:
     from .multicubic_regular import MulticubicRegular
     from .multicubic_rectilinear import MulticubicRectilinear
     from .multibspline_regular import MultiBsplineRegular
+    from .multibspline_rectilinear import MultiBsplineRectilinear
     from .nearest_regular import NearestRegular
     from .nearest_rectilinear import NearestRectilinear
 
@@ -45,6 +46,7 @@ if _PYDANTIC_FOUND:
         "MulticubicRegular",
         "MulticubicRectilinear",
         "MultiBsplineRegular",
+        "MultiBsplineRectilinear",
         "NearestRegular",
         "NearestRectilinear",
     ]
