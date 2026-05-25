@@ -66,6 +66,7 @@ pub(crate) enum Saturation {
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).
+#[allow(dead_code)]
 #[inline]
 pub(crate) fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are the difference between this function and a linear one going
