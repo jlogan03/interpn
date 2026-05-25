@@ -13,6 +13,7 @@ from plotly.subplots import make_subplots
 
 from interpn import (
     MultiBsplineRegular,
+    MultiBsplineRectilinear,
     MultilinearRectilinear,
     MultilinearRegular,
     MulticubicRegular,
@@ -32,6 +33,7 @@ RUN_INTERPN_ONLY = os.environ.get("INTERPNPY_INTERPN_ONLY", "").lower() in {
 TARGET_SAMPLE_SECONDS = 2.0
 MAX_TIMER_LOOPS = 1_000_000_000
 MULTIBSPLINE_LABEL = "InterpN MultiBsplineRegular"
+MULTIBSPLINE_RECTILINEAR_LABEL = "InterpN MultiBsplineRectilinear"
 
 
 def average_call_time(
@@ -67,8 +69,8 @@ def _normalized_line_style(index: int) -> str:
 def _normalized_legend_name(label: str) -> str:
     if label.startswith("Scipy RegularGridInterpolator"):
         return "Scipy"
-    if label == MULTIBSPLINE_LABEL:
-        return "InterpN MultiBsplineRegular"
+    if label in {MULTIBSPLINE_LABEL, MULTIBSPLINE_RECTILINEAR_LABEL}:
+        return label
     if label.startswith("InterpN"):
         return "InterpN"
     return label
@@ -721,6 +723,9 @@ def bench_4_dims_1_obs():
     bspline_regular_interpn = MultiBsplineRegular.new(
         dims, starts, steps, zgrid, linearize_extrapolation=True
     )
+    bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+        grids, zgrid, linearize_extrapolation=True
+    )
     cubic_rectilinear_interpn = MulticubicRectilinear.new(
         grids, zgrid, linearize_extrapolation=True
     )
@@ -735,6 +740,9 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p, out),
         "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p, out),
         MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+        MULTIBSPLINE_RECTILINEAR_LABEL: lambda p: bspline_rectilinear_interpn.eval(
+            p, out
+        ),
         "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
             p, out
         ),
@@ -755,6 +763,7 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn,
         "InterpN MulticubicRegular": points_interpn,
         MULTIBSPLINE_LABEL: points_interpn,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
         "InterpN MulticubicRectilinear": points_interpn,
         "InterpN NearestRegular": points_interpn,
         "InterpN NearestRectilinear": points_interpn,
@@ -786,6 +795,7 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn1,
         "InterpN MulticubicRegular": points_interpn1,
         MULTIBSPLINE_LABEL: points_interpn1,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn1,
         "InterpN MulticubicRectilinear": points_interpn1,
         "InterpN NearestRegular": points_interpn1,
         "InterpN NearestRectilinear": points_interpn1,
@@ -817,6 +827,7 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn2,
         "InterpN MulticubicRegular": points_interpn2,
         MULTIBSPLINE_LABEL: points_interpn2,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn2,
         "InterpN MulticubicRectilinear": points_interpn2,
         "InterpN NearestRegular": points_interpn2,
         "InterpN NearestRectilinear": points_interpn2,
@@ -851,6 +862,7 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRectilinear": points_interpn3,
         "InterpN MulticubicRegular": points_interpn3,
         MULTIBSPLINE_LABEL: points_interpn3,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn3,
         "InterpN MulticubicRectilinear": points_interpn3,
         "InterpN NearestRegular": points_interpn3,
         "InterpN NearestRectilinear": points_interpn3,
@@ -901,6 +913,9 @@ def bench_3_dims_n_obs_unordered():
         bspline_regular_interpn = MultiBsplineRegular.new(
             dims, starts, steps, zgrid, linearize_extrapolation=True
         )
+        bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
@@ -914,6 +929,7 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -953,6 +969,9 @@ def bench_3_dims_n_obs_unordered():
                     p, out
                 ),
                 MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p: bspline_rectilinear_interpn.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
@@ -974,6 +993,7 @@ def bench_3_dims_n_obs_unordered():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -996,6 +1016,7 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",
@@ -1048,6 +1069,9 @@ def bench_4_dims_n_obs_unordered():
         bspline_regular_interpn = MultiBsplineRegular.new(
             dims, starts, steps, zgrid, linearize_extrapolation=True
         )
+        bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
@@ -1061,6 +1085,7 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -1098,6 +1123,9 @@ def bench_4_dims_n_obs_unordered():
                     p, out
                 ),
                 MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p: bspline_rectilinear_interpn.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
@@ -1119,6 +1147,7 @@ def bench_4_dims_n_obs_unordered():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -1139,6 +1168,7 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",
@@ -1171,6 +1201,7 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
             MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -1203,6 +1234,9 @@ def bench_throughput_vs_dims():
             )
             bspline_regular_interpn = MultiBsplineRegular.new(
                 dims, starts, steps, zgrid, linearize_extrapolation=True
+            )
+            bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+                grids, zgrid, linearize_extrapolation=True
             )
             cubic_rectilinear_interpn = MulticubicRectilinear.new(
                 grids, zgrid, linearize_extrapolation=True
@@ -1237,6 +1271,9 @@ def bench_throughput_vs_dims():
                 interp=cubic_regular_interpn: interp.eval(p, out),
                 MULTIBSPLINE_LABEL: lambda p,
                 interp=bspline_regular_interpn: interp.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p, interp=bspline_rectilinear_interpn: interp.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": (
                     lambda p, interp=cubic_rectilinear_interpn: interp.eval(p, out)
                 ),
@@ -1269,6 +1306,7 @@ def bench_throughput_vs_dims():
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
                 MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -1295,6 +1333,7 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
             MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",
