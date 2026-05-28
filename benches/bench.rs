@@ -3,8 +3,8 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    Linear1D, LinearHoldLast1D, MultilinearRegular, NearestRectilinear, NearestRegular,
-    RectilinearGrid1D, RegularGrid1D, multibspline, multicubic, multilinear, nearest,
+    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D, multibspline,
+    multicubic, multilinear, nearest,
     one_dim::{
         Interp1D,
         hold::{Left1D, Nearest1D},
@@ -600,7 +600,7 @@ criterion_group!(benches_interp, bench_interp);
 criterion_main!(benches_interp);
 
 mod randn {
-    use rand::Rng;
+    use rand::RngExt;
     use rand::SeedableRng;
     use rand::distr::StandardUniform;
     use rand::rngs::StdRng;
