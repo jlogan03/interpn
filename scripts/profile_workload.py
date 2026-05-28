@@ -80,6 +80,8 @@ def main() -> None:
                 ("linear", "rectilinear", grids_rect),
                 ("cubic", "regular", grids),
                 ("cubic", "rectilinear", grids_rect),
+                ("bspline", "regular", grids),
+                ("bspline", "rectilinear", grids_rect),
                 ("nearest", "regular", grids),
                 ("nearest", "rectilinear", grids_rect),
             )
