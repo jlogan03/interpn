@@ -46,7 +46,7 @@
 //!     but can tolerate some discontinuity in the second derivative
 use num_traits::Float;
 
-use crate::scalar::mul_add;
+use crate::mul_add;
 
 pub mod rectilinear;
 pub mod regular;

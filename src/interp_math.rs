@@ -1,6 +1,6 @@
 use num_traits::Float;
 
-use crate::scalar::mul_add;
+use crate::mul_add;
 
 #[inline]
 pub(crate) fn dot4<T: Float>(weights: [T; 4], vals: [T; 4]) -> T {

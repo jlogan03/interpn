@@ -26,7 +26,7 @@
 //! // Do interpolation, allocating for the output for convenience
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, &obs).unwrap();
 //! ```
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{index_arr_fixed_dims, mul_add};
 use num_traits::{Float, NumCast};
 
 /// Evaluate nearest-neighbor interpolation on a regular grid in up to 8 dimensions.

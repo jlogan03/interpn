@@ -27,7 +27,7 @@
 //!
 //! References
 //! * https://en.wikipedia.org/wiki/Bilinear_interpolation#Weighted_mean
-use crate::{index_arr_fixed_dims, scalar::mul_add};
+use crate::{index_arr_fixed_dims, mul_add};
 use crunchy::unroll;
 use num_traits::Float;
 

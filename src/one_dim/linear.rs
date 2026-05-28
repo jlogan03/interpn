@@ -3,7 +3,7 @@
 
 use num_traits::Float;
 
-use crate::scalar::mul_add;
+use crate::mul_add;
 
 use super::{Extrap, Grid1D, GridSample, Interp1D};
 

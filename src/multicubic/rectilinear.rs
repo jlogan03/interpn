@@ -33,7 +33,7 @@ use super::Saturation;
 use crate::{
     index_arr_fixed_dims,
     interp_math::{dot4, hermite_basis},
-    scalar::mul_add,
+    mul_add,
 };
 use crunchy::unroll;
 use num_traits::Float;
