@@ -40,6 +40,7 @@ def _evaluate(
     grid_kind: str,
     max_threads: int | None,
 ) -> None:
+    # Run once without preallocated output to exercise allocating path
     interpn_fn(
         obs=points,
         grids=grids,
@@ -49,6 +50,7 @@ def _evaluate(
         linearize_extrapolation=True,
         max_threads=max_threads,
     )
+    # Run again with preallocated output
     out = np.empty_like(points[0])
     interpn_fn(
         obs=points,
@@ -91,6 +93,11 @@ def main() -> None:
 
                 for max_threads in (None, 1):
                     for method, grid_kind, grids_in in cases:
+                        # B-spline method has to do the fitting solve,
+                        # so it's much slower than the others.
+                        if method == "bspline":
+                            nreps = max(nreps / 100, 1)
+
                         for _ in range(nreps):
                             points = _observation_points(rng, ndims, nobs, dtype)
                             _evaluate(
@@ -112,5 +119,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    # Run the serial script separately. This will make another
+    # profile file that needs to be merged, but since we ran
+    # some threaded workloads, we already end up with several
+    # files to merge.
     script = Path(__file__).with_name("profile_workload_ser.py")
     subprocess.run([sys.executable, str(script)], check=True)
