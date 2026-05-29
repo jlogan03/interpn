@@ -13,13 +13,8 @@ use interpn::{
 
 use std::hint::black_box;
 
-enum Kind {
-    Interp,
-    Extrap,
-}
-
 macro_rules! bench_interp_specific {
-    ($group:ident, $ndims:expr, $gridsize:expr, $size:expr, $kind:expr) => {
+    ($group:ident, $ndims:expr, $gridsize:expr, $size:expr) => {
         $group.throughput(Throughput::Elements(*$size as u64));
         // $group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
         let scan_or_shuffle = "Shuffled Order";
@@ -41,10 +36,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let obs = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
@@ -80,10 +72,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -117,10 +106,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -166,10 +152,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let obs = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
@@ -223,10 +206,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -253,10 +233,7 @@ macro_rules! bench_interp_specific {
             |b, &size| {
                 let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -288,10 +265,7 @@ macro_rules! bench_interp_specific {
                 let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
 
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -320,10 +294,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -359,10 +330,7 @@ macro_rules! bench_interp_specific {
 
                 // Observation grid
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
-                let gridobs_t = match $kind {
-                    Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                    Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                };
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                 let mut out = vec![0.0; size];
 
@@ -388,7 +356,7 @@ fn bench_interp(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("Interp_1D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
             group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 1, gridsize, size, Kind::Interp);
+            bench_interp_specific!(group, 1, gridsize, size);
         }
         group.finish();
     }
@@ -397,7 +365,7 @@ fn bench_interp(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("Interp_2D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
             group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 2, gridsize, size, Kind::Interp);
+            bench_interp_specific!(group, 2, gridsize, size);
         }
         group.finish();
     }
@@ -406,14 +374,13 @@ fn bench_interp(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("Interp_3D_Shuffled_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
             group.throughput(Throughput::Elements(*size as u64));
-            bench_interp_specific!(group, 3, gridsize, size, Kind::Interp);
+            bench_interp_specific!(group, 3, gridsize, size);
         }
         group.finish();
     }
 
     // 1D specialized linear rectilinear
     for gridsize in [10, 1000] {
-        let kind = Kind::Interp;
         let ndims = 1;
         let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
@@ -428,10 +395,7 @@ fn bench_interp(c: &mut Criterion) {
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
-                    let gridobs_t = match kind {
-                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                    };
+                    let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                     let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                     let mut out = vec![0.0; size];
 
@@ -449,7 +413,6 @@ fn bench_interp(c: &mut Criterion) {
 
     // 1D specialized linear regular
     for gridsize in [10, 1000] {
-        let kind = Kind::Interp;
         let ndims = 1;
         let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
@@ -465,10 +428,7 @@ fn bench_interp(c: &mut Criterion) {
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
-                    let gridobs_t = match kind {
-                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                    };
+                    let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                     let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                     let mut out = vec![0.0; size];
 
@@ -486,7 +446,6 @@ fn bench_interp(c: &mut Criterion) {
 
     // 1D specialized linear hold-last regular
     for gridsize in [10, 1000] {
-        let kind = Kind::Interp;
         let ndims = 1;
         let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
@@ -502,10 +461,7 @@ fn bench_interp(c: &mut Criterion) {
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
-                    let gridobs_t = match kind {
-                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                    };
+                    let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                     let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                     let mut out = vec![0.0; size];
 
@@ -523,7 +479,6 @@ fn bench_interp(c: &mut Criterion) {
 
     // 1D specialized hold-left
     for gridsize in [10, 1000] {
-        let kind = Kind::Interp;
         let ndims = 1;
         let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
@@ -539,10 +494,7 @@ fn bench_interp(c: &mut Criterion) {
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
-                    let gridobs_t = match kind {
-                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                    };
+                    let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                     let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                     let mut out = vec![0.0; size];
 
@@ -560,7 +512,6 @@ fn bench_interp(c: &mut Criterion) {
 
     // 1D specialized nearest
     for gridsize in [10, 1000] {
-        let kind = Kind::Interp;
         let ndims = 1;
         let mut group = c.benchmark_group(format!("Interp_1D_Special_{gridsize}-grid"));
         for size in [1, 100, 1_000_000].iter() {
@@ -576,10 +527,7 @@ fn bench_interp(c: &mut Criterion) {
 
                     // Observation grid
                     let m: usize = ((size as f64).powf(1.0 / (ndims as f64)) + 2.0) as usize;
-                    let gridobs_t = match kind {
-                        Kind::Interp => gen_interp_obs_grid(&grids, m, true),
-                        Kind::Extrap => gen_extrap_obs_grid(&grids, m, true),
-                    };
+                    let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                     let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
                     let mut out = vec![0.0; size];
 
@@ -677,37 +625,6 @@ mod gridgen {
         }
         // unpack like:
         // let xobsslice: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
-        gridobs_t
-    }
-
-    // Generate a set of observation points that are entirely outside
-    // the interpolation grid on every axis (meaning, in a corner region,
-    // the worst case for perf).
-    //
-    // `size` is the size per grid, so the total number of points will be size.pow(ndims).
-    pub fn gen_extrap_obs_grid(
-        grids: &Vec<Vec<f64>>,
-        size: usize,
-        _shuffled: bool,
-    ) -> Vec<Vec<f64>> {
-        let ndims = grids.len();
-
-        let xobs: Vec<Vec<f64>> = (0..ndims)
-            .map(|i| {
-                linspace(
-                    grids[i].last().unwrap() + 1.0,
-                    grids[i].last().unwrap() + 2.0,
-                    size,
-                )
-            })
-            .collect();
-        let gridobs = meshgrid((0..ndims).map(|i| &xobs[i]).collect());
-        let gridobs_t: Vec<Vec<f64>> = (0..ndims)
-            .map(|i| gridobs.iter().map(|x| x[i]).collect())
-            .collect(); // transpose
-
-        // unpack like:
-        // let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
         gridobs_t
     }
 }

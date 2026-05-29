@@ -391,6 +391,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
 
 const FP: usize = 4;
 
+/// Extract dimension lengths from a fixed-size array of grid slices.
 fn dims_from_grids<T: Float, const N: usize>(grids: &[&[T]; N]) -> [usize; N] {
     let mut dims = [0_usize; N];
     for i in 0..N {
@@ -399,6 +400,7 @@ fn dims_from_grids<T: Float, const N: usize>(grids: &[&[T]; N]) -> [usize; N] {
     dims
 }
 
+/// Validate dimensions, coefficient storage length, and grid monotonicity.
 fn check_dims<T: Float, const N: usize>(grids: &[&[T]; N], data: &[T]) -> Result<(), &'static str> {
     let dims = dims_from_grids(grids);
     let nvals = MultiBsplineRectilinear::<T, N>::coeff_storage_len(dims);
@@ -413,6 +415,10 @@ fn check_dims<T: Float, const N: usize>(grids: &[&[T]; N], data: &[T]) -> Result
     Ok(())
 }
 
+/// Recursive implementation for [`MultiBsplineRectilinear::coeff_storage_len`].
+///
+/// This is recursive rather than a `for` loop so the public sizing function can
+/// remain `const fn` on stable Rust.
 const fn coeff_storage_len_inner<const N: usize>(
     dims: [usize; N],
     axis: usize,
@@ -431,6 +437,9 @@ const fn coeff_storage_len_inner<const N: usize>(
     }
 }
 
+/// Return the largest valid dimension, or zero if any dimension is invalid.
+///
+/// This is recursive rather than a `for` loop so it can be called from `const fn`.
 const fn max_valid_dim<const N: usize>(dims: [usize; N], axis: usize, max: usize) -> usize {
     if axis == N {
         return max;
@@ -444,6 +453,11 @@ const fn max_valid_dim<const N: usize>(dims: [usize; N], axis: usize, max: usize
 }
 
 #[cfg(feature = "par")]
+/// Recursive implementation for the parallel construction scratch length.
+///
+/// Each axis can use at most the number of independent prefix slabs available in
+/// C-style memory order, so this tracks both the prefix slab count and the
+/// largest per-axis scratch requirement.
 const fn parallel_construction_scratch_len_inner<const N: usize>(
     dims: [usize; N],
     max_threads: usize,
@@ -489,6 +503,7 @@ const fn parallel_construction_scratch_len_inner<const N: usize>(
     )
 }
 
+/// Return the largest dimension length for runtime scratch splitting.
 fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
     let mut max = 0_usize;
     for dim in dims {
@@ -499,6 +514,10 @@ fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
     max
 }
 
+/// Populate C-order strides for each dimension.
+///
+/// `dimprod[axis]` is the distance in the flattened coefficient buffer between
+/// neighboring coefficients along `axis`.
 fn populate_dimprod<const N: usize>(dims: [usize; N], dimprod: &mut [usize; N]) {
     let mut acc = 1;
     for i in 0..N {
@@ -509,6 +528,7 @@ fn populate_dimprod<const N: usize>(dims: [usize; N], dimprod: &mut [usize; N]) 
     }
 }
 
+/// Solve every one-dimensional coefficient line along one axis.
 fn solve_axis<T: Float, const N: usize>(
     grids: &[&[T]; N],
     dims: [usize; N],
@@ -531,6 +551,7 @@ fn solve_axis<T: Float, const N: usize>(
 }
 
 #[cfg(feature = "par")]
+/// Solve one axis by splitting independent contiguous slabs across workers.
 fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
     grids: &[&[T]; N],
     dims: [usize; N],
@@ -557,6 +578,7 @@ fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
 }
 
 #[cfg(feature = "par")]
+/// Recursively split slab ranges so each Rayon branch owns disjoint coeff/scratch slices.
 fn solve_axis_slabs_par<T: Float + Send + Sync>(
     grid: &[T],
     coeffs: &mut [T],
@@ -609,6 +631,7 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
 }
 
 #[cfg(feature = "par")]
+/// Solve all coefficient lines contained in a contiguous set of slabs.
 fn solve_axis_slabs<T: Float>(
     grid: &[T],
     coeffs: &mut [T],
@@ -626,6 +649,7 @@ fn solve_axis_slabs<T: Float>(
     Ok(())
 }
 
+/// Convert a line number, excluding one active axis, into a flattened base index.
 fn line_base_index<const N: usize>(
     dims: [usize; N],
     dimprod: [usize; N],
@@ -741,6 +765,7 @@ fn solve_line<T: Float>(
     Ok(())
 }
 
+/// Build the first tridiagonal row after folding in the low ghost coefficient.
 fn first_row<T: Float>(grid: &[T], y0: T, y1: T) -> (T, T, T) {
     let w0 = basis_span_weights(grid, 0, grid[0]);
     let p = low_ghost_coeffs(grid);
@@ -753,6 +778,7 @@ fn first_row<T: Float>(grid: &[T], y0: T, y1: T) -> (T, T, T) {
     (e0 - factor * w1[0], e1 - factor * w1[1], y0 - factor * y1)
 }
 
+/// Build the last tridiagonal row after folding in the high ghost coefficient.
 fn last_row<T: Float>(grid: &[T], y_prev: T, y_last: T) -> (T, T, T, T) {
     let n = grid.len();
     let w = basis_span_weights(grid, n - 2, grid[n - 1]);
@@ -773,6 +799,7 @@ fn last_row<T: Float>(grid: &[T], y_prev: T, y_last: T) -> (T, T, T, T) {
 }
 
 #[inline]
+/// Select the appropriate four local B-spline weights for an interpolation region.
 fn interp_weights<T: Float>(
     grid: &[T],
     span: usize,
@@ -790,6 +817,7 @@ fn interp_weights<T: Float>(
 }
 
 #[inline]
+/// Low-boundary weights with the ghost coefficient folded into stored coefficients.
 fn low_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
     let raw = if linearize_extrapolation {
         linearized_boundary_weights(grid, 0, grid[0], x)
@@ -807,6 +835,7 @@ fn low_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: boo
 }
 
 #[inline]
+/// High-boundary weights with the ghost coefficient folded into stored coefficients.
 fn high_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
     let n = grid.len();
     let raw = if linearize_extrapolation {
@@ -825,6 +854,7 @@ fn high_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bo
 }
 
 #[inline]
+/// Affine continuation of a boundary span's value and first derivative.
 fn linearized_boundary_weights<T: Float>(grid: &[T], span: usize, endpoint: T, x: T) -> [T; 4] {
     let weights = basis_span_weights(grid, span, endpoint);
     let derivs = basis_span_weight_derivatives(grid, span, endpoint);
@@ -838,27 +868,32 @@ fn linearized_boundary_weights<T: Float>(grid: &[T], span: usize, endpoint: T, x
 }
 
 #[cfg(test)]
+/// Evaluate the low ghost coefficient relation for tests.
 fn low_ghost<T: Float>(grid: &[T], vals: &[T; 4]) -> T {
     let p = low_ghost_coeffs(grid);
     mul_add(p[2], vals[2], mul_add(p[1], vals[1], p[0] * vals[0]))
 }
 
 #[cfg(test)]
+/// Evaluate the high ghost coefficient relation for tests.
 fn high_ghost<T: Float>(grid: &[T], vals: &[T; 4]) -> T {
     let s = high_ghost_coeffs(grid);
     mul_add(s[2], vals[3], mul_add(s[1], vals[2], s[0] * vals[1]))
 }
 
+/// Coefficients expressing the low ghost as a linear combination of stored coeffs.
 fn low_ghost_coeffs<T: Float>(grid: &[T]) -> [T; 3] {
     let q = span_weight_third_derivatives(grid, 0);
     [-q[1] / q[0], -q[2] / q[0], -q[3] / q[0]]
 }
 
+/// Coefficients expressing the high ghost as a linear combination of stored coeffs.
 fn high_ghost_coeffs<T: Float>(grid: &[T]) -> [T; 3] {
     let q = span_weight_third_derivatives(grid, grid.len() - 2);
     [-q[0] / q[3], -q[1] / q[3], -q[2] / q[3]]
 }
 
+/// Third derivatives of the four fixed-span basis weights on one span.
 fn span_weight_third_derivatives<T: Float>(grid: &[T], span: usize) -> [T; 4] {
     let xs = span_samples(grid, span);
     let mut values = [[T::zero(); 4]; 4];
@@ -875,6 +910,7 @@ fn span_weight_third_derivatives<T: Float>(grid: &[T], span: usize) -> [T; 4] {
     out
 }
 
+/// First derivatives of the four fixed-span basis weights at `x`.
 fn basis_span_weight_derivatives<T: Float>(grid: &[T], span: usize, x: T) -> [T; 4] {
     let xs = span_samples(grid, span);
     let mut values = [[T::zero(); 4]; 4];
@@ -890,6 +926,7 @@ fn basis_span_weight_derivatives<T: Float>(grid: &[T], span: usize, x: T) -> [T;
     out
 }
 
+/// Four sample locations spanning one knot interval.
 fn span_samples<T: Float>(grid: &[T], span: usize) -> [T; 4] {
     let three = T::from(3.0).unwrap();
     let a = grid[span];
@@ -897,6 +934,7 @@ fn span_samples<T: Float>(grid: &[T], span: usize) -> [T; 4] {
     [a, a + h / three, a + (h + h) / three, a + h]
 }
 
+/// Third divided difference of four samples.
 fn third_divided_difference<T: Float>(x: [T; 4], f: [T; 4]) -> T {
     let d01 = (f[1] - f[0]) / (x[1] - x[0]);
     let d12 = (f[2] - f[1]) / (x[2] - x[1]);
@@ -906,6 +944,7 @@ fn third_divided_difference<T: Float>(x: [T; 4], f: [T; 4]) -> T {
     (d123 - d012) / (x[3] - x[0])
 }
 
+/// Derivative of the cubic Lagrange interpolant through four samples.
 fn lagrange_derivative<T: Float>(x: [T; 4], f: [T; 4], at: T) -> T {
     let mut out = T::zero();
     for j in 0..4 {
@@ -956,6 +995,7 @@ fn basis_span_weights<T: Float>(grid: &[T], span: usize, x: T) -> [T; 4] {
     n
 }
 
+/// Return an extrapolated open-uniform knot for boundary spans.
 fn knot<T: Float>(grid: &[T], index: isize) -> T {
     let n = grid.len() as isize;
     if index < 0 {

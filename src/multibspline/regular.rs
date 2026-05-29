@@ -258,6 +258,10 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
 
     /// Build coefficients from nodal values using caller-provided storage, then
     /// return a borrowed interpolator over those coefficients.
+    ///
+    /// This is the nonallocating construction path. `vals` is immutable input,
+    /// `coeffs` receives generated B-spline coefficients, and `scratch` is used
+    /// only during construction.
     pub fn from_values_with_workspace(
         dims: [usize; N],
         starts: [T; N],
@@ -274,6 +278,11 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
     /// Build coefficients from nodal values using caller-provided storage and a
     /// caller-provided parallel construction scratch buffer, then return a
     /// borrowed interpolator over those coefficients.
+    ///
+    /// This preserves the borrowed, nonallocating Rust API while allowing
+    /// coefficient construction to use Rayon. The caller owns `coeffs` for the
+    /// lifetime of the returned interpolator and owns `scratch` only during
+    /// construction.
     #[cfg(feature = "par")]
     pub fn from_values_with_workspace_par(
         dims: [usize; N],
@@ -418,6 +427,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
 
 const FP: usize = 4;
 
+/// Validate that dimensions and coefficient storage agree.
 fn check_dims<T: Float, const N: usize>(dims: [usize; N], data: &[T]) -> Result<(), &'static str> {
     let nvals = MultiBsplineRegular::<T, N>::coeff_storage_len(dims);
     if nvals == 0 || data.len() != nvals {
@@ -426,6 +436,10 @@ fn check_dims<T: Float, const N: usize>(dims: [usize; N], data: &[T]) -> Result<
     Ok(())
 }
 
+/// Recursive implementation for [`MultiBsplineRegular::coeff_storage_len`].
+///
+/// This is recursive rather than a `for` loop so the public sizing function can
+/// remain `const fn` on stable Rust.
 const fn coeff_storage_len_inner<const N: usize>(
     dims: [usize; N],
     axis: usize,
@@ -444,6 +458,9 @@ const fn coeff_storage_len_inner<const N: usize>(
     }
 }
 
+/// Return the largest valid dimension, or zero if any dimension is invalid.
+///
+/// This is recursive rather than a `for` loop so it can be called from `const fn`.
 const fn max_valid_dim<const N: usize>(dims: [usize; N], axis: usize, max: usize) -> usize {
     if axis == N {
         return max;
@@ -457,6 +474,11 @@ const fn max_valid_dim<const N: usize>(dims: [usize; N], axis: usize, max: usize
 }
 
 #[cfg(feature = "par")]
+/// Recursive implementation for the parallel construction scratch length.
+///
+/// Each axis can use at most the number of independent prefix slabs available in
+/// C-style memory order, so this tracks both the prefix slab count and the
+/// largest per-axis scratch requirement.
 const fn parallel_construction_scratch_len_inner<const N: usize>(
     dims: [usize; N],
     max_threads: usize,
@@ -502,6 +524,7 @@ const fn parallel_construction_scratch_len_inner<const N: usize>(
     )
 }
 
+/// Return the largest dimension length for runtime scratch splitting.
 fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
     let mut max = 0_usize;
     for dim in dims {
@@ -512,6 +535,10 @@ fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
     max
 }
 
+/// Populate C-order strides for each dimension.
+///
+/// `dimprod[axis]` is the distance in the flattened coefficient buffer between
+/// neighboring coefficients along `axis`.
 fn populate_dimprod<const N: usize>(dims: [usize; N], dimprod: &mut [usize; N]) {
     let mut acc = 1;
     for i in 0..N {
@@ -522,6 +549,7 @@ fn populate_dimprod<const N: usize>(dims: [usize; N], dimprod: &mut [usize; N]) 
     }
 }
 
+/// Solve every one-dimensional coefficient line along one axis.
 fn solve_axis<T: Float, const N: usize>(
     dims: [usize; N],
     dimprod: [usize; N],
@@ -543,6 +571,7 @@ fn solve_axis<T: Float, const N: usize>(
 }
 
 #[cfg(feature = "par")]
+/// Solve one axis by splitting independent contiguous slabs across workers.
 fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
     dims: [usize; N],
     dimprod: [usize; N],
@@ -568,6 +597,7 @@ fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
 }
 
 #[cfg(feature = "par")]
+/// Recursively split slab ranges so each Rayon branch owns disjoint coeff/scratch slices.
 fn solve_axis_slabs_par<T: Float + Send + Sync>(
     coeffs: &mut [T],
     slab_len: usize,
@@ -609,6 +639,7 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
 }
 
 #[cfg(feature = "par")]
+/// Solve all coefficient lines contained in a contiguous set of slabs.
 fn solve_axis_slabs<T: Float>(
     coeffs: &mut [T],
     slab_len: usize,
@@ -626,6 +657,7 @@ fn solve_axis_slabs<T: Float>(
     Ok(())
 }
 
+/// Convert a line number, excluding one active axis, into a flattened base index.
 fn line_base_index<const N: usize>(
     dims: [usize; N],
     dimprod: [usize; N],
@@ -737,6 +769,7 @@ fn solve_line<T: Float>(
 }
 
 #[inline]
+/// Select the appropriate four local B-spline weights for an interpolation region.
 fn interp_weights<T: Float>(t: T, sat: Saturation, linearize_extrapolation: bool) -> [T; 4] {
     match sat {
         Saturation::None => cubic_bspline_weights(t),
@@ -748,6 +781,7 @@ fn interp_weights<T: Float>(t: T, sat: Saturation, linearize_extrapolation: bool
 }
 
 #[inline]
+/// Cubic cardinal B-spline weights for an interior unit-width span.
 fn cubic_bspline_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
@@ -765,6 +799,7 @@ fn cubic_bspline_weights<T: Float>(t: T) -> [T; 4] {
 }
 
 #[inline]
+/// Low-boundary weights with the ghost coefficient folded into stored coefficients.
 fn low_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
     let raw = if linearize_extrapolation {
         low_linearized_boundary_weights(t)
@@ -784,6 +819,7 @@ fn low_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4]
 }
 
 #[inline]
+/// High-boundary weights with the ghost coefficient folded into stored coefficients.
 fn high_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
     let raw = if linearize_extrapolation {
         high_linearized_boundary_weights(t)
@@ -803,6 +839,7 @@ fn high_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4
 }
 
 #[inline]
+/// Low-side affine continuation of the boundary span's value and first derivative.
 fn low_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
@@ -818,6 +855,7 @@ fn low_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
 }
 
 #[inline]
+/// High-side affine continuation of the boundary span's value and first derivative.
 fn high_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
     let two = one + one;
