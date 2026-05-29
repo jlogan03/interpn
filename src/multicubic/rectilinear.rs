@@ -562,9 +562,16 @@ fn centered_difference_weights<T: Float>(h01: T, h12: T) -> [T; 3] {
 
 #[cfg(test)]
 mod test {
-    use super::interpn;
+    use super::{MulticubicRectilinear, interpn};
     use crate::testing::*;
     use crate::utils::*;
+
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-12,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -617,6 +624,28 @@ mod test {
             interpn(&grids, &u, false, &xobsslice, &mut out[..]).unwrap();
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
         }
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let x = [-1.0_f64, -0.2, 0.35, 1.4, 2.8, 4.0];
+        let grids = [&x[..]];
+        let vals: Vec<f64> = x
+            .iter()
+            .map(|&x| x * x * x - 0.5 * x * x + 2.0 * x)
+            .collect();
+        let interp = MulticubicRectilinear::new(&grids, &vals, true).unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-1.6]).unwrap(),
+            interp.interp_one([-2.2]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([4.0]).unwrap(),
+            interp.interp_one([4.7]).unwrap(),
+            interp.interp_one([5.4]).unwrap(),
+        ]);
     }
 
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition

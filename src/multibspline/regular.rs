@@ -258,10 +258,6 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
 
     /// Build coefficients from nodal values using caller-provided storage, then
     /// return a borrowed interpolator over those coefficients.
-    ///
-    /// This is the nonallocating construction path. `vals` is immutable input,
-    /// `coeffs` receives generated B-spline coefficients, and `scratch` is used
-    /// only during construction.
     pub fn from_values_with_workspace(
         dims: [usize; N],
         starts: [T; N],
@@ -278,11 +274,6 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
     /// Build coefficients from nodal values using caller-provided storage and a
     /// caller-provided parallel construction scratch buffer, then return a
     /// borrowed interpolator over those coefficients.
-    ///
-    /// This preserves the borrowed, nonallocating Rust API while allowing
-    /// coefficient construction to use Rayon. The caller owns `coeffs` for the
-    /// lifetime of the returned interpolator and owns `scratch` only during
-    /// construction.
     #[cfg(feature = "par")]
     pub fn from_values_with_workspace_par(
         dims: [usize; N],
@@ -881,6 +872,13 @@ mod test {
         out
     }
 
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-10,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
+
     #[test]
     fn test_storage_lengths() {
         assert_eq!(MultiBsplineRegular::<f64, 2>::coeff_storage_len([4, 5]), 20);
@@ -1064,5 +1062,42 @@ mod test {
         let y_hi_far = interp.interp_one([6.0]).unwrap();
         let y_hi_farther = interp.interp_one([7.0]).unwrap();
         assert!(((y_hi_farther - y_hi_far) - (y_hi_far - y_hi)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let dims = [6_usize];
+        let starts = [0.0_f64];
+        let steps = [1.0_f64];
+        let vals: Vec<f64> = (0..dims[0])
+            .map(|i| {
+                let x = i as f64;
+                x * x * x - 0.5 * x * x + 2.0 * x
+            })
+            .collect();
+        let mut coeffs = vec![0.0; MultiBsplineRegular::<f64, 1>::coeff_storage_len(dims)];
+        let mut scratch = vec![0.0; MultiBsplineRegular::<f64, 1>::construction_scratch_len(dims)];
+
+        let interp = MultiBsplineRegular::from_values_with_workspace(
+            dims,
+            starts,
+            steps,
+            &vals,
+            &mut coeffs,
+            &mut scratch,
+            true,
+        )
+        .unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([0.0]).unwrap(),
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-2.0]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([5.0]).unwrap(),
+            interp.interp_one([6.0]).unwrap(),
+            interp.interp_one([7.0]).unwrap(),
+        ]);
     }
 }

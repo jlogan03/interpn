@@ -531,8 +531,15 @@ fn high_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
 
 #[cfg(test)]
 mod test {
-    use super::interpn;
+    use super::{MulticubicRegular, interpn};
     use crate::utils::*;
+
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-12,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
 
     /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -580,6 +587,31 @@ mod test {
             // and do not do well under a check on relative difference.
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
         }
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let dims = [6_usize];
+        let starts = [0.0_f64];
+        let steps = [1.0_f64];
+        let vals: Vec<f64> = (0..dims[0])
+            .map(|i| {
+                let x = i as f64;
+                x * x * x - 0.5 * x * x + 2.0 * x
+            })
+            .collect();
+        let interp = MulticubicRegular::new(dims, starts, steps, &vals, true).unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([0.0]).unwrap(),
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-2.0]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([5.0]).unwrap(),
+            interp.interp_one([6.0]).unwrap(),
+            interp.interp_one([7.0]).unwrap(),
+        ]);
     }
 
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition

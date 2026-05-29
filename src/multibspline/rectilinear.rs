@@ -1013,6 +1013,13 @@ mod test {
         out
     }
 
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-10,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
+
     #[test]
     fn test_uniform_rows_reduce_to_regular_rows() {
         let grid = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
@@ -1291,5 +1298,39 @@ mod test {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let x = [-1.0_f64, -0.2, 0.35, 1.4, 2.8, 4.0];
+        let grids = [&x[..]];
+        let dims = [x.len()];
+        let vals: Vec<f64> = x
+            .iter()
+            .map(|&x| x * x * x - 0.5 * x * x + 2.0 * x)
+            .collect();
+        let mut coeffs = vec![0.0; MultiBsplineRectilinear::<f64, 1>::coeff_storage_len(dims)];
+        let mut scratch =
+            vec![0.0; MultiBsplineRectilinear::<f64, 1>::construction_scratch_len(dims)];
+
+        let interp = MultiBsplineRectilinear::from_values_with_workspace(
+            &grids,
+            &vals,
+            &mut coeffs,
+            &mut scratch,
+            true,
+        )
+        .unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-1.6]).unwrap(),
+            interp.interp_one([-2.2]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([4.0]).unwrap(),
+            interp.interp_one([4.7]).unwrap(),
+            interp.interp_one([5.4]).unwrap(),
+        ]);
     }
 }
