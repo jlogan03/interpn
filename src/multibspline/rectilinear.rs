@@ -166,20 +166,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
             return 0;
         }
 
-        let mut out = 1_usize;
-        let mut i = 0;
-        while i < N {
-            if dims[i] < 4 {
-                return 0;
-            }
-            match out.checked_mul(dims[i]) {
-                Some(v) => out = v,
-                None => return 0,
-            }
-            i += 1;
-        }
-
-        out
+        coeff_storage_len_inner(dims, 0, 1)
     }
 
     /// Number of scratch values required to construct coefficients for `dims`.
@@ -191,19 +178,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
             return 0;
         }
 
-        let mut max = 0_usize;
-        let mut i = 0;
-        while i < N {
-            if dims[i] < 4 {
-                return 0;
-            }
-            if dims[i] > max {
-                max = dims[i];
-            }
-            i += 1;
-        }
-
-        match max.checked_mul(2) {
+        match max_valid_dim(dims, 0, 0).checked_mul(2) {
             Some(v) => v,
             None => 0,
         }
@@ -230,38 +205,7 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         }
 
         let max_threads = max_usize(max_threads, 1);
-        let mut max_scratch = 0_usize;
-        let mut prefix_slabs = 1_usize;
-        let mut axis = 0;
-        while axis < N {
-            if dims[axis] < 4 {
-                return 0;
-            }
-
-            let tasks = if prefix_slabs < max_threads {
-                prefix_slabs
-            } else {
-                max_threads
-            };
-            let scratch = match dims[axis].checked_mul(2) {
-                Some(v) => match v.checked_mul(tasks) {
-                    Some(v) => v,
-                    None => return 0,
-                },
-                None => return 0,
-            };
-            if scratch > max_scratch {
-                max_scratch = scratch;
-            }
-
-            match prefix_slabs.checked_mul(dims[axis]) {
-                Some(v) => prefix_slabs = v,
-                None => return 0,
-            }
-            axis += 1;
-        }
-
-        max_scratch
+        parallel_construction_scratch_len_inner(dims, max_threads, 0, 1, 0)
     }
 
     /// Build an interpolator from precomputed coefficients.
@@ -469,14 +413,88 @@ fn check_dims<T: Float, const N: usize>(grids: &[&[T]; N], data: &[T]) -> Result
     Ok(())
 }
 
-const fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
+const fn coeff_storage_len_inner<const N: usize>(
+    dims: [usize; N],
+    axis: usize,
+    out: usize,
+) -> usize {
+    if axis == N {
+        return out;
+    }
+    if dims[axis] < 4 {
+        return 0;
+    }
+
+    match out.checked_mul(dims[axis]) {
+        Some(v) => coeff_storage_len_inner(dims, axis + 1, v),
+        None => 0,
+    }
+}
+
+const fn max_valid_dim<const N: usize>(dims: [usize; N], axis: usize, max: usize) -> usize {
+    if axis == N {
+        return max;
+    }
+    if dims[axis] < 4 {
+        return 0;
+    }
+
+    let next_max = if dims[axis] > max { dims[axis] } else { max };
+    max_valid_dim(dims, axis + 1, next_max)
+}
+
+#[cfg(feature = "par")]
+const fn parallel_construction_scratch_len_inner<const N: usize>(
+    dims: [usize; N],
+    max_threads: usize,
+    axis: usize,
+    prefix_slabs: usize,
+    max_scratch: usize,
+) -> usize {
+    if axis == N {
+        return max_scratch;
+    }
+    if dims[axis] < 4 {
+        return 0;
+    }
+
+    let tasks = if prefix_slabs < max_threads {
+        prefix_slabs
+    } else {
+        max_threads
+    };
+    let scratch = match dims[axis].checked_mul(2) {
+        Some(v) => match v.checked_mul(tasks) {
+            Some(v) => v,
+            None => return 0,
+        },
+        None => return 0,
+    };
+    let next_max_scratch = if scratch > max_scratch {
+        scratch
+    } else {
+        max_scratch
+    };
+    let next_prefix_slabs = match prefix_slabs.checked_mul(dims[axis]) {
+        Some(v) => v,
+        None => return 0,
+    };
+
+    parallel_construction_scratch_len_inner(
+        dims,
+        max_threads,
+        axis + 1,
+        next_prefix_slabs,
+        next_max_scratch,
+    )
+}
+
+fn max_dim<const N: usize>(dims: [usize; N]) -> usize {
     let mut max = 0_usize;
-    let mut i = 0;
-    while i < N {
-        if dims[i] > max {
-            max = dims[i];
+    for dim in dims {
+        if dim > max {
+            max = dim;
         }
-        i += 1;
     }
     max
 }

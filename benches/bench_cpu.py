@@ -505,10 +505,11 @@ def _thread_counts() -> list[int]:
     max_threads = os.cpu_count() or 1
     max_threads = max(int(max_threads / 2), 1)  # Real threads, not hyperthreads
     counts = []
-    threads = 1
-    while threads < max_threads:
+    for exponent in range(max_threads.bit_length()):
+        threads = 1 << exponent
+        if threads >= max_threads:
+            break
         counts.append(threads)
-        threads *= 2
     counts.append(max_threads)
     return sorted(set(counts))
 
