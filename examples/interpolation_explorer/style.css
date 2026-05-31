@@ -1,0 +1,216 @@
+:root {
+  --bg: #f4f7f8;
+  --panel: #ffffff;
+  --panel-strong: #eef3f4;
+  --ink: #15171d;
+  --muted: #5d6673;
+  --line: #d9e1e5;
+  --accent: #007f7a;
+  --accent-strong: #005f73;
+  --danger: #d1495b;
+  --warning: #edae49;
+  --shadow: 0 12px 28px rgba(26, 37, 44, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    Inter, "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 1.25rem;
+  border-right: 1px solid var(--line);
+  background: #fbfcfc;
+}
+
+.sidebar h1 {
+  margin: 0 0 1.25rem;
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidebar a {
+  display: block;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.sidebar a:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.content {
+  min-width: 0;
+  padding: 2rem;
+}
+
+.section-block {
+  max-width: 1320px;
+  margin: 0 auto 2rem;
+}
+
+.section-header {
+  margin-bottom: 0.9rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 1.7rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.control-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.control-card,
+.plot-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.control-card {
+  padding: 1rem;
+}
+
+.control-row {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.control-row label {
+  font-weight: 700;
+}
+
+.control-row output,
+.status-line {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.control-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.control-row select,
+.control-row input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.control-row select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.checkbox-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.checkbox-row label {
+  min-width: 0;
+}
+
+.status-line {
+  margin: 1rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  line-height: 1.4;
+}
+
+.plot-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.plot-surface {
+  min-height: 420px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.plot-surface .js-plotly-plot,
+.plot-surface .plot-container,
+.plot-surface .svg-container {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .content {
+    padding: 1rem;
+  }
+
+  .control-layout {
+    grid-template-columns: 1fr;
+  }
+}
