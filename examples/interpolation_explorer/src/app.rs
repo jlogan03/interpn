@@ -13,9 +13,15 @@ use plotly::{
 
 const SAMPLE_COUNT: usize = 500;
 const BSPLINE_KNOTS: usize = 8;
+const DEIMOS_PRIMARY: &str = "#8232ba";
+const DEIMOS_ACCENT: &str = "#ac37ff";
+const DEIMOS_WARNING: &str = "#ffd166";
+const DEIMOS_DANGER: &str = "#f26d7d";
+const REFERENCE_LINE: &str = "#000000";
 
 #[component]
 pub fn App() -> impl IntoView {
+    let (light_mode, set_light_mode) = signal(false);
     let (truth_function, set_truth_function) = signal(TruthFunction::SineMix);
     let (grid_kind, set_grid_kind) = signal(GridChoice::Regular);
     let (method, set_method) = signal(MethodChoice::Linear);
@@ -45,9 +51,29 @@ pub fn App() -> impl IntoView {
     let spline_status = move || spline.get().status;
 
     view! {
-        <div class="app-shell">
+        <div class=move || {
+            if light_mode.get() {
+                "app-shell light-mode"
+            } else {
+                "app-shell"
+            }
+        }>
             <aside class="sidebar">
-                <h1>"interpn"</h1>
+                <h1 class="sidebar-title">"interpn"</h1>
+                <button
+                    class=move || {
+                        if light_mode.get() {
+                            "theme-toggle active"
+                        } else {
+                            "theme-toggle"
+                        }
+                    }
+                    attr:aria-pressed=move || light_mode.get().to_string()
+                    on:click=move |_| set_light_mode.update(|enabled| *enabled = !*enabled)
+                >
+                    <span class="theme-toggle-icon" aria-hidden="true"></span>
+                    <span>"Light mode"</span>
+                </button>
                 <nav>
                     <a href="#comparison">"1D Comparison"</a>
                     <a href="#bspline">"B-Spline Coefficients"</a>
@@ -178,20 +204,18 @@ pub fn App() -> impl IntoView {
                                 .map(|index| {
                                     view! {
                                         <div class="control-row">
-                                            <label for=format!("knot-{index}")>
-                                                {move || {
-                                                    format!(
-                                                        "{} {}",
-                                                        bspline_input_mode.get().slider_label(),
-                                                        index + 1,
-                                                    )
-                                                }}
-                                            </label>
                                             <output>
                                                 {move || format!("{:.2}", knot_values.get()[index])}
                                             </output>
                                             <input
                                                 id=format!("knot-{index}")
+                                                attr:aria-label=move || {
+                                                    format!(
+                                                        "{} {}",
+                                                        bspline_input_mode.get().slider_label(),
+                                                        index + 1,
+                                                    )
+                                                }
                                                 type="range"
                                                 min="-1.50"
                                                 max="1.50"
@@ -636,26 +660,31 @@ fn build_comparison_plot(data: ComparisonData) -> Plot {
         Scatter::new(data.x_eval.clone(), data.y_truth)
             .mode(Mode::Lines)
             .name("truth")
-            .line(Line::new().color("#15171d").width(3.0)),
+            .line(Line::new().color(REFERENCE_LINE).width(3.0)),
     );
     plot.add_trace(
         Scatter::new(data.x_eval.clone(), data.y_interp)
             .mode(Mode::Lines)
             .name("interpolated")
-            .line(Line::new().color("#007f7a").width(3.0)),
+            .line(Line::new().color(DEIMOS_PRIMARY).width(3.0)),
     );
     plot.add_trace(
         Scatter::new(data.x_grid, data.y_grid)
             .mode(Mode::Markers)
             .name("grid samples")
-            .marker(Marker::new().color("#d1495b").size(10)),
+            .marker(Marker::new().color(DEIMOS_DANGER).size(10)),
     );
     if data.show_error {
         plot.add_trace(
             Scatter::new(data.x_eval, data.y_error)
                 .mode(Mode::Lines)
                 .name("absolute error")
-                .line(Line::new().color("#edae49").width(2.0).dash(DashType::Dash)),
+                .line(
+                    Line::new()
+                        .color(DEIMOS_WARNING)
+                        .width(2.0)
+                        .dash(DashType::Dash),
+                ),
         );
     }
     plot.set_layout(line_layout(&data.title, "x", "y"));
@@ -668,19 +697,19 @@ fn build_bspline_plot(data: BsplineData) -> Plot {
         Scatter::new(data.x_eval, data.y_curve)
             .mode(Mode::Lines)
             .name("B-spline curve")
-            .line(Line::new().color("#007f7a").width(3.0)),
+            .line(Line::new().color(DEIMOS_PRIMARY).width(3.0)),
     );
     plot.add_trace(
         Scatter::new(data.x_nodes.clone(), data.y_inputs)
             .mode(Mode::Markers)
             .name(data.input_label)
-            .marker(Marker::new().color("#d1495b").size(12)),
+            .marker(Marker::new().color(DEIMOS_DANGER).size(12)),
     );
     plot.add_trace(
         Scatter::new(data.x_nodes, data.y_curve_at_nodes)
             .mode(Mode::Markers)
             .name("curve at nodes")
-            .marker(Marker::new().color("#edae49").size(8)),
+            .marker(Marker::new().color(DEIMOS_ACCENT).size(8)),
     );
     plot.set_layout(line_layout(data.title, "x", "value"));
     plot
