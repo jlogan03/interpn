@@ -39,6 +39,60 @@
 //! Boundary spans and rectilinear grids use the same local-footprint idea, but
 //! with boundary ghost coefficients folded into the stored coefficients or with
 //! nonuniform-grid basis weights.
+//!
+//! For a rectilinear-grid interior span, the polynomial mapping is
+//! span-dependent because the local knot spacing affects the nonuniform
+//! B-spline basis. For span `s`, define
+//!
+//! ```text
+//! h = grid[s + 1] - grid[s]
+//! t = (x - grid[s]) / h
+//! ```
+//!
+//! and let the four footprint coefficients multiply the fixed-span nonuniform
+//! basis weights:
+//!
+//! ```text
+//! S(t) = c0*b0(t) + c1*b1(t) + c2*b2(t) + c3*b3(t)
+//! ```
+//!
+//! where `b0..b3` are computed by the rectilinear `basis_span_weights` routine
+//! for that span. To convert this span to a normalized power-basis polynomial,
+//! sample the local spline at four normalized positions:
+//!
+//! ```text
+//! t0 = 0
+//! t1 = 1/3
+//! t2 = 2/3
+//! t3 = 1
+//!
+//! xr = grid[s] + tr*h
+//! yr = b0(xr)*c0 + b1(xr)*c1 + b2(xr)*c2 + b3(xr)*c3
+//! ```
+//!
+//! Then, for `S(t) = a0 + a1*t + a2*t^2 + a3*t^3`,
+//!
+//! ```text
+//! a0 = y0
+//! a1 = (-11*y0 + 18*y1 - 9*y2 + 2*y3) / 2
+//! a2 = (18*y0 - 45*y1 + 36*y2 - 9*y3) / 2
+//! a3 = (-9*y0 + 27*y1 - 27*y2 + 9*y3) / 2
+//! ```
+//!
+//! In physical coordinates `u = x - grid[s]`, the same polynomial is
+//!
+//! ```text
+//! S(u) = A0 + A1*u + A2*u^2 + A3*u^3
+//!
+//! A0 = a0
+//! A1 = a1 / h
+//! A2 = a2 / h^2
+//! A3 = a3 / h^3
+//! ```
+//!
+//! Boundary spans use the same conversion after replacing the raw nonuniform
+//! basis weights with the low- or high-boundary weights that fold ghost
+//! coefficients into the stored coefficient footprint.
 
 pub mod rectilinear;
 pub mod regular;
