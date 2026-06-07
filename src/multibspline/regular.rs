@@ -1,4 +1,43 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a regular grid.
+//!
+//! Boundary spans use ghost coefficients: virtual B-spline coefficients just
+//! outside the stored coefficient line. A cubic span needs four coefficients,
+//! so the low boundary span naturally references `c[-1], c[0], c[1], c[2]`,
+//! while the high boundary span references `c[n - 3], c[n - 2], c[n - 1], c[n]`.
+//! The ghost coefficients are not stored. They are derived from the boundary
+//! condition that the boundary span has zero third derivative:
+//!
+//! ```text
+//! c[-1] = 3c[0] - 3c[1] + c[2]
+//! c[n]  = c[n - 3] - 3c[n - 2] + 3c[n - 1]
+//! ```
+//!
+//! Evaluation folds each ghost coefficient into the stored coefficient
+//! footprint by substitution. On the low side, the raw span expression is
+//!
+//! ```text
+//! S = w0*c[-1] + w1*c[0] + w2*c[1] + w3*c[2]
+//! ```
+//!
+//! Substituting the low ghost relation and collecting terms gives stored-only
+//! weights:
+//!
+//! ```text
+//! S = (w1 + 3w0)*c[0] + (w2 - 3w0)*c[1] + (w3 + w0)*c[2]
+//!
+//! folded weights = [w1 + 3w0, w2 - 3w0, w3 + w0, 0]
+//! ```
+//!
+//! The high side is analogous:
+//!
+//! ```text
+//! S = w0*c[n - 3] + w1*c[n - 2] + w2*c[n - 1] + w3*c[n]
+//!
+//! folded weights = [0, w0 + w3, w1 - 3w3, w2 + 3w3]
+//! ```
+//!
+//! This keeps the evaluator using the same four-slot local footprint while
+//! avoiding storage for coefficients outside the grid.
 
 use super::Saturation;
 #[cfg(feature = "par")]

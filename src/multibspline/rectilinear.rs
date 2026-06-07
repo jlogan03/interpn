@@ -1,5 +1,56 @@
 //! An arbitrary-dimensional cubic B-spline interpolator / extrapolator on a
 //! rectilinear grid.
+//!
+//! Boundary spans use ghost coefficients: virtual B-spline coefficients just
+//! outside the stored coefficient line. A cubic span needs four coefficients,
+//! so the low boundary span naturally references `c[-1], c[0], c[1], c[2]`,
+//! while the high boundary span references `c[n - 3], c[n - 2], c[n - 1], c[n]`.
+//! The ghost coefficients are not stored. They are derived from the boundary
+//! condition that the boundary span has zero third derivative.
+//!
+//! On a rectilinear grid, the ghost relations depend on the local nonuniform
+//! knot spacing. The low-side relation is computed from the third derivatives
+//! of the fixed-span basis weights:
+//!
+//! ```text
+//! q[-1]*c[-1] + q[0]*c[0] + q[1]*c[1] + q[2]*c[2] = 0
+//! c[-1] = p[0]*c[0] + p[1]*c[1] + p[2]*c[2]
+//! p[j] = -q[j] / q[-1]
+//! ```
+//!
+//! Evaluation folds the ghost coefficient into the stored coefficient footprint
+//! by substitution. On the low side, the raw span expression is
+//!
+//! ```text
+//! S = w0*c[-1] + w1*c[0] + w2*c[1] + w3*c[2]
+//! ```
+//!
+//! Substituting the low ghost relation and collecting terms gives stored-only
+//! weights:
+//!
+//! ```text
+//! S = (w1 + w0*p[0])*c[0]
+//!   + (w2 + w0*p[1])*c[1]
+//!   + (w3 + w0*p[2])*c[2]
+//!
+//! folded weights = [w1 + w0*p[0], w2 + w0*p[1], w3 + w0*p[2], 0]
+//! ```
+//!
+//! The high side is analogous. If
+//! `c[n] = s[0]*c[n - 3] + s[1]*c[n - 2] + s[2]*c[n - 1]`, then
+//!
+//! ```text
+//! folded weights = [
+//!     0,
+//!     w0 + w3*s[0],
+//!     w1 + w3*s[1],
+//!     w2 + w3*s[2],
+//! ]
+//! ```
+//!
+//! In the uniform-grid limit these relations reduce to the regular-grid
+//! formulas `c[-1] = 3c[0] - 3c[1] + c[2]` and
+//! `c[n] = c[n - 3] - 3c[n - 2] + 3c[n - 1]`.
 
 use super::Saturation;
 #[cfg(feature = "par")]
