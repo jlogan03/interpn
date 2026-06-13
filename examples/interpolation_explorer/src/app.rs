@@ -1,7 +1,7 @@
 use crate::plotly_support::use_plotly_chart;
 use interpn::{
-    GridInterpMethod, GridKind, Left1D, Linear1D, LinearHoldLast1D, Nearest1D, RectilinearGrid1D,
-    RegularGrid1D, Right1D, interpn_serial, multibspline::regular as bspline_regular,
+    GridInterpMethod, GridKind, Left1D, Linear1D, LinearHoldLast1D, MultiBsplineRectilinear,
+    MultiBsplineRegular, Nearest1D, RectilinearGrid1D, RegularGrid1D, Right1D, interpn_serial,
     one_dim::Interp1D,
 };
 use leptos::prelude::*;
@@ -420,9 +420,8 @@ impl MethodChoice {
         match self {
             Self::Linear => Some(GridInterpMethod::Linear),
             Self::Cubic => Some(GridInterpMethod::Cubic),
-            Self::Bspline => Some(GridInterpMethod::Bspline),
             Self::Nearest => Some(GridInterpMethod::Nearest),
-            Self::LinearHoldLast | Self::Left | Self::Right => None,
+            Self::Bspline | Self::LinearHoldLast | Self::Left | Self::Right => None,
         }
     }
 
@@ -523,6 +522,10 @@ fn interpolate_curve(
     y_grid: &[f64],
     x_eval: &[f64],
 ) -> Result<Vec<f64>, &'static str> {
+    if method == MethodChoice::Bspline {
+        return interpolate_bspline_curve(grid_kind, x_grid, y_grid, x_eval);
+    }
+
     match method.grid_method() {
         Some(grid_method) => {
             let grids = &[x_grid];
@@ -542,6 +545,49 @@ fn interpolate_curve(
         }
         None => interpolate_one_dim(grid_kind, method, x_grid, y_grid, x_eval),
     }
+}
+
+fn interpolate_bspline_curve(
+    grid_kind: GridChoice,
+    x_grid: &[f64],
+    y_grid: &[f64],
+    x_eval: &[f64],
+) -> Result<Vec<f64>, &'static str> {
+    let dims = [x_grid.len()];
+    let mut out = vec![0.0; x_eval.len()];
+    match grid_kind {
+        GridChoice::Regular => {
+            let mut coeffs = vec![0.0; MultiBsplineRegular::<f64, 1>::coeff_storage_len(dims)];
+            let mut scratch =
+                vec![0.0; MultiBsplineRegular::<f64, 1>::construction_scratch_len(dims)];
+            let interpolator = MultiBsplineRegular::from_values_with_workspace(
+                dims,
+                [x_grid[0]],
+                [x_grid[1] - x_grid[0]],
+                y_grid,
+                &mut coeffs,
+                &mut scratch,
+                true,
+            )?;
+            interpolator.interp(&[x_eval], &mut out)?;
+        }
+        GridChoice::Rectilinear => {
+            let grids = [x_grid];
+            let mut coeffs =
+                vec![0.0; MultiBsplineRectilinear::<f64, 1>::coeff_storage_len(dims)];
+            let mut scratch =
+                vec![0.0; MultiBsplineRectilinear::<f64, 1>::construction_scratch_len(dims)];
+            let interpolator = MultiBsplineRectilinear::from_values_with_workspace(
+                &grids,
+                y_grid,
+                &mut coeffs,
+                &mut scratch,
+                true,
+            )?;
+            interpolator.interp(&[x_eval], &mut out)?;
+        }
+    }
+    Ok(out)
 }
 
 fn interpolate_one_dim(
@@ -631,26 +677,33 @@ fn eval_bspline(
     x_eval: &[f64],
     out: &mut [f64],
 ) -> Result<(), &'static str> {
+    let dims = [x_nodes.len()];
+    let starts = [x_nodes[0]];
+    let steps = [x_nodes[1] - x_nodes[0]];
     match input_mode {
-        BsplineInputMode::NodalValues => interpn_serial(
-            &[x_nodes],
+        BsplineInputMode::NodalValues => {
+            let mut coeffs = vec![0.0; MultiBsplineRegular::<f64, 1>::coeff_storage_len(dims)];
+            let mut scratch =
+                vec![0.0; MultiBsplineRegular::<f64, 1>::construction_scratch_len(dims)];
+            let interpolator = MultiBsplineRegular::from_values_with_workspace(
+                dims,
+                starts,
+                steps,
+                y_inputs,
+                &mut coeffs,
+                &mut scratch,
+                true,
+            )?;
+            interpolator.interp(&[x_eval], out)
+        }
+        BsplineInputMode::Coefficients => MultiBsplineRegular::new(
+            dims,
+            starts,
+            steps,
             y_inputs,
-            &[x_eval],
-            out,
-            GridInterpMethod::Bspline,
-            Some(GridKind::Regular),
             true,
-            None,
-        ),
-        BsplineInputMode::Coefficients => bspline_regular::interpn(
-            &[x_nodes.len()],
-            &[x_nodes[0]],
-            &[x_nodes[1] - x_nodes[0]],
-            y_inputs,
-            true,
-            &[x_eval],
-            out,
-        ),
+        )?
+        .interp(&[x_eval], out),
     }
 }
 

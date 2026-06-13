@@ -40,13 +40,13 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     // MultiBspline with regular grid
     m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(interpn_bspline_regular_f64, m)?)?;
-    m.add_function(wrap_pyfunction!(interpn_bspline_regular_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_f32, m)?)?;
     // MultiBspline with rectilinear grid
     m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(interpn_bspline_rectilinear_f64, m)?)?;
-    m.add_function(wrap_pyfunction!(interpn_bspline_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f32, m)?)?;
     // Top-level interpn dispatch
     m.add_function(wrap_pyfunction!(interpn_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_f32, m)?)?;
@@ -340,7 +340,7 @@ macro_rules! coefficients_bspline_regular_impl {
 coefficients_bspline_regular_impl!(coefficients_bspline_regular_f64, f64);
 coefficients_bspline_regular_impl!(coefficients_bspline_regular_f32, f32);
 
-macro_rules! interpn_bspline_regular_impl {
+macro_rules! eval_bspline_regular_impl {
     ($funcname:ident, $T:ty) => {
         #[pyfunction]
         fn $funcname(
@@ -354,14 +354,31 @@ macro_rules! interpn_bspline_regular_impl {
         ) -> PyResult<()> {
             unpack_vec_of_arr!(obs, obs, $T);
 
-            match multibspline::regular::interpn(
-                &dims,
-                starts.as_slice()?,
-                steps.as_slice()?,
-                coeffs.as_slice()?,
-                linearize_extrapolation,
-                obs,
-                out.as_slice_mut()?,
+            let ndims = dims.len();
+            let starts = starts.as_slice()?;
+            let steps = steps.as_slice()?;
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+            if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    match multibspline::MultiBsplineRegular::<$T, N>::new(
+                        dims.try_into().unwrap(),
+                        starts.try_into().unwrap(),
+                        steps.try_into().unwrap(),
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => interpolator.interp(obs.try_into().unwrap(), out),
+                        Err(msg) => Err(msg),
+                    }
+                }
             ) {
                 Ok(()) => Ok(()),
                 Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
@@ -370,8 +387,8 @@ macro_rules! interpn_bspline_regular_impl {
     };
 }
 
-interpn_bspline_regular_impl!(interpn_bspline_regular_f64, f64);
-interpn_bspline_regular_impl!(interpn_bspline_regular_f32, f32);
+eval_bspline_regular_impl!(_eval_bspline_regular_f64, f64);
+eval_bspline_regular_impl!(_eval_bspline_regular_f32, f32);
 
 macro_rules! coefficients_bspline_rectilinear_impl {
     ($funcname:ident, $T:ty) => {
@@ -408,7 +425,7 @@ macro_rules! coefficients_bspline_rectilinear_impl {
 coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f64, f64);
 coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f32, f32);
 
-macro_rules! interpn_bspline_rectilinear_impl {
+macro_rules! eval_bspline_rectilinear_impl {
     ($funcname:ident, $T:ty) => {
         #[pyfunction]
         fn $funcname(
@@ -421,12 +438,28 @@ macro_rules! interpn_bspline_rectilinear_impl {
             unpack_vec_of_arr!(grids, grids, $T);
             unpack_vec_of_arr!(obs, obs, $T);
 
-            match multibspline::rectilinear::interpn(
-                grids,
-                coeffs.as_slice()?,
-                linearize_extrapolation,
-                obs,
-                out.as_slice_mut()?,
+            let ndims = grids.len();
+            if obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    let grids: &[&[$T]; N] = grids.try_into().unwrap();
+                    match multibspline::MultiBsplineRectilinear::<$T, N>::new(
+                        grids,
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => interpolator.interp(obs.try_into().unwrap(), out),
+                        Err(msg) => Err(msg),
+                    }
+                }
             ) {
                 Ok(()) => Ok(()),
                 Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
@@ -435,17 +468,16 @@ macro_rules! interpn_bspline_rectilinear_impl {
     };
 }
 
-interpn_bspline_rectilinear_impl!(interpn_bspline_rectilinear_f64, f64);
-interpn_bspline_rectilinear_impl!(interpn_bspline_rectilinear_f32, f32);
+eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f64, f64);
+eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f32, f32);
 
 fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
     match method.to_ascii_lowercase().as_str() {
         "linear" => Ok(GridInterpMethod::Linear),
         "cubic" => Ok(GridInterpMethod::Cubic),
-        "bspline" | "b-spline" => Ok(GridInterpMethod::Bspline),
         "nearest" => Ok(GridInterpMethod::Nearest),
         _ => Err(exceptions::PyValueError::new_err(
-            "`method` must be 'linear', 'cubic', 'bspline', or 'nearest'",
+            "`method` must be 'linear', 'cubic', or 'nearest'",
         )),
     }
 }

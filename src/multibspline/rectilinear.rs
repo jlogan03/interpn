@@ -59,51 +59,6 @@ use crate::{index_arr_fixed_dims, interp_math::dot4, mul_add};
 use crunchy::unroll;
 use num_traits::Float;
 
-/// Evaluate cubic B-spline interpolation on a rectilinear grid in up to 8 dimensions.
-///
-/// This function expects precomputed B-spline coefficients. To build
-/// coefficients from nodal values without allocation, use
-/// [`MultiBsplineRectilinear::from_values_with_workspace`].
-pub fn interpn<T: Float>(
-    grids: &[&[T]],
-    coeffs: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    let ndims = grids.len();
-    if obs.len() != ndims {
-        return Err("Dimension mismatch");
-    }
-
-    crate::dispatch_ndims!(
-        ndims,
-        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        [1, 2, 3, 4, 5, 6, 7, 8],
-        |N| {
-            MultiBsplineRectilinear::<'_, T, N>::new(
-                grids.try_into().unwrap(),
-                coeffs,
-                linearize_extrapolation,
-            )?
-            .interp(obs.try_into().unwrap(), out)
-        }
-    )
-}
-
-/// Evaluate interpolant, allocating a new Vec for the output.
-#[cfg(feature = "std")]
-pub fn interpn_alloc<T: Float>(
-    grids: &[&[T]],
-    coeffs: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-) -> Result<Vec<T>, &'static str> {
-    let mut out = vec![T::zero(); obs[0].len()];
-    interpn(grids, coeffs, linearize_extrapolation, obs, &mut out)?;
-    Ok(out)
-}
-
 /// Construct cubic B-spline coefficients from nodal values on a rectilinear grid.
 ///
 /// The input values are immutable. The generated coefficients are written into

@@ -62,3 +62,13 @@ def test_interpn_check_bounds_rectilinear(dtype, max_threads):
             check_bounds_with_atol=1e-8,
             max_threads=max_threads,
         )
+
+
+@pytest.mark.parametrize("method", ["bspline", "b-spline"])
+def test_interpn_rejects_bspline_method(method):
+    grid = np.linspace(0.0, 1.0, 5)
+    vals = np.linspace(0.0, 1.0, grid.size)
+    obs = [np.array([0.5])]
+
+    with pytest.raises(ValueError):
+        interpn(obs=obs, grids=[grid], vals=vals, method=method)

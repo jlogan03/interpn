@@ -38,7 +38,7 @@ macro_rules! bench_interp_specific {
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
                 let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
-                let obs = (&obs[..]).try_into().unwrap();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];
@@ -74,6 +74,7 @@ macro_rules! bench_interp_specific {
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
                 let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];
@@ -84,7 +85,7 @@ macro_rules! bench_interp_specific {
 
                 b.iter(|| {
                     black_box({
-                        multilinear::regular::interpn(&dims, &starts, &steps, &z, &obs, &mut out)
+                        multilinear::regular::interpn(&dims, &starts, &steps, &z, obs, &mut out)
                             .unwrap()
                     })
                 });
@@ -108,6 +109,7 @@ macro_rules! bench_interp_specific {
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
                 let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];
@@ -125,15 +127,11 @@ macro_rules! bench_interp_specific {
                 let mut coeffs = vec![0.0; coeff_len];
                 let mut scratch = vec![0.0; scratch_len];
                 multibspline::regular::coefficients(dims, &z, &mut coeffs, &mut scratch).unwrap();
+                let interpolator: multibspline::MultiBsplineRegular<'_, _, $ndims> =
+                    multibspline::MultiBsplineRegular::new(dims, starts, steps, &coeffs, false)
+                        .unwrap();
 
-                b.iter(|| {
-                    black_box({
-                        multibspline::regular::interpn(
-                            &dims, &starts, &steps, &coeffs, false, &obs, &mut out,
-                        )
-                        .unwrap()
-                    })
-                });
+                b.iter(|| black_box({ interpolator.interp(obs, &mut out).unwrap() }));
             },
         );
 
@@ -154,7 +152,7 @@ macro_rules! bench_interp_specific {
                 let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
                 let gridobs_t = gen_interp_obs_grid(&grids, m, true);
                 let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
-                let obs = (&obs[..]).try_into().unwrap();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
                 let mut out = vec![0.0; size];
 
                 let dims = [$gridsize; $ndims];

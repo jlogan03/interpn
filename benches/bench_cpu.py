@@ -62,10 +62,9 @@ DASH_STYLES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"]
 THREAD_SPEEDUP_COLORS = {
     "linear": "#1f77b4",
     "cubic": "#ff7f0e",
-    "bspline": "#9467bd",
     "nearest": "#2ca02c",
 }
-THREAD_SPEEDUP_METHODS = ["linear", "cubic", "bspline", "nearest"]
+THREAD_SPEEDUP_METHODS = ["linear", "cubic", "nearest"]
 
 
 def _normalized_line_style(index: int) -> str:
@@ -535,8 +534,7 @@ def _plot_speedup_vs_threads(
                 continue
             values_arr = np.array(values, dtype=float)
             all_values.append(values_arr)
-            method_label = "B-Spline" if method == "bspline" else method.title()
-            series.append((f"{method_label} {grid_kind}", method, values_arr))
+            series.append((f"{method.title()} {grid_kind}", method, values_arr))
     for _, _, values_arr in series:
         ones = np.ones_like(values_arr)
         fill_between(

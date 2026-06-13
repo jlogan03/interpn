@@ -57,7 +57,7 @@ def interpn(
     grids: Sequence[NDArray],
     vals: NDArray,
     *,
-    method: Literal["linear", "cubic", "bspline", "b-spline", "nearest"] = "linear",
+    method: Literal["linear", "cubic", "nearest"] = "linear",
     out: NDArray | None = None,
     linearize_extrapolation: bool = True,
     grid_kind: Literal["regular", "rectilinear"] | None = None,
@@ -76,22 +76,13 @@ def interpn(
     If a pre-allocated output array is provided, the returned array is a
     reference to that array.
 
-    Note that, unlike the other methods, `bspline` requires coefficient storage in
-    addition to the raw data points and performs a linear solve during initialization
-    to generate those coefficients. As a result, it can be much slower than the
-    other methods, especially when used for large grids with a small number of
-    target points.
-
     Args:
         obs: Observation coordinates, one array per dimension.
         grids: Grid axis coordinates, one array per dimension.
         vals: Values defined on the full cartesian-product grid.
-        method: Interpolation kind, one of ``"linear"``, ``"cubic"``,
-            ``"bspline"``, or ``"nearest"``.
-            The B-spline option constructs coefficients inside this convenience
-            call before evaluation; use ``MultiBsplineRegular`` or
-            ``MultiBsplineRectilinear`` directly when coefficients should be
-            reused across calls.
+        method: Interpolation kind, one of ``"linear"``, ``"cubic"``, or
+            ``"nearest"``. For B-spline interpolation, use
+            ``MultiBsplineRegular`` or ``MultiBsplineRectilinear``.
         out: Optional preallocated array that receives the result.
         linearize_extrapolation: Whether cubic extrapolation should fall back to
             linear behaviour outside the grid bounds.

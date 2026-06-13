@@ -46,65 +46,6 @@ use crate::{index_arr_fixed_dims, interp_math::dot4, mul_add};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
-/// Evaluate cubic B-spline interpolation on a regular grid in up to 8 dimensions.
-/// Assumes C-style ordering of coeffs (z(x0, y0), z(x0, y1), ..., z(x0, yn), z(x1, y0), ...).
-///
-/// This function expects precomputed B-spline coefficients. To build coefficients from
-/// nodal values without allocation, use [`MultiBsplineRegular::from_values_with_workspace`].
-pub fn interpn<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    coeffs: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-    out: &mut [T],
-) -> Result<(), &'static str> {
-    let ndims = dims.len();
-    if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
-        return Err("Dimension mismatch");
-    }
-
-    crate::dispatch_ndims!(
-        ndims,
-        "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
-        [1, 2, 3, 4, 5, 6, 7, 8],
-        |N| {
-            MultiBsplineRegular::<'_, T, N>::new(
-                dims.try_into().unwrap(),
-                starts.try_into().unwrap(),
-                steps.try_into().unwrap(),
-                coeffs,
-                linearize_extrapolation,
-            )?
-            .interp(obs.try_into().unwrap(), out)
-        }
-    )
-}
-
-/// Evaluate interpolant, allocating a new Vec for the output.
-#[cfg(feature = "std")]
-pub fn interpn_alloc<T: Float>(
-    dims: &[usize],
-    starts: &[T],
-    steps: &[T],
-    coeffs: &[T],
-    linearize_extrapolation: bool,
-    obs: &[&[T]],
-) -> Result<Vec<T>, &'static str> {
-    let mut out = vec![T::zero(); obs[0].len()];
-    interpn(
-        dims,
-        starts,
-        steps,
-        coeffs,
-        linearize_extrapolation,
-        obs,
-        &mut out,
-    )?;
-    Ok(out)
-}
-
 /// Construct cubic B-spline coefficients from nodal values on a regular grid.
 ///
 /// The input values are immutable. The generated coefficients are written into `coeffs`.

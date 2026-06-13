@@ -16,8 +16,8 @@ from .serialization import Array, ArrayF32, ArrayF64
 from .interpn import (
     coefficients_bspline_regular_f64,
     coefficients_bspline_regular_f32,
-    interpn_bspline_regular_f64,
-    interpn_bspline_regular_f32,
+    _eval_bspline_regular_f64,
+    _eval_bspline_regular_f32,
     check_bounds_regular_f64,
     check_bounds_regular_f32,
 )
@@ -120,7 +120,7 @@ class MultiBsplineRegular(BaseModel):
         out_inner = out if out is not None else np.zeros_like(obs[0])
 
         if dtype == np.float64:
-            interpn_bspline_regular_f64(
+            _eval_bspline_regular_f64(
                 self.dims,
                 self.starts.data,
                 self.steps.data,
@@ -130,7 +130,7 @@ class MultiBsplineRegular(BaseModel):
                 out_inner,
             )
         elif dtype == np.float32:
-            interpn_bspline_regular_f32(
+            _eval_bspline_regular_f32(
                 self.dims,
                 self.starts.data,
                 self.steps.data,

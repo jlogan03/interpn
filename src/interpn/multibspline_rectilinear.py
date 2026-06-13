@@ -16,8 +16,8 @@ from .serialization import Array, ArrayF32, ArrayF64
 from .interpn import (
     coefficients_bspline_rectilinear_f64,
     coefficients_bspline_rectilinear_f32,
-    interpn_bspline_rectilinear_f64,
-    interpn_bspline_rectilinear_f32,
+    _eval_bspline_rectilinear_f64,
+    _eval_bspline_rectilinear_f32,
     check_bounds_rectilinear_f64,
     check_bounds_rectilinear_f32,
 )
@@ -118,7 +118,7 @@ class MultiBsplineRectilinear(BaseModel):
         out_inner = out if out is not None else np.zeros_like(obs[0])
 
         if dtype == np.float64:
-            interpn_bspline_rectilinear_f64(
+            _eval_bspline_rectilinear_f64(
                 [x.data for x in self.grids],
                 self.coeffs.data,
                 self.linearize_extrapolation,
@@ -126,7 +126,7 @@ class MultiBsplineRectilinear(BaseModel):
                 out_inner,
             )
         elif dtype == np.float32:
-            interpn_bspline_rectilinear_f32(
+            _eval_bspline_rectilinear_f32(
                 [x.data for x in self.grids],
                 self.coeffs.data,
                 self.linearize_extrapolation,
