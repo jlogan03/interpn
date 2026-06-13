@@ -200,6 +200,12 @@ pub struct MultiBsplineRectilinear<'a, T: Float, const N: usize> {
     /// Size of each dimension
     dims: [usize; N],
 
+    /// Low-side ghost coefficient relation for each axis.
+    low_ghost_coeffs: [[T; 3]; N],
+
+    /// High-side ghost coefficient relation for each axis.
+    high_ghost_coeffs: [[T; 3]; N],
+
     /// B-spline coefficients, size prod(dims)
     coeffs: &'a [T],
 
@@ -272,10 +278,13 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
     ) -> Result<Self, &'static str> {
         check_dims(grids, coeffs)?;
         let dims = dims_from_grids(grids);
+        let (low_ghost_coeffs, high_ghost_coeffs) = ghost_coeffs_by_axis(grids);
 
         Ok(Self {
             grids,
             dims,
+            low_ghost_coeffs,
+            high_ghost_coeffs,
             coeffs,
             linearize_extrapolation,
         })
@@ -360,6 +369,8 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
                 x[i],
                 sat[i],
                 self.linearize_extrapolation,
+                self.low_ghost_coeffs[i],
+                self.high_ghost_coeffs[i],
             );
         }
 
@@ -449,6 +460,19 @@ fn dims_from_grids<T: Float, const N: usize>(grids: &[&[T]; N]) -> [usize; N] {
         dims[i] = grids[i].len();
     }
     dims
+}
+
+/// Precompute boundary ghost coefficient relations for each axis.
+fn ghost_coeffs_by_axis<T: Float, const N: usize>(grids: &[&[T]; N]) -> ([[T; 3]; N], [[T; 3]; N]) {
+    let mut low = [[T::zero(); 3]; N];
+    let mut high = [[T::zero(); 3]; N];
+
+    for i in 0..N {
+        low[i] = low_ghost_coeffs(grids[i]);
+        high[i] = high_ghost_coeffs(grids[i]);
+    }
+
+    (low, high)
 }
 
 /// Validate dimensions, coefficient storage length, and grid monotonicity.
@@ -589,13 +613,24 @@ fn solve_axis<T: Float, const N: usize>(
     upper: &mut [T],
     rhs: &mut [T],
 ) -> Result<(), &'static str> {
+    let low_ghost = low_ghost_coeffs(grids[axis]);
+    let high_ghost = high_ghost_coeffs(grids[axis]);
     let n = dims[axis];
     let stride = dimprod[axis];
     let nlines = coeffs.len() / n;
 
     for line in 0..nlines {
         let base = line_base_index(dims, dimprod, axis, line);
-        solve_line(grids[axis], base, stride, coeffs, upper, rhs)?;
+        solve_line(
+            grids[axis],
+            low_ghost,
+            high_ghost,
+            base,
+            stride,
+            coeffs,
+            upper,
+            rhs,
+        )?;
     }
 
     Ok(())
@@ -612,6 +647,8 @@ fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
     scratch: &mut [T],
     max_tasks: usize,
 ) -> Result<(), &'static str> {
+    let low_ghost = low_ghost_coeffs(grids[axis]);
+    let high_ghost = high_ghost_coeffs(grids[axis]);
     let n = dims[axis];
     let stride = dimprod[axis];
     let slab_len = n * stride;
@@ -622,9 +659,27 @@ fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
 
     if tasks == 1 {
         let (upper, rhs) = scratch.split_at_mut(n);
-        solve_axis_slabs(grids[axis], coeffs, slab_len, stride, upper, rhs)
+        solve_axis_slabs(
+            grids[axis],
+            low_ghost,
+            high_ghost,
+            coeffs,
+            slab_len,
+            stride,
+            upper,
+            rhs,
+        )
     } else {
-        solve_axis_slabs_par(grids[axis], coeffs, slab_len, stride, scratch, tasks)
+        solve_axis_slabs_par(
+            grids[axis],
+            low_ghost,
+            high_ghost,
+            coeffs,
+            slab_len,
+            stride,
+            scratch,
+            tasks,
+        )
     }
 }
 
@@ -632,6 +687,8 @@ fn solve_axis_par<T: Float + Send + Sync, const N: usize>(
 /// Recursively split slab ranges so each Rayon branch owns disjoint coeff/scratch slices.
 fn solve_axis_slabs_par<T: Float + Send + Sync>(
     grid: &[T],
+    low_ghost: [T; 3],
+    high_ghost: [T; 3],
     coeffs: &mut [T],
     slab_len: usize,
     stride: usize,
@@ -642,7 +699,9 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
     if tasks <= 1 || nslabs <= 1 {
         let n = grid.len();
         let (upper, rhs) = scratch.split_at_mut(n);
-        return solve_axis_slabs(grid, coeffs, slab_len, stride, upper, rhs);
+        return solve_axis_slabs(
+            grid, low_ghost, high_ghost, coeffs, slab_len, stride, upper, rhs,
+        );
     }
 
     let left_slabs = nslabs / 2;
@@ -659,6 +718,8 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
         || {
             solve_axis_slabs_par(
                 grid,
+                low_ghost,
+                high_ghost,
                 left_coeffs,
                 slab_len,
                 stride,
@@ -669,6 +730,8 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
         || {
             solve_axis_slabs_par(
                 grid,
+                low_ghost,
+                high_ghost,
                 right_coeffs,
                 slab_len,
                 stride,
@@ -685,6 +748,8 @@ fn solve_axis_slabs_par<T: Float + Send + Sync>(
 /// Solve all coefficient lines contained in a contiguous set of slabs.
 fn solve_axis_slabs<T: Float>(
     grid: &[T],
+    low_ghost: [T; 3],
+    high_ghost: [T; 3],
     coeffs: &mut [T],
     slab_len: usize,
     stride: usize,
@@ -693,7 +758,7 @@ fn solve_axis_slabs<T: Float>(
 ) -> Result<(), &'static str> {
     for slab in coeffs.chunks_mut(slab_len) {
         for base in 0..stride {
-            solve_line(grid, base, stride, slab, upper, rhs)?;
+            solve_line(grid, low_ghost, high_ghost, base, stride, slab, upper, rhs)?;
         }
     }
 
@@ -773,6 +838,8 @@ fn line_base_index<const N: usize>(
 /// ```
 fn solve_line<T: Float>(
     grid: &[T],
+    low_ghost: [T; 3],
+    high_ghost: [T; 3],
     base: usize,
     stride: usize,
     coeffs: &mut [T],
@@ -784,7 +851,7 @@ fn solve_line<T: Float>(
         return Err("Dimension mismatch");
     }
 
-    let (diag0, upper0, rhs0) = first_row(grid, coeffs[base], coeffs[base + stride]);
+    let (diag0, upper0, rhs0) = first_row(grid, low_ghost, coeffs[base], coeffs[base + stride]);
     upper[0] = upper0 / diag0;
     rhs[0] = rhs0 / diag0;
 
@@ -792,6 +859,7 @@ fn solve_line<T: Float>(
         let (lower, diag, upper_i, y) = if i == n - 1 {
             last_row(
                 grid,
+                high_ghost,
                 coeffs[base + (n - 2) * stride],
                 coeffs[base + (n - 1) * stride],
             )
@@ -817,12 +885,11 @@ fn solve_line<T: Float>(
 }
 
 /// Build the first tridiagonal row after folding in the low ghost coefficient.
-fn first_row<T: Float>(grid: &[T], y0: T, y1: T) -> (T, T, T) {
+fn first_row<T: Float>(grid: &[T], low_ghost: [T; 3], y0: T, y1: T) -> (T, T, T) {
     let w0 = basis_span_weights(grid, 0, grid[0]);
-    let p = low_ghost_coeffs(grid);
-    let e0 = w0[1] + w0[0] * p[0];
-    let e1 = w0[2] + w0[0] * p[1];
-    let e2 = w0[3] + w0[0] * p[2];
+    let e0 = w0[1] + w0[0] * low_ghost[0];
+    let e1 = w0[2] + w0[0] * low_ghost[1];
+    let e2 = w0[3] + w0[0] * low_ghost[2];
 
     let w1 = basis_span_weights(grid, 1, grid[1]);
     let factor = e2 / w1[2];
@@ -830,14 +897,13 @@ fn first_row<T: Float>(grid: &[T], y0: T, y1: T) -> (T, T, T) {
 }
 
 /// Build the last tridiagonal row after folding in the high ghost coefficient.
-fn last_row<T: Float>(grid: &[T], y_prev: T, y_last: T) -> (T, T, T, T) {
+fn last_row<T: Float>(grid: &[T], high_ghost: [T; 3], y_prev: T, y_last: T) -> (T, T, T, T) {
     let n = grid.len();
     let w = basis_span_weights(grid, n - 2, grid[n - 1]);
-    let s = high_ghost_coeffs(grid);
 
-    let e0 = w[0] + w[3] * s[0];
-    let e1 = w[1] + w[3] * s[1];
-    let e2 = w[2] + w[3] * s[2];
+    let e0 = w[0] + w[3] * high_ghost[0];
+    let e1 = w[1] + w[3] * high_ghost[1];
+    let e2 = w[2] + w[3] * high_ghost[2];
 
     let wadj = basis_span_weights(grid, n - 2, grid[n - 2]);
     let factor = e0 / wadj[0];
@@ -857,50 +923,62 @@ fn interp_weights<T: Float>(
     x: T,
     sat: Saturation,
     linearize_extrapolation: bool,
+    low_ghost: [T; 3],
+    high_ghost: [T; 3],
 ) -> [T; 4] {
     match sat {
         Saturation::None => basis_span_weights(grid, span, x),
-        Saturation::InsideLow => low_boundary_weights(grid, x, false),
-        Saturation::OutsideLow => low_boundary_weights(grid, x, linearize_extrapolation),
-        Saturation::InsideHigh => high_boundary_weights(grid, x, false),
-        Saturation::OutsideHigh => high_boundary_weights(grid, x, linearize_extrapolation),
+        Saturation::InsideLow => low_boundary_weights(grid, x, false, low_ghost),
+        Saturation::OutsideLow => low_boundary_weights(grid, x, linearize_extrapolation, low_ghost),
+        Saturation::InsideHigh => high_boundary_weights(grid, x, false, high_ghost),
+        Saturation::OutsideHigh => {
+            high_boundary_weights(grid, x, linearize_extrapolation, high_ghost)
+        }
     }
 }
 
 #[inline]
 /// Low-boundary weights with the ghost coefficient folded into stored coefficients.
-fn low_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
+fn low_boundary_weights<T: Float>(
+    grid: &[T],
+    x: T,
+    linearize_extrapolation: bool,
+    low_ghost: [T; 3],
+) -> [T; 4] {
     let raw = if linearize_extrapolation {
         linearized_boundary_weights(grid, 0, grid[0], x)
     } else {
         basis_span_weights(grid, 0, x)
     };
-    let p = low_ghost_coeffs(grid);
 
     [
-        mul_add(raw[0], p[0], raw[1]),
-        mul_add(raw[0], p[1], raw[2]),
-        mul_add(raw[0], p[2], raw[3]),
+        mul_add(raw[0], low_ghost[0], raw[1]),
+        mul_add(raw[0], low_ghost[1], raw[2]),
+        mul_add(raw[0], low_ghost[2], raw[3]),
         T::zero(),
     ]
 }
 
 #[inline]
 /// High-boundary weights with the ghost coefficient folded into stored coefficients.
-fn high_boundary_weights<T: Float>(grid: &[T], x: T, linearize_extrapolation: bool) -> [T; 4] {
+fn high_boundary_weights<T: Float>(
+    grid: &[T],
+    x: T,
+    linearize_extrapolation: bool,
+    high_ghost: [T; 3],
+) -> [T; 4] {
     let n = grid.len();
     let raw = if linearize_extrapolation {
         linearized_boundary_weights(grid, n - 2, grid[n - 1], x)
     } else {
         basis_span_weights(grid, n - 2, x)
     };
-    let s = high_ghost_coeffs(grid);
 
     [
         T::zero(),
-        mul_add(raw[3], s[0], raw[0]),
-        mul_add(raw[3], s[1], raw[1]),
-        mul_add(raw[3], s[2], raw[2]),
+        mul_add(raw[3], high_ghost[0], raw[0]),
+        mul_add(raw[3], high_ghost[1], raw[1]),
+        mul_add(raw[3], high_ghost[2], raw[2]),
     ]
 }
 
@@ -1123,12 +1201,12 @@ mod test {
             assert!((got - expected).abs() < 1e-10, "{got} != {expected}");
         }
 
-        let (d0, u0, r0) = first_row(&grid, 7.0, 11.0);
+        let (d0, u0, r0) = first_row(&grid, p, 7.0, 11.0);
         assert!((d0 - 1.0).abs() < 1e-10);
         assert!((u0 + 1.0).abs() < 1e-10);
         assert!((r0 - (7.0 - 11.0)).abs() < 1e-10);
 
-        let (ll, dl, _, rl) = last_row(&grid, 13.0, 17.0);
+        let (ll, dl, _, rl) = last_row(&grid, s, 13.0, 17.0);
         assert!((ll + 1.0).abs() < 1e-10);
         assert!((dl - 1.0).abs() < 1e-10);
         assert!((rl - (17.0 - 13.0)).abs() < 1e-10);
