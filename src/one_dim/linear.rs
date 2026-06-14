@@ -3,6 +3,8 @@
 
 use num_traits::Float;
 
+use crate::mul_add;
+
 use super::{Extrap, Grid1D, GridSample, Interp1D};
 
 /// Simple linear interpolation / extrapolation.
@@ -28,10 +30,7 @@ where
         let slope = (y1 - y0) / (x1 - x0);
         let dx = loc - x0;
 
-        #[cfg(not(feature = "fma"))]
-        let v = y0 + slope * dx;
-        #[cfg(feature = "fma")]
-        let v = slope.mul_add(dx, y0);
+        let v = mul_add(slope, dx, y0);
 
         Ok(v)
     }
@@ -70,10 +69,7 @@ where
                 let slope = (y1 - y0) / (x1 - x0);
                 let dx = loc - x0;
 
-                #[cfg(not(feature = "fma"))]
-                let v = y0 + slope * dx;
-                #[cfg(feature = "fma")]
-                let v = slope.mul_add(dx, y0);
+                let v = mul_add(slope, dx, y0);
 
                 v
             }

@@ -2,6 +2,7 @@ use numpy::borrow::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::exceptions;
 use pyo3::prelude::*;
 
+use crate::multibspline;
 use crate::multicubic;
 use crate::multilinear;
 use crate::nearest;
@@ -36,6 +37,16 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     // Multicubic with rectilinear grid
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f32, m)?)?;
+    // MultiBspline with regular grid
+    m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_f32, m)?)?;
+    // MultiBspline with rectilinear grid
+    m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f32, m)?)?;
     // Top-level interpn dispatch
     m.add_function(wrap_pyfunction!(interpn_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_f32, m)?)?;
@@ -294,6 +305,171 @@ macro_rules! interpn_cubic_rectilinear_impl {
 
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f64, f64);
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f32, f32);
+
+macro_rules! coefficients_bspline_regular_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            dims: Vec<usize>,
+            vals: PyReadonlyArray1<$T>,
+            mut coeffs: PyReadwriteArray1<$T>,
+            mut scratch: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            let ndims = dims.len();
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    multibspline::regular::coefficients::<$T, N>(
+                        dims.try_into().unwrap(),
+                        vals.as_slice()?,
+                        coeffs.as_slice_mut()?,
+                        scratch.as_slice_mut()?,
+                    )
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+coefficients_bspline_regular_impl!(coefficients_bspline_regular_f64, f64);
+coefficients_bspline_regular_impl!(coefficients_bspline_regular_f32, f32);
+
+macro_rules! eval_bspline_regular_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            dims: Vec<usize>,
+            starts: PyReadonlyArray1<$T>,
+            steps: PyReadonlyArray1<$T>,
+            coeffs: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = dims.len();
+            let starts = starts.as_slice()?;
+            let steps = steps.as_slice()?;
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+            if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    match multibspline::MultiBsplineRegular::<$T, N>::new(
+                        dims.try_into().unwrap(),
+                        starts.try_into().unwrap(),
+                        steps.try_into().unwrap(),
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => interpolator.interp(obs.try_into().unwrap(), out),
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+eval_bspline_regular_impl!(_eval_bspline_regular_f64, f64);
+eval_bspline_regular_impl!(_eval_bspline_regular_f32, f32);
+
+macro_rules! coefficients_bspline_rectilinear_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            vals: PyReadonlyArray1<$T>,
+            mut coeffs: PyReadwriteArray1<$T>,
+            mut scratch: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            let ndims = grids.len();
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    multibspline::rectilinear::coefficients::<$T, N>(
+                        grids.try_into().unwrap(),
+                        vals.as_slice()?,
+                        coeffs.as_slice_mut()?,
+                        scratch.as_slice_mut()?,
+                    )
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f64, f64);
+coefficients_bspline_rectilinear_impl!(coefficients_bspline_rectilinear_f32, f32);
+
+macro_rules! eval_bspline_rectilinear_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            coeffs: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = grids.len();
+            if obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    let grids: &[&[$T]; N] = grids.try_into().unwrap();
+                    match multibspline::MultiBsplineRectilinear::<$T, N>::new(
+                        grids,
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => interpolator.interp(obs.try_into().unwrap(), out),
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f64, f64);
+eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f32, f32);
 
 fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
     match method.to_ascii_lowercase().as_str() {

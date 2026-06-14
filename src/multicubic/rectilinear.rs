@@ -29,8 +29,12 @@
 //! References
 //! * A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
 //!   https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-use super::{Saturation, centered_difference_nonuniform, normalized_hermite_spline};
-use crate::index_arr_fixed_dims;
+use super::Saturation;
+use crate::{
+    index_arr_fixed_dims,
+    interp_math::{dot4, hermite_basis},
+    mul_add,
+};
 use crunchy::unroll;
 use num_traits::Float;
 
@@ -231,6 +235,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         // and does not increase peak stack usage.
         let mut origin = [0_usize; N]; // Indices of lower corner of hypercub
         let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
+        let mut weights = [[T::zero(); FP]; N];
         let mut dimprod = [1_usize; N];
         let mut loc = [0_usize; N];
         let mut store = [[T::zero(); FP]; N];
@@ -249,6 +254,13 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
             // Populate lower corner and saturation flag for each dimension
             (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+            let grid_cell = &self.grids[i][origin[i]..origin[i] + 4];
+            weights[i] = interp_weights(
+                grid_cell.try_into().unwrap(),
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+            );
         }
 
         // Recursive interpolation of one dependency tree at a time
@@ -282,16 +294,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
                         if level {
                             // const branch
-                            let grid_cell = &self.grids[ind][origin[ind]..origin[ind] + 4];
-                            let interped = interp_inner::<T>(
-                                store[ind],
-                                grid_cell.try_into().unwrap(),
-                                x[ind],
-                                sat[ind],
-                                self.linearize_extrapolation,
-                            );
-
-                            store[j][p] = interped;
+                            store[j][p] = dot4(weights[ind], store[ind]);
                         }
                     }
                 }
@@ -325,15 +328,7 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         }
 
         // Interpolate the final value
-        let grid_cell = &self.grids[N - 1][origin[N - 1]..origin[N - 1] + 4];
-        let interped = interp_inner::<T>(
-            store[N - 1],
-            grid_cell.try_into().unwrap(),
-            x[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        );
-        Ok(interped)
+        Ok(dot4(weights[N - 1], store[N - 1]))
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -389,30 +384,29 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
     }
 }
 
-/// Calculate slopes and offsets & select evaluation method
+/// Calculate one-dimensional interpolation weights for a fixed grid cell.
+///
+/// For cases on the interior, use two slopes from a nonuniform-grid centered
+/// difference and two values as the Hermite boundary conditions.
+///
+/// For locations near an edge, take one centered difference for the inside
+/// derivative, then impose a natural spline boundary condition on the
+/// derivative at the edge, meaning the third derivative q'''(t) = 0 at the
+/// last grid point. This produces a quadratic in the last cell, reducing wobble
+/// that would be caused by enforcing the use of a cubic function where there is
+/// not enough information to support it.
+///
+/// The returned weights multiply the four local values directly. This keeps the
+/// same interpolant as the direct Hermite evaluation, but lets the N-dimensional
+/// reduction reuse the weights for every child group on the same axis.
 #[inline]
-fn interp_inner<T: Float>(
-    vals: [T; 4],
+fn interp_weights<T: Float>(
     grid_cell: &[T; 4],
     x: T,
     sat: Saturation,
     linearize_extrapolation: bool,
-) -> T {
-    // Construct some constants using generic methods
+) -> [T; 4] {
     let one = T::one();
-    let two = one + one;
-
-    // For cases on the interior, use two slopes (from centered difference) and two values
-    // as the BCs.
-    //
-    // For locations falling near and edge, take one centered
-    // difference for the inside derivative,
-    // then for the derivative at the edge, impose a natural
-    // spline constraint, meaning the third derivative q'''(t) = 0
-    // at the last grid point, which produces a quadratic in the
-    // last cell, reducing wobble that would be cause by enforcing
-    // the use of a cubic function where there is not enough information
-    // to support it.
 
     match sat {
         Saturation::None => {
@@ -420,116 +414,164 @@ fn interp_inner<T: Float>(
             // --|---|---|---|--
             //         x
             //
-            // This is the nominal case
-            let y0 = vals[1];
-            let dy = vals[2] - vals[1];
-
+            // This is the nominal case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[0], vals[1], vals[2], h01 / h12, T::one());
-            let k1 = centered_difference_nonuniform(vals[1], vals[2], vals[3], T::one(), h23 / h12);
-
             let t = (x - grid_cell[1]) / h12;
+            let [h00, h10, h01_basis, h11] = hermite_basis(t);
+            let k0 = centered_difference_weights(h01 / h12, one);
+            let k1 = centered_difference_weights(one, h23 / h12);
 
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            [
+                h10 * k0[0],
+                h00 + h10 * k0[1] + h11 * k1[0],
+                h01_basis + h10 * k0[2] + h11 * k1[1],
+                h11 * k1[2],
+            ]
         }
         Saturation::InsideLow => {
             //   t <-|
             // --|---|---|---|--
             //     x
             //
-            // Flip direction to maintain symmetry
-            // with the InsideHigh case.
-
-            let y0 = vals[1]; // Same starting point, opposite direction
-            let dy = vals[0] - vals[1];
-
+            // Flip direction to maintain symmetry with the InsideHigh case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 =
-                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
-            let k1 = two * dy - k0; // Natural spline boundary condition
-
             let t = -(x - grid_cell[1]) / h01;
 
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            low_weights(t, h12 / h01, false)
         }
         Saturation::OutsideLow => {
             //   t <-|
             // --|---|---|---|--
             // x
             //
-            // Flip direction to maintain symmetry
-            // with the InsideHigh case.
-
-            let y0 = vals[1];
-            let y1 = vals[0];
-            let dy = vals[0] - vals[1];
-
+            // Flip direction to maintain symmetry with the OutsideHigh case.
             let h01 = grid_cell[1] - grid_cell[0];
             let h12 = grid_cell[2] - grid_cell[1];
-            let k0 =
-                -centered_difference_nonuniform(vals[0], vals[1], vals[2], T::one(), h12 / h01);
-            let k1 = two * dy - k0; // Natural spline boundary condition
-
             let t = -(x - grid_cell[1]) / h01;
 
-            // If we are linearizing the interpolant under extrapolation,
-            // hold the last slope outside the grid
-            if linearize_extrapolation {
-                y1 + k1 * (t - one)
-            } else {
-                normalized_hermite_spline(t, y0, dy, k0, k1)
-            }
+            low_weights(t, h12 / h01, linearize_extrapolation)
         }
         Saturation::InsideHigh => {
             //           |-> t
             // --|---|---|---|--
             //             x
-            let y0 = vals[2];
-            let dy = vals[3] - vals[2];
-
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
-            let k1 = two * dy - k0; // Natural spline boundary condition
-
             let t = (x - grid_cell[2]) / h23;
 
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            high_weights(t, h12 / h23, false)
         }
         Saturation::OutsideHigh => {
             //           |-> t
             // --|---|---|---|--
             //                 x
-            let y0 = vals[2];
-            let y1 = vals[3];
-            let dy = vals[3] - vals[2];
-
             let h12 = grid_cell[2] - grid_cell[1];
             let h23 = grid_cell[3] - grid_cell[2];
-            let k0 = centered_difference_nonuniform(vals[1], vals[2], vals[3], h12 / h23, T::one());
-            let k1 = two * dy - k0; // Natural spline boundary condition
-
             let t = (x - grid_cell[2]) / h23;
 
-            // If we are linearizing the interpolant under extrapolation,
-            // hold the last slope outside the grid
-            if linearize_extrapolation {
-                y1 + k1 * (t - one)
-            } else {
-                normalized_hermite_spline(t, y0, dy, k0, k1)
-            }
+            high_weights(t, h12 / h23, linearize_extrapolation)
         }
     }
 }
 
+#[inline]
+fn low_weights<T: Float>(t: T, h12_over_h01: T, linearize_extrapolation: bool) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let k0 = centered_difference_weights(one, h12_over_h01);
+
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
+    if linearize_extrapolation {
+        let s = t - one;
+        [
+            one + s * (two + k0[0]),
+            s * (-two + k0[1]),
+            s * k0[2],
+            T::zero(),
+        ]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis(t);
+        let slope_factor = h11 - h10;
+        [
+            h01 + two * h11 + slope_factor * k0[0],
+            h00 - two * h11 + slope_factor * k0[1],
+            slope_factor * k0[2],
+            T::zero(),
+        ]
+    }
+}
+
+#[inline]
+fn high_weights<T: Float>(t: T, h12_over_h23: T, linearize_extrapolation: bool) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let k0 = centered_difference_weights(h12_over_h23, one);
+
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
+    if linearize_extrapolation {
+        let s = t - one;
+        [
+            T::zero(),
+            -s * k0[0],
+            s * (-two - k0[1]),
+            one + s * (two - k0[2]),
+        ]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis(t);
+        let slope_factor = h10 - h11;
+        [
+            T::zero(),
+            slope_factor * k0[0],
+            h00 - two * h11 + slope_factor * k0[1],
+            h01 + two * h11 + slope_factor * k0[2],
+        ]
+    }
+}
+
+/// Second-order central difference weights on a nonuniform grid per
+///
+/// A. E. P. Veldman and K. Rinzema, "Playing with nonuniform grids".
+/// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
+///
+/// Method B, which is essentially a distance-weighted average of the forward
+/// and backward differences s.t. the closer points have more influence on the
+/// derivative estimate.
+///
+/// The returned weights multiply `[y0, y1, y2]` and produce the same result as:
+///
+/// ```text
+/// a = h01 / (h01 + h12)
+/// b = (y2 - y1) / h12
+/// c = h12 / (h12 + h01)
+/// d = (y1 - y0) / h01
+/// derivative = a * b + c * d
+/// ```
+#[inline]
+fn centered_difference_weights<T: Float>(h01: T, h12: T) -> [T; 3] {
+    let denom = h01 + h12;
+    let a = h01 / denom;
+    let c = h12 / denom;
+
+    [-c / h01, mul_add(c, T::one() / h01, -a / h12), a / h12]
+}
+
 #[cfg(test)]
 mod test {
-    use super::interpn;
+    use super::{MulticubicRectilinear, interpn};
     use crate::testing::*;
     use crate::utils::*;
+
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-12,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
 
     /// Iterate from 1 to 8 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -582,6 +624,28 @@ mod test {
             interpn(&grids, &u, false, &xobsslice, &mut out[..]).unwrap();
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-10));
         }
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let x = [-1.0_f64, -0.2, 0.35, 1.4, 2.8, 4.0];
+        let grids = [&x[..]];
+        let vals: Vec<f64> = x
+            .iter()
+            .map(|&x| x * x * x - 0.5 * x * x + 2.0 * x)
+            .collect();
+        let interp = MulticubicRectilinear::new(&grids, &vals, true).unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-1.6]).unwrap(),
+            interp.interp_one([-2.2]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([4.0]).unwrap(),
+            interp.interp_one([4.7]).unwrap(),
+            interp.interp_one([5.4]).unwrap(),
+        ]);
     }
 
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition

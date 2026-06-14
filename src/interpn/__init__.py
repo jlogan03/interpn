@@ -23,6 +23,8 @@ if _PYDANTIC_FOUND:
     from .multilinear_rectilinear import MultilinearRectilinear
     from .multicubic_regular import MulticubicRegular
     from .multicubic_rectilinear import MulticubicRectilinear
+    from .multibspline_regular import MultiBsplineRegular
+    from .multibspline_rectilinear import MultiBsplineRectilinear
     from .nearest_regular import NearestRegular
     from .nearest_rectilinear import NearestRectilinear
 
@@ -43,6 +45,8 @@ if _PYDANTIC_FOUND:
         "MultilinearRectilinear",
         "MulticubicRegular",
         "MulticubicRectilinear",
+        "MultiBsplineRegular",
+        "MultiBsplineRectilinear",
         "NearestRegular",
         "NearestRectilinear",
     ]
@@ -76,7 +80,9 @@ def interpn(
         obs: Observation coordinates, one array per dimension.
         grids: Grid axis coordinates, one array per dimension.
         vals: Values defined on the full cartesian-product grid.
-        method: Interpolation kind, one of ``"linear"``, ``"cubic"``, or ``"nearest"``.
+        method: Interpolation kind, one of ``"linear"``, ``"cubic"``, or
+            ``"nearest"``. For B-spline interpolation, use
+            ``MultiBsplineRegular`` or ``MultiBsplineRectilinear``.
         out: Optional preallocated array that receives the result.
         linearize_extrapolation: Whether cubic extrapolation should fall back to
             linear behaviour outside the grid bounds.

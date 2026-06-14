@@ -90,11 +90,46 @@
 
 use num_traits::Float;
 
+pub(crate) mod interp_math;
+
+/// Returns `mul_lhs * mul_rhs + addend`.
+///
+/// When the `fma` feature is enabled this uses `Float::mul_add`; otherwise it
+/// falls back to the ordinary multiply-then-add expression.
+#[inline]
+pub(crate) fn mul_add<T>(mul_lhs: T, mul_rhs: T, addend: T) -> T
+where
+    T: Float,
+{
+    #[cfg(feature = "fma")]
+    {
+        mul_lhs.mul_add(mul_rhs, addend)
+    }
+    #[cfg(not(feature = "fma"))]
+    {
+        mul_lhs * mul_rhs + addend
+    }
+}
+
+#[cfg(test)]
+mod scalar_tests {
+    use super::mul_add;
+
+    #[test]
+    fn mul_add_matches_plain_expression() {
+        assert_eq!(mul_add(1.25_f64, -3.0, 0.5), 1.25 * -3.0 + 0.5);
+        assert_eq!(mul_add(1.25_f32, -3.0, 0.5), 1.25 * -3.0 + 0.5);
+    }
+}
+
 pub mod multilinear;
 pub use multilinear::{MultilinearRectilinear, MultilinearRegular};
 
 pub mod multicubic;
 pub use multicubic::{MulticubicRectilinear, MulticubicRegular};
+
+pub mod multibspline;
+pub use multibspline::{MultiBsplineRectilinear, MultiBsplineRegular};
 
 pub mod linear {
     pub use crate::multilinear::rectilinear;
@@ -134,7 +169,7 @@ pub(crate) mod testing;
 pub mod python;
 
 /// Interpolant function for multi-dimensional methods.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GridInterpMethod {
     /// Multi-linear interpolation.
     Linear,
@@ -156,6 +191,7 @@ pub enum GridKind {
 const MAXDIMS: usize = 8;
 const MAXDIMS_ERR: &str =
     "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.";
+#[cfg(feature = "par")]
 const MIN_CHUNK_SIZE: usize = 1024;
 
 /// The number of physical cores present on the machine;
@@ -215,6 +251,7 @@ static PHYSICAL_CORES: LazyLock<usize> = LazyLock::new(num_cpus::get_physical);
 ///                           by an amount exceeding the provided tolerance.
 /// * `max_threads`: If provided, limit number of threads used to at most this number. Otherwise,
 ///                use a heuristic to choose the number that will provide the best throughput.
+///
 #[cfg(feature = "par")]
 pub fn interpn<T: Float + Send + Sync>(
     grids: &[&[T]],
@@ -250,13 +287,8 @@ pub fn interpn<T: Float + Send + Sync>(
         // We also use a minimum chunk size of 1024 as a heuristic, because below that limit,
         // single-threaded performance is usually faster due to a combination of thread spawning overhead,
         // memory page sizing, and improved vectorization over larger inputs.
-        let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
-        let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
-        let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
-        let num_cores = match max_threads {
-            Some(num_cores_requested) => num_cores_requested.min(num_cores_available),
-            None => num_cores_available,
-        };
+        let num_cores = parallel_thread_count(max_threads);
+
         let chunk = MIN_CHUNK_SIZE.max(n / num_cores);
 
         // Make a shared error indicator
@@ -325,6 +357,21 @@ pub fn interpn<T: Float + Send + Sync>(
     }
 }
 
+/// Resolve the effective parallelism cap used by top-level threaded dispatch.
+///
+/// The caller-facing `max_threads` is clamped to at least one thread and no more
+/// than the smaller of Rayon worker count and physical core count.
+#[cfg(feature = "par")]
+fn parallel_thread_count(max_threads: Option<usize>) -> usize {
+    let num_cores_physical = *PHYSICAL_CORES; // Real cores, populated on first access
+    let num_cores_pool = rayon::current_num_threads(); // Available cores from rayon thread pool
+    let num_cores_available = num_cores_physical.min(num_cores_pool).max(1); // Real max
+    match max_threads {
+        Some(num_cores_requested) => num_cores_requested.max(1).min(num_cores_available),
+        None => num_cores_available,
+    }
+}
+
 /// Allocating variant of [interpn].
 /// It is recommended to pre-allocate outputs and use the non-allocating variant
 /// whenever possible.
@@ -364,6 +411,7 @@ pub fn interpn_alloc<T: Float + Send + Sync>(
 }
 
 /// Single-threaded, non-allocating variant of [interpn] available without `par` feature.
+///
 pub fn interpn_serial<T: Float>(
     grids: &[&[T]],
     vals: &[T],
@@ -382,62 +430,11 @@ pub fn interpn_serial<T: Float>(
     // Resolve grid kind, checking the grid if the kind is not provided by the user.
     let kind = resolve_grid_kind(assume_grid_kind, grids)?;
 
-    // Extract regular grid params
-    let get_regular_grid = || {
-        let mut dims = [0_usize; MAXDIMS];
-        let mut starts = [T::zero(); MAXDIMS];
-        let mut steps = [T::zero(); MAXDIMS];
-
-        for (i, grid) in grids.iter().enumerate() {
-            if grid.len() < 2 {
-                return Err("All grids must have at least two entries");
-            }
-            dims[i] = grid.len();
-            starts[i] = grid[0];
-            steps[i] = grid[1] - grid[0];
-        }
-
-        Ok((dims, starts, steps))
-    };
-
-    // Bounds checks for regular grid, if requested
-    let maybe_check_bounds_regular = |dims: &[usize], starts: &[T], steps: &[T], obs: &[&[T]]| {
-        if let Some(atol) = check_bounds_with_atol {
-            let mut bounds = [false; MAXDIMS];
-            let out = &mut bounds[..ndims];
-            multilinear::regular::check_bounds(
-                &dims[..ndims],
-                &starts[..ndims],
-                &steps[..ndims],
-                obs,
-                atol,
-                out,
-            )?;
-            if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.");
-            }
-        }
-        Ok(())
-    };
-
-    // Bounds checks for rectilinear grid, if requested
-    let maybe_check_bounds_rectilinear = |grids, obs| {
-        if let Some(atol) = check_bounds_with_atol {
-            let mut bounds = [false; MAXDIMS];
-            let out = &mut bounds[..ndims];
-            multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
-            if bounds.iter().any(|x| *x) {
-                return Err("At least one observation point is outside the grid.");
-            }
-        }
-        Ok(())
-    };
-
     // Select lower-level method
     match (method, kind) {
         (GridInterpMethod::Linear, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             linear::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -448,12 +445,12 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Linear, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             linear::rectilinear::interpn(grids, vals, obs, out)
         }
         (GridInterpMethod::Cubic, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             cubic::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -465,12 +462,12 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Cubic, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             cubic::rectilinear::interpn(grids, vals, linearize_extrapolation, obs, out)
         }
         (GridInterpMethod::Nearest, GridKind::Regular) => {
-            let (dims, starts, steps) = get_regular_grid()?;
-            maybe_check_bounds_regular(&dims, &starts, &steps, obs)?;
+            let (dims, starts, steps) = regular_grid_params(grids)?;
+            maybe_check_bounds_regular(&dims, &starts, &steps, obs, ndims, check_bounds_with_atol)?;
             nearest::regular::interpn(
                 &dims[..ndims],
                 &starts[..ndims],
@@ -481,10 +478,79 @@ pub fn interpn_serial<T: Float>(
             )
         }
         (GridInterpMethod::Nearest, GridKind::Rectilinear) => {
-            maybe_check_bounds_rectilinear(grids, obs)?;
+            maybe_check_bounds_rectilinear(grids, obs, ndims, check_bounds_with_atol)?;
             nearest::rectilinear::interpn(grids, vals, obs, out)
         }
     }
+}
+
+/// Extract regular-grid dimensions, starts, and steps from rectilinear-style
+/// grid slices.
+///
+/// This keeps top-level dispatch paths consistent while still allowing callers
+/// to pass grids in the same shape for all methods.
+fn regular_grid_params<T: Float>(
+    grids: &[&[T]],
+) -> Result<([usize; MAXDIMS], [T; MAXDIMS], [T; MAXDIMS]), &'static str> {
+    let mut dims = [0_usize; MAXDIMS];
+    let mut starts = [T::zero(); MAXDIMS];
+    let mut steps = [T::zero(); MAXDIMS];
+
+    for (i, grid) in grids.iter().enumerate() {
+        if grid.len() < 2 {
+            return Err("All grids must have at least two entries");
+        }
+        dims[i] = grid.len();
+        starts[i] = grid[0];
+        steps[i] = grid[1] - grid[0];
+    }
+
+    Ok((dims, starts, steps))
+}
+
+/// Run the optional top-level bounds check for regular-grid dispatch.
+fn maybe_check_bounds_regular<T: Float>(
+    dims: &[usize; MAXDIMS],
+    starts: &[T; MAXDIMS],
+    steps: &[T; MAXDIMS],
+    obs: &[&[T]],
+    ndims: usize,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    if let Some(atol) = check_bounds_with_atol {
+        let mut bounds = [false; MAXDIMS];
+        let out = &mut bounds[..ndims];
+        multilinear::regular::check_bounds(
+            &dims[..ndims],
+            &starts[..ndims],
+            &steps[..ndims],
+            obs,
+            atol,
+            out,
+        )?;
+        if bounds.iter().any(|x| *x) {
+            return Err("At least one observation point is outside the grid.");
+        }
+    }
+    Ok(())
+}
+
+/// Run the optional top-level bounds check for rectilinear-grid dispatch.
+fn maybe_check_bounds_rectilinear<T: Float>(
+    grids: &[&[T]],
+    obs: &[&[T]],
+    ndims: usize,
+    check_bounds_with_atol: Option<T>,
+) -> Result<(), &'static str> {
+    if let Some(atol) = check_bounds_with_atol {
+        let mut bounds = [false; MAXDIMS];
+        let out = &mut bounds[..ndims];
+        multilinear::rectilinear::check_bounds(grids, obs, atol, out)?;
+        if bounds.iter().any(|x| *x) {
+            return Err("At least one observation point is outside the grid.");
+        }
+    }
+    Ok(())
 }
 
 /// Figure out whether a grid is regular or rectilinear.

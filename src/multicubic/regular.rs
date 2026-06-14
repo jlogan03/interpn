@@ -30,8 +30,11 @@
 //! let linearize_extrapolation = false;
 //! regular::interpn_alloc(&dims, &starts, &steps, &z, linearize_extrapolation, &obs).unwrap();
 //! ```
-use super::{Saturation, normalized_hermite_spline};
-use crate::index_arr_fixed_dims;
+use super::Saturation;
+use crate::{
+    index_arr_fixed_dims,
+    interp_math::{dot4, hermite_basis},
+};
 use crunchy::unroll;
 use num_traits::{Float, NumCast};
 
@@ -264,7 +267,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         // and does not increase peak stack usage.
         let mut origin = [0_usize; N]; // Indices of lower corner of hypercube
         let mut sat = [Saturation::None; N]; // Saturation none/high/low flags for each dim
-        let mut dts = [T::zero(); N]; // Normalized coordinate storage
+        let mut weights = [[T::zero(); FP]; N];
         let mut dimprod = [1_usize; N];
         let mut loc = [0_usize; N];
         let mut store = [[T::zero(); FP]; N];
@@ -291,7 +294,8 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
                 + self.steps[i]
                     * <T as NumCast>::from(origin[i] + 1)
                         .ok_or("Unrepresentable coordinate value")?;
-            dts[i] = (x[i] - index_one_loc) / self.steps[i];
+            let t = (x[i] - index_one_loc) / self.steps[i];
+            weights[i] = interp_weights(t, sat[i], self.linearize_extrapolation);
         }
 
         // Recursive interpolation of one dependency tree at a time
@@ -325,14 +329,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
 
                         if level {
                             // const branch
-                            let interped = interp_inner::<T>(
-                                &store[ind],
-                                dts[ind],
-                                sat[ind],
-                                self.linearize_extrapolation,
-                            );
-
-                            store[j][p] = interped;
+                            store[j][p] = dot4(weights[ind], store[ind]);
                         }
                     }
                 }
@@ -366,13 +363,7 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
         }
 
         // Interpolate the final value
-        let interped = interp_inner::<T>(
-            &store[N - 1],
-            dts[N - 1],
-            sat[N - 1],
-            self.linearize_extrapolation,
-        );
-        Ok(interped)
+        Ok(dot4(weights[N - 1], store[N - 1]))
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -423,30 +414,23 @@ impl<'a, T: Float, const N: usize> MulticubicRegular<'a, T, N> {
     }
 }
 
-/// Calculate slopes and offsets & select evaluation method
+/// Calculate one-dimensional interpolation weights for a fixed regular-grid cell.
+///
+/// For cases on the interior, use two slopes from centered difference and two
+/// values as the Hermite boundary conditions.
+///
+/// For locations falling near an edge, take one centered difference for the
+/// inside derivative, then for the derivative at the edge, impose a natural
+/// spline constraint, meaning the third derivative q'''(t) = 0 at the last grid
+/// point. This produces a quadratic in the last cell, reducing wobble that
+/// would be caused by enforcing the use of a cubic function where there is not
+/// enough information to support it.
+///
+/// The returned weights multiply the four local values directly. This keeps the
+/// same interpolant as the direct Hermite evaluation, but lets the N-dimensional
+/// reduction reuse the weights for every child group on the same axis.
 #[inline]
-fn interp_inner<T: Float>(
-    vals: &[T; 4],
-    t: T,
-    sat: Saturation,
-    linearize_extrapolation: bool,
-) -> T {
-    // Construct some constants using generic methods
-    let one = T::one();
-    let two = one + one;
-
-    // For cases on the interior, use two slopes (from centered difference) and two values
-    // as the BCs.
-    //
-    // For locations falling near and edge, take one centered
-    // difference for the inside derivative,
-    // then for the derivative at the edge, impose a natural
-    // spline constraint, meaning the third derivative q'''(t) = 0
-    // at the last grid point, which produces a quadratic in the
-    // last cell, reducing wobble that would be cause by enforcing
-    // the use of a cubic function where there is not enough information
-    // to support it.
-
+fn interp_weights<T: Float>(t: T, sat: Saturation, linearize_extrapolation: bool) -> [T; 4] {
     match sat {
         Saturation::None => {
             //       |-> t
@@ -454,14 +438,9 @@ fn interp_inner<T: Float>(
             //         x
             //
             // This is the nominal case
-            let y0 = vals[1];
-            let dy = vals[2] - vals[1];
-
-            // Take slopes from centered difference
-            let k0 = (vals[2] - vals[0]) / two;
-            let k1 = (vals[3] - vals[1]) / two;
-
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            let [h00, h10, h01, h11] = hermite_basis(t);
+            let two = T::one() + T::one();
+            [-h10 / two, h00 - h11 / two, h01 + h10 / two, h11 / two]
         }
         Saturation::InsideLow => {
             //   t <-|
@@ -470,18 +449,8 @@ fn interp_inner<T: Float>(
             //
             // Flip direction to maintain symmetry
             // with the InsideHigh case
-            let t = -t; // `t` always w.r.t. index 1 of cube
-            let y0 = vals[1]; // Same starting point, opposite direction
-            let dy = vals[0] - vals[1];
-
-            let k0 = -(vals[2] - vals[0]) / two;
-
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
-
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            let t = -t; // `t` is initially w.r.t. index 1 of cube
+            low_weights(t, false)
         }
         Saturation::OutsideLow => {
             //   t <-|
@@ -490,32 +459,8 @@ fn interp_inner<T: Float>(
             //
             // Flip direction to maintain symmetry
             // with the InsideHigh case
-            let t = -t; // `t` always w.r.t. index 1 of cube
-            let y0 = vals[1]; // Same starting point, opposite direction
-            let y1 = vals[0];
-            let dy = vals[0] - vals[1];
-
-            let k0 = -(vals[2] - vals[0]) / two;
-
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
-
-            // If we are linearizing the interpolant under extrapolation,
-            // hold the last slope outside the grid
-            if linearize_extrapolation {
-                #[cfg(not(feature = "fma"))]
-                {
-                    y1 + k1 * (t - one)
-                }
-                #[cfg(feature = "fma")]
-                {
-                    k1.mul_add(t - one, y1)
-                }
-            } else {
-                normalized_hermite_spline(t, y0, dy, k0, k1)
-            }
+            let t = -t; // `t` is initially w.r.t. index 1 of cube
+            low_weights(t, linearize_extrapolation)
         }
         Saturation::InsideHigh => {
             //           |-> t
@@ -525,18 +470,8 @@ fn interp_inner<T: Float>(
             // Shift cell up an index
             // and offset `t`, which has value between 1 and 2
             // because it is calculated w.r.t. index 1
-            let t = t - one;
-            let y0 = vals[2];
-            let dy = vals[3] - vals[2];
-
-            let k0 = (vals[3] - vals[1]) / two;
-
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
-
-            normalized_hermite_spline(t, y0, dy, k0, k1)
+            let t = t - T::one();
+            high_weights(t, false)
         }
         Saturation::OutsideHigh => {
             //           |-> t
@@ -546,40 +481,65 @@ fn interp_inner<T: Float>(
             // Shift cell up an index
             // and offset `t`, which has value between 1 and 2
             // because it is calculated w.r.t. index 1
-            let t = t - one;
-            let y0 = vals[2];
-            let y1 = vals[3];
-            let dy = vals[3] - vals[2];
-
-            let k0 = (vals[3] - vals[1]) / two;
-
-            #[cfg(not(feature = "fma"))]
-            let k1 = two * dy - k0; // Natural spline boundary condition
-            #[cfg(feature = "fma")]
-            let k1 = two.mul_add(dy, -k0); // Natural spline boundary condition
-
-            // If we are linearizing the interpolant under extrapolation,
-            // hold the last slope outside the grid
-            if linearize_extrapolation {
-                #[cfg(not(feature = "fma"))]
-                {
-                    y1 + k1 * (t - one)
-                }
-                #[cfg(feature = "fma")]
-                {
-                    k1.mul_add(t - one, y1)
-                }
-            } else {
-                normalized_hermite_spline(t, y0, dy, k0, k1)
-            }
+            let t = t - T::one();
+            high_weights(t, linearize_extrapolation)
         }
+    }
+}
+
+#[inline]
+fn low_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
+    if linearize_extrapolation {
+        let s = t - one;
+        [one + s * (one + one / two), -two * s, s / two, T::zero()]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis(t);
+        [
+            h01 + h10 / two + (one + one / two) * h11,
+            h00 - two * h11,
+            (h11 - h10) / two,
+            T::zero(),
+        ]
+    }
+}
+
+#[inline]
+fn high_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+
+    // If we are linearizing the interpolant under extrapolation, hold the last
+    // slope outside the grid. Otherwise, continue the natural-boundary spline.
+    if linearize_extrapolation {
+        let s = t - one;
+        [T::zero(), s / two, -two * s, one + s * (one + one / two)]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis(t);
+        [
+            T::zero(),
+            (h11 - h10) / two,
+            h00 - two * h11,
+            h01 + h10 / two + (one + one / two) * h11,
+        ]
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::interpn;
+    use super::{MulticubicRegular, interpn};
     use crate::utils::*;
+
+    fn assert_linear_extrapolation(values: [f64; 3]) {
+        assert!(
+            (values[2] - 2.0 * values[1] + values[0]).abs() < 1e-12,
+            "extrapolated values are not linear: {values:?}"
+        );
+    }
 
     /// Iterate from 1 to 6 dimensions, making a minimum-sized grid for each one
     /// to traverse every combination of interpolating or extrapolating high or low on each dimension.
@@ -627,6 +587,31 @@ mod test {
             // and do not do well under a check on relative difference.
             (0..uobs.len()).for_each(|i| assert!((out[i] - uobs[i]).abs() < 1e-12));
         }
+    }
+
+    #[test]
+    fn test_linearized_extrapolation_is_linear_outside_grid() {
+        let dims = [6_usize];
+        let starts = [0.0_f64];
+        let steps = [1.0_f64];
+        let vals: Vec<f64> = (0..dims[0])
+            .map(|i| {
+                let x = i as f64;
+                x * x * x - 0.5 * x * x + 2.0 * x
+            })
+            .collect();
+        let interp = MulticubicRegular::new(dims, starts, steps, &vals, true).unwrap();
+
+        assert_linear_extrapolation([
+            interp.interp_one([0.0]).unwrap(),
+            interp.interp_one([-1.0]).unwrap(),
+            interp.interp_one([-2.0]).unwrap(),
+        ]);
+        assert_linear_extrapolation([
+            interp.interp_one([5.0]).unwrap(),
+            interp.interp_one([6.0]).unwrap(),
+            interp.interp_one([7.0]).unwrap(),
+        ]);
     }
 
     /// Under both interpolation and extrapolation, a hermite spline with natural boundary condition

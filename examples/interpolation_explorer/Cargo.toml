@@ -1,0 +1,16 @@
+[workspace]
+
+[package]
+name = "interpolation_explorer"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+interpn = { path = "../..", default-features = false, features = ["std"] }
+
+plotly = "0.14.1"
+
+leptos = { version = "0.8.17", default-features = false, features = ["csr"] }
+console_error_panic_hook = "0.1.7"
+wasm-bindgen-futures = "0.4.55"

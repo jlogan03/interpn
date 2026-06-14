@@ -46,6 +46,8 @@
 //!     but can tolerate some discontinuity in the second derivative
 use num_traits::Float;
 
+use crate::mul_add;
+
 pub mod rectilinear;
 pub mod regular;
 
@@ -64,6 +66,7 @@ pub(crate) enum Saturation {
 /// Evaluate a hermite spline function on an interval from x0 to x1,
 /// with imposed slopes k0 and k1 at the endpoints, and normalized
 /// coordinate t = (x - x0) / (x1 - x0).
+#[allow(dead_code)]
 #[inline]
 pub(crate) fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1: T) -> T {
     // `a` and `b` are the difference between this function and a linear one going
@@ -76,38 +79,5 @@ pub(crate) fn normalized_hermite_spline<T: Float>(t: T, y0: T, dy: T, k0: T, k1:
     let c3 = a - b;
 
     // Horner's method
-    #[cfg(not(feature = "fma"))]
-    {
-        y0 + t * (c1 + t * (c2 + t * c3))
-    }
-    #[cfg(feature = "fma")]
-    {
-        c3.mul_add(t, c2).mul_add(t, c1).mul_add(t, y0)
-    }
-}
-
-/// Second-order central difference on non-uniform grid per
-///
-/// A. E. P. Veldman and K. Rinzema, “Playing with nonuniform grids”.
-/// https://pure.rug.nl/ws/portalfiles/portal/3332271/1992JEngMathVeldman.pdf
-///
-/// Method B,
-/// which is essentially a distance-weighted average of the forward and backward
-/// differences s.t. the closer points have more influence on the estimate
-/// of the derivative.
-#[inline]
-pub(crate) fn centered_difference_nonuniform<T: Float>(y0: T, y1: T, y2: T, h01: T, h12: T) -> T {
-    let a = h01 / (h01 + h12);
-    let b = (y2 - y1) / h12;
-    let c = h12 / (h12 + h01);
-    let d = (y1 - y0) / h01;
-
-    #[cfg(not(feature = "fma"))]
-    {
-        a * b + c * d
-    }
-    #[cfg(feature = "fma")]
-    {
-        a.mul_add(b, c * d)
-    }
+    mul_add(mul_add(mul_add(c3, t, c2), t, c1), t, y0)
 }

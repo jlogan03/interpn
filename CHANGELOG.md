@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.1 2026-06-13
+
+### Changed
+
+* Extract Hermite node weights from eval loop for cubic methods
+  * 3x asymptotic speedup for large data; modest improvement in latency
+* Use inlined helper function for FMA feature switching
+
+### Added
+
+* Add B-spline methods for regular and rectilinear grids
+  * Tridiagonal coeff solve using preallocated scratch space, optionally parallelized
+  * Use same BCs as Hermite methods (zero third derivative) for reduced ringing and graceful transition to linearized extrapolation
+
 ## 0.11.0 2026-01-15
 
 ### Changed

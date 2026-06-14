@@ -36,18 +36,19 @@ test = [
     "pyright == 1.1.407",
     "mktestdocs == 0.2.1",
     "scipy >= 1.11.4",
+    # More kaleido>1 crashes when used with plotly
     "kaleido==0.2.1",
-    "plotly>=5,<6",
+    "plotly>=6,<7",
 ]
 bench = [
     "scipy >= 1.11.4",
     "kaleido==0.2.1",
-    "plotly>=5,<6",
+    "plotly>=6,<7",
     "memory_profiler >= 0.61.0",
 ]
 doc = [
     "mkdocs >= 1.5.3",
-    "mkdocstrings-python >= 1.7.5",
+    "mkdocstrings-python >= 2.0.3",
     "mkdocs-material >= 9.4.10"
 ]
 
@@ -56,7 +57,7 @@ cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
     { file = ".cargo/config.toml" },
-    { file = "**/*.rs" },
+    { file = "src/**/*.rs" },
     { file = "scripts/pgo-profiles/interpn.profdata" },
     { env = "RUSTFLAGS" },
 ]

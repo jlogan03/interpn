@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from interpn import (
+    MultiBsplineRegular,
+    MultiBsplineRectilinear,
     MultilinearRectilinear,
     MultilinearRegular,
     MulticubicRegular,
@@ -30,6 +32,12 @@ RUN_INTERPN_ONLY = os.environ.get("INTERPNPY_INTERPN_ONLY", "").lower() in {
 
 TARGET_SAMPLE_SECONDS = 2.0
 MAX_TIMER_LOOPS = 1_000_000_000
+MULTIBSPLINE_LABEL = "InterpN MultiBsplineRegular"
+MULTIBSPLINE_RECTILINEAR_LABEL = "InterpN MultiBsplineRectilinear"
+MULTICUBIC_LABELS = {
+    "InterpN MulticubicRegular",
+    "InterpN MulticubicRectilinear",
+}
 
 
 def average_call_time(
@@ -56,10 +64,31 @@ THREAD_SPEEDUP_COLORS = {
     "cubic": "#ff7f0e",
     "nearest": "#2ca02c",
 }
+THREAD_SPEEDUP_METHODS = ["linear", "cubic", "nearest"]
 
 
 def _normalized_line_style(index: int) -> str:
     return DASH_STYLES[index % len(DASH_STYLES)]
+
+
+def _normalized_legend_name(label: str) -> str:
+    if label.startswith("Scipy RegularGridInterpolator"):
+        return "Scipy"
+    if label in MULTICUBIC_LABELS:
+        return "InterpN Cubic"
+    if label in {MULTIBSPLINE_LABEL, MULTIBSPLINE_RECTILINEAR_LABEL}:
+        return "InterpN B-Spline"
+    if label.startswith("InterpN"):
+        return "InterpN"
+    return label
+
+
+def _regular_fill_candidate(name: str, kind: str) -> bool:
+    if kind == "Linear":
+        return name == "InterpN MultilinearRegular"
+    if kind == "Cubic":
+        return name in {"InterpN MulticubicRegular", MULTIBSPLINE_LABEL}
+    return False
 
 
 def fill_between(
@@ -116,7 +145,7 @@ def _plot_normalized_vs_nobs(
             x_vals = np.array(ns[:min_len])
             ratios = values[:min_len] / baseline_arr[:min_len]
             is_baseline = label.startswith("Scipy RegularGridInterpolator")
-            legend_name = "Scipy" if is_baseline else "InterpN"
+            legend_name = _normalized_legend_name(label)
             showlegend = True
             for trace in fig.data:
                 if trace.name == legend_name:
@@ -237,20 +266,21 @@ def _plot_throughput_vs_dims(
         interpn_series = [
             values
             for name, values in throughputs.items()
-            if name.startswith("InterpN") and f"Multi{kind.lower()}" in name and values
+            if _regular_fill_candidate(name, kind) and values
         ]
 
-        v = max(interpn_series, key=lambda vals: vals[-1])
-
-        baseline_norm = np.array(baseline_vals) / max_throughput
-        fill_between(
-            fig,
-            x=np.array(ndims_to_test),
-            upper=np.array(v) / max_throughput,
-            lower=baseline_norm,
-            row=row,
-            col=1,
-        )
+        if baseline_vals and interpn_series:
+            v = max(interpn_series, key=lambda vals: vals[-1])
+            fill_len = min(len(v), len(baseline_vals), len(ndims_to_test))
+            baseline_norm = np.array(baseline_vals[:fill_len]) / max_throughput
+            fill_between(
+                fig,
+                x=np.array(ndims_to_test[:fill_len]),
+                upper=np.array(v[:fill_len]) / max_throughput,
+                lower=baseline_norm,
+                row=row,
+                col=1,
+            )
 
         # Lines
         for idx, (label, values) in enumerate(series):
@@ -269,7 +299,7 @@ def _plot_throughput_vs_dims(
                     line=dict(color="black", width=2, dash=_normalized_line_style(idx)),
                     marker=dict(symbol="square" if is_baseline else "circle", size=8),
                     opacity=1.0 if is_baseline else 1.0,
-                    name=label,
+                    name=_normalized_legend_name(label),
                     showlegend=True,
                     legendgroup=kind,
                     legendgrouptitle_text=kind,
@@ -391,12 +421,10 @@ def _plot_speedup_vs_dims(
                     x=x_vals,
                     y=speedup,
                     mode="lines",
-                    line=dict(color="black", width=3),
+                    line=dict(color="black", width=3, dash=_normalized_line_style(idx)),
                     marker=dict(symbol="circle", size=8),
-                    name=name,
-                    showlegend=False,
-                    # legendgroup=kind,
-                    # legendgrouptitle_text=kind,
+                    name=_normalized_legend_name(name),
+                    showlegend=True,
                 ),
                 row=1,
                 col=1,
@@ -450,14 +478,14 @@ def _plot_speedup_vs_dims(
                 yanchor="top",
             ),
             height=450,
-            margin=dict(t=60, l=60, r=20, b=90),
-            # legend=dict(
-            #     orientation="v",
-            #     yanchor="top",
-            #     y=1.0,
-            #     x=1.02,
-            #     xanchor="left",
-            # ),
+            margin=dict(t=60, l=60, r=220, b=90),
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1.0,
+                x=1.02,
+                xanchor="left",
+            ),
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
             font=dict(color="black"),
@@ -476,10 +504,11 @@ def _thread_counts() -> list[int]:
     max_threads = os.cpu_count() or 1
     max_threads = max(int(max_threads / 2), 1)  # Real threads, not hyperthreads
     counts = []
-    threads = 1
-    while threads < max_threads:
+    for exponent in range(max_threads.bit_length()):
+        threads = 1 << exponent
+        if threads >= max_threads:
+            break
         counts.append(threads)
-        threads *= 2
     counts.append(max_threads)
     return sorted(set(counts))
 
@@ -493,21 +522,20 @@ def _plot_speedup_vs_threads(
 ) -> None:
     fig = make_subplots(rows=1, cols=1)
     dash_styles = [
-        _normalized_line_style(i)
-        for i in range(len(["linear", "cubic", "nearest"]) * 2)
+        _normalized_line_style(i) for i in range(len(THREAD_SPEEDUP_METHODS) * 2)
     ]
     all_values = []
     thread_arr = np.array(thread_counts)
-    series: list[tuple[str, np.ndarray]] = []
+    series: list[tuple[str, str, np.ndarray]] = []
     for grid_kind in ["regular", "rectilinear"]:
-        for method in ["linear", "cubic", "nearest"]:
+        for method in THREAD_SPEEDUP_METHODS:
             values = speedups[grid_kind].get(method)
             if not values:
                 continue
             values_arr = np.array(values, dtype=float)
             all_values.append(values_arr)
-            series.append((f"{method.title()} {grid_kind}", values_arr))
-    for _, values_arr in series:
+            series.append((f"{method.title()} {grid_kind}", method, values_arr))
+    for _, _, values_arr in series:
         ones = np.ones_like(values_arr)
         fill_between(
             fig,
@@ -518,7 +546,7 @@ def _plot_speedup_vs_threads(
             col=1,
             fillcolor="rgba(139, 196, 59, 0.25)",
         )
-    for idx, (label, values_arr) in enumerate(series):
+    for idx, (label, method, values_arr) in enumerate(series):
         fig.add_trace(
             go.Scatter(
                 x=thread_arr,
@@ -526,12 +554,12 @@ def _plot_speedup_vs_threads(
                 mode="lines+markers",
                 name=label,
                 line=dict(
-                    color="black",
+                    color=THREAD_SPEEDUP_COLORS[method],
                     width=2,
                     dash=dash_styles[idx],
                 ),
-                marker=dict(size=7, color="black"),
-                showlegend=False,
+                marker=dict(size=7, color=THREAD_SPEEDUP_COLORS[method]),
+                showlegend=True,
             ),
             row=1,
             col=1,
@@ -582,8 +610,15 @@ def _plot_speedup_vs_threads(
             yanchor="top",
         ),
         height=430,
-        margin=dict(t=70, l=60, r=40, b=80),
-        showlegend=False,
+        margin=dict(t=70, l=60, r=170, b=80),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            x=1.02,
+            xanchor="left",
+        ),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="black"),
@@ -633,7 +668,7 @@ def bench_thread_speedup_vs_threads():
             )
         out = np.zeros_like(obs[0])
 
-        for method in ["linear", "cubic", "nearest"]:
+        for method in THREAD_SPEEDUP_METHODS:
             timings = []
             for threads in thread_counts:
                 timed = average_call_time(
@@ -699,6 +734,12 @@ def bench_4_dims_1_obs():
     cubic_regular_interpn = MulticubicRegular.new(
         dims, starts, steps, zgrid, linearize_extrapolation=True
     )
+    bspline_regular_interpn = MultiBsplineRegular.new(
+        dims, starts, steps, zgrid, linearize_extrapolation=True
+    )
+    bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+        grids, zgrid, linearize_extrapolation=True
+    )
     cubic_rectilinear_interpn = MulticubicRectilinear.new(
         grids, zgrid, linearize_extrapolation=True
     )
@@ -712,6 +753,10 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": lambda p: regular_interpn.eval(p, out),
         "InterpN MultilinearRectilinear": lambda p: rectilinear_interpn.eval(p, out),
         "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(p, out),
+        MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+        MULTIBSPLINE_RECTILINEAR_LABEL: lambda p: bspline_rectilinear_interpn.eval(
+            p, out
+        ),
         "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
             p, out
         ),
@@ -731,6 +776,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": points_interpn,
         "InterpN MultilinearRectilinear": points_interpn,
         "InterpN MulticubicRegular": points_interpn,
+        MULTIBSPLINE_LABEL: points_interpn,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
         "InterpN MulticubicRectilinear": points_interpn,
         "InterpN NearestRegular": points_interpn,
         "InterpN NearestRectilinear": points_interpn,
@@ -761,6 +808,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": points_interpn1,
         "InterpN MultilinearRectilinear": points_interpn1,
         "InterpN MulticubicRegular": points_interpn1,
+        MULTIBSPLINE_LABEL: points_interpn1,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn1,
         "InterpN MulticubicRectilinear": points_interpn1,
         "InterpN NearestRegular": points_interpn1,
         "InterpN NearestRectilinear": points_interpn1,
@@ -791,6 +840,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": points_interpn2,
         "InterpN MultilinearRectilinear": points_interpn2,
         "InterpN MulticubicRegular": points_interpn2,
+        MULTIBSPLINE_LABEL: points_interpn2,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn2,
         "InterpN MulticubicRectilinear": points_interpn2,
         "InterpN NearestRegular": points_interpn2,
         "InterpN NearestRectilinear": points_interpn2,
@@ -824,6 +875,8 @@ def bench_4_dims_1_obs():
         "InterpN MultilinearRegular": points_interpn3,
         "InterpN MultilinearRectilinear": points_interpn3,
         "InterpN MulticubicRegular": points_interpn3,
+        MULTIBSPLINE_LABEL: points_interpn3,
+        MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn3,
         "InterpN MulticubicRectilinear": points_interpn3,
         "InterpN NearestRegular": points_interpn3,
         "InterpN NearestRectilinear": points_interpn3,
@@ -871,6 +924,12 @@ def bench_3_dims_n_obs_unordered():
         cubic_regular_interpn = MulticubicRegular.new(
             dims, starts, steps, zgrid, linearize_extrapolation=True
         )
+        bspline_regular_interpn = MultiBsplineRegular.new(
+            dims, starts, steps, zgrid, linearize_extrapolation=True
+        )
+        bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
@@ -883,6 +942,8 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRegular": [],
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
+            MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -921,6 +982,10 @@ def bench_3_dims_n_obs_unordered():
                 "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(
                     p, out
                 ),
+                MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p: bspline_rectilinear_interpn.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
@@ -941,6 +1006,8 @@ def bench_3_dims_n_obs_unordered():
                 "InterpN MultilinearRegular": points_interpn,
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
+                MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -962,6 +1029,8 @@ def bench_3_dims_n_obs_unordered():
             "InterpN MultilinearRegular": "Linear",
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
+            MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",
@@ -1011,6 +1080,12 @@ def bench_4_dims_n_obs_unordered():
         cubic_regular_interpn = MulticubicRegular.new(
             dims, starts, steps, zgrid, linearize_extrapolation=True
         )
+        bspline_regular_interpn = MultiBsplineRegular.new(
+            dims, starts, steps, zgrid, linearize_extrapolation=True
+        )
+        bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+            grids, zgrid, linearize_extrapolation=True
+        )
         cubic_rectilinear_interpn = MulticubicRectilinear.new(
             grids, zgrid, linearize_extrapolation=True
         )
@@ -1023,6 +1098,8 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRegular": [],
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
+            MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -1059,6 +1136,10 @@ def bench_4_dims_n_obs_unordered():
                 "InterpN MulticubicRegular": lambda p: cubic_regular_interpn.eval(
                     p, out
                 ),
+                MULTIBSPLINE_LABEL: lambda p: bspline_regular_interpn.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p: bspline_rectilinear_interpn.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": lambda p: cubic_rectilinear_interpn.eval(
                     p, out
                 ),
@@ -1079,6 +1160,8 @@ def bench_4_dims_n_obs_unordered():
                 "InterpN MultilinearRegular": points_interpn,
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
+                MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -1098,6 +1181,8 @@ def bench_4_dims_n_obs_unordered():
             "InterpN MultilinearRegular": "Linear",
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
+            MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",
@@ -1129,6 +1214,8 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRegular": [],
             "InterpN MultilinearRectilinear": [],
             "InterpN MulticubicRegular": [],
+            MULTIBSPLINE_LABEL: [],
+            MULTIBSPLINE_RECTILINEAR_LABEL: [],
             "InterpN MulticubicRectilinear": [],
             "InterpN NearestRegular": [],
             "InterpN NearestRectilinear": [],
@@ -1158,6 +1245,12 @@ def bench_throughput_vs_dims():
             regular_interpn = MultilinearRegular.new(dims, starts, steps, zgrid)
             cubic_regular_interpn = MulticubicRegular.new(
                 dims, starts, steps, zgrid, linearize_extrapolation=True
+            )
+            bspline_regular_interpn = MultiBsplineRegular.new(
+                dims, starts, steps, zgrid, linearize_extrapolation=True
+            )
+            bspline_rectilinear_interpn = MultiBsplineRectilinear.new(
+                grids, zgrid, linearize_extrapolation=True
             )
             cubic_rectilinear_interpn = MulticubicRectilinear.new(
                 grids, zgrid, linearize_extrapolation=True
@@ -1190,6 +1283,11 @@ def bench_throughput_vs_dims():
                 ),
                 "InterpN MulticubicRegular": lambda p,
                 interp=cubic_regular_interpn: interp.eval(p, out),
+                MULTIBSPLINE_LABEL: lambda p,
+                interp=bspline_regular_interpn: interp.eval(p, out),
+                MULTIBSPLINE_RECTILINEAR_LABEL: (
+                    lambda p, interp=bspline_rectilinear_interpn: interp.eval(p, out)
+                ),
                 "InterpN MulticubicRectilinear": (
                     lambda p, interp=cubic_rectilinear_interpn: interp.eval(p, out)
                 ),
@@ -1221,6 +1319,8 @@ def bench_throughput_vs_dims():
                 "InterpN MultilinearRegular": points_interpn,
                 "InterpN MultilinearRectilinear": points_interpn,
                 "InterpN MulticubicRegular": points_interpn,
+                MULTIBSPLINE_LABEL: points_interpn,
+                MULTIBSPLINE_RECTILINEAR_LABEL: points_interpn,
                 "InterpN MulticubicRectilinear": points_interpn,
                 "InterpN NearestRegular": points_interpn,
                 "InterpN NearestRectilinear": points_interpn,
@@ -1246,6 +1346,8 @@ def bench_throughput_vs_dims():
             "InterpN MultilinearRegular": "Linear",
             "InterpN MultilinearRectilinear": "Linear",
             "InterpN MulticubicRegular": "Cubic",
+            MULTIBSPLINE_LABEL: "Cubic",
+            MULTIBSPLINE_RECTILINEAR_LABEL: "Cubic",
             "InterpN MulticubicRectilinear": "Cubic",
             "InterpN NearestRegular": "Linear",
             "InterpN NearestRectilinear": "Linear",

@@ -16,7 +16,8 @@ Available as a rust crate and python library.
 |-----------------------------------|-----------------|---------------------|-----------------------| ------------------ |
 | Nearest-Neighbor                  |   ✅            |     ✅              | ✅                    | ✅                 |
 | Linear                            |   ✅            |     ✅              | ✅                    | ✅                 |
-| Cubic                             |   ✅            |     ✅              | ✅                    | ✅                 |
+| Cubic Hermite                     |   ✅            |     ✅              | ✅                    | ✅                 |
+| Cubic B-spline                    |   ✅            |     ✅              | ✅                    | ✅                 |
 
 The methods provided here, while more limited in scope than scipy's,
 

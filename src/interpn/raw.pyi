@@ -25,6 +25,10 @@ __all__ = [
     "interpn_cubic_regular_f32",
     "interpn_cubic_rectilinear_f64",
     "interpn_cubic_rectilinear_f32",
+    "coefficients_bspline_regular_f64",
+    "coefficients_bspline_regular_f32",
+    "coefficients_bspline_rectilinear_f64",
+    "coefficients_bspline_rectilinear_f32",
     "check_bounds_regular_f64",
     "check_bounds_regular_f32",
     "check_bounds_rectilinear_f64",
@@ -140,6 +144,30 @@ def interpn_cubic_rectilinear_f32(
     linearize_extrapolation: bool,
     obs: Sequence[NDArrayF32],
     out: NDArrayF32,
+) -> None: ...
+def coefficients_bspline_regular_f64(
+    dims: IntArray,
+    vals: NDArrayF64,
+    coeffs: NDArrayF64,
+    scratch: NDArrayF64,
+) -> None: ...
+def coefficients_bspline_regular_f32(
+    dims: IntArray,
+    vals: NDArrayF32,
+    coeffs: NDArrayF32,
+    scratch: NDArrayF32,
+) -> None: ...
+def coefficients_bspline_rectilinear_f64(
+    grids: Sequence[NDArrayF64],
+    vals: NDArrayF64,
+    coeffs: NDArrayF64,
+    scratch: NDArrayF64,
+) -> None: ...
+def coefficients_bspline_rectilinear_f32(
+    grids: Sequence[NDArrayF32],
+    vals: NDArrayF32,
+    coeffs: NDArrayF32,
+    scratch: NDArrayF32,
 ) -> None: ...
 def check_bounds_regular_f64(
     dims: IntArray,

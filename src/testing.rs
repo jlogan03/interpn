@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 use rand::SeedableRng;
 use rand::distr::StandardUniform;
 use rand::rngs::StdRng;
