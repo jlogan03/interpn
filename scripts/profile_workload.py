@@ -82,8 +82,6 @@ def main() -> None:
                 ("linear", "rectilinear", grids_rect),
                 ("cubic", "regular", grids),
                 ("cubic", "rectilinear", grids_rect),
-                ("bspline", "regular", grids),
-                ("bspline", "rectilinear", grids_rect),
                 ("nearest", "regular", grids),
                 ("nearest", "rectilinear", grids_rect),
             )
@@ -93,11 +91,6 @@ def main() -> None:
 
                 for max_threads in (None, 1):
                     for method, grid_kind, grids_in in cases:
-                        # B-spline method has to do the fitting solve,
-                        # so it's much slower than the others.
-                        if method == "bspline":
-                            nreps = max(nreps / 100, 1)
-
                         for _ in range(nreps):
                             points = _observation_points(rng, ndims, nobs, dtype)
                             _evaluate(
