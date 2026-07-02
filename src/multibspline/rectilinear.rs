@@ -304,6 +304,29 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         Ok(())
     }
 
+    /// Evaluate the gradient on a contiguous list of observation points.
+    ///
+    /// `out[j][i]` is the derivative of observation `i` with respect to axis `j`.
+    pub fn interp_grad(&self, x: &[&[T]; N], out: &mut [&mut [T]; N]) -> Result<(), &'static str> {
+        let n = out[0].len();
+        for i in 0..N {
+            if x[i].len() != n || out[i].len() != n {
+                return Err("Dimension mismatch");
+            }
+        }
+
+        let mut tmp = [T::zero(); N];
+        for i in 0..n {
+            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            let grad = self.interp_one_grad(tmp)?;
+            for j in 0..N {
+                out[j][i] = grad[j];
+            }
+        }
+
+        Ok(())
+    }
+
     /// Interpolate the value at one point.
     pub fn interp_one(&self, x: [T; N]) -> Result<T, &'static str> {
         let mut origin = [0_usize; N];
@@ -382,6 +405,131 @@ impl<'a, T: Float, const N: usize> MultiBsplineRectilinear<'a, T, N> {
         }
 
         Ok(dot4(weights[N - 1], store[N - 1]))
+    }
+
+    /// Evaluate the gradient at one point.
+    ///
+    /// Uses fixed-size intermediate storage and no allocation.
+    pub fn interp_one_grad(&self, x: [T; N]) -> Result<[T; N], &'static str> {
+        let mut origin = [0_usize; N];
+        let mut span = [0_usize; N];
+        let mut sat = [Saturation::None; N];
+        let mut weights = [[T::zero(); FP]; N];
+        let mut dweights = [[T::zero(); FP]; N];
+        let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
+        let mut grad_store = [[[T::zero(); N]; FP]; N];
+
+        populate_dimprod(self.dims, &mut dimprod);
+
+        for i in 0..N {
+            (origin[i], span[i], sat[i]) = self.get_loc(x[i], i);
+            weights[i] = interp_weights(
+                self.grids[i],
+                span[i],
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+                self.low_ghost_coeffs[i],
+                self.high_ghost_coeffs[i],
+            );
+            dweights[i] = interp_weight_derivatives(
+                self.grids[i],
+                span[i],
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+                self.low_ghost_coeffs[i],
+                self.high_ghost_coeffs[i],
+            );
+        }
+
+        let nverts = const { FP.pow(N as u32) };
+
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
+                for j in 0..N {
+                    if j == 0 {
+                        for k in 0..N {
+                            let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
+                            loc[k] = origin[k] + offset;
+                        }
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.coeffs);
+                    } else {
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
+                        let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
+                        let ind: usize = j.saturating_sub(1);
+
+                        if level {
+                            store[j][p] = dot4(weights[ind], store[ind]);
+                            for k in 0..N {
+                                grad_store[j][p][k] = if k == ind {
+                                    dot4(dweights[ind], store[ind])
+                                } else {
+                                    dot4(
+                                        weights[ind],
+                                        [
+                                            grad_store[ind][0][k],
+                                            grad_store[ind][1][k],
+                                            grad_store[ind][2][k],
+                                            grad_store[ind][3][k],
+                                        ],
+                                    )
+                                };
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        #[cfg(not(feature = "deep-unroll"))]
+        if N <= 3 {
+            unroll! {
+                for i < 64 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        #[cfg(feature = "deep-unroll")]
+        if N <= 4 {
+            unroll! {
+                for i < 256 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        let ind = N - 1;
+        let mut grad = [T::zero(); N];
+        for k in 0..N {
+            grad[k] = if k == ind {
+                dot4(dweights[ind], store[ind])
+            } else {
+                dot4(
+                    weights[ind],
+                    [
+                        grad_store[ind][0][k],
+                        grad_store[ind][1][k],
+                        grad_store[ind][2][k],
+                        grad_store[ind][3][k],
+                    ],
+                )
+            };
+        }
+        Ok(grad)
     }
 
     /// Return the stored coefficient origin, knot span, and saturation region.
@@ -893,6 +1041,30 @@ fn interp_weights<T: Float>(
 }
 
 #[inline]
+/// Select first-derivative weights for an interpolation region.
+fn interp_weight_derivatives<T: Float>(
+    grid: &[T],
+    span: usize,
+    x: T,
+    sat: Saturation,
+    linearize_extrapolation: bool,
+    low_ghost: [T; 3],
+    high_ghost: [T; 3],
+) -> [T; 4] {
+    match sat {
+        Saturation::None => basis_span_weight_derivatives(grid, span, x),
+        Saturation::InsideLow => low_boundary_weight_derivatives(grid, x, false, low_ghost),
+        Saturation::OutsideLow => {
+            low_boundary_weight_derivatives(grid, x, linearize_extrapolation, low_ghost)
+        }
+        Saturation::InsideHigh => high_boundary_weight_derivatives(grid, x, false, high_ghost),
+        Saturation::OutsideHigh => {
+            high_boundary_weight_derivatives(grid, x, linearize_extrapolation, high_ghost)
+        }
+    }
+}
+
+#[inline]
 /// Low-boundary weights with the ghost coefficient folded into stored coefficients.
 fn low_boundary_weights<T: Float>(
     grid: &[T],
@@ -904,6 +1076,28 @@ fn low_boundary_weights<T: Float>(
         linearized_boundary_weights(grid, 0, grid[0], x)
     } else {
         basis_span_weights(grid, 0, x)
+    };
+
+    [
+        mul_add(raw[0], low_ghost[0], raw[1]),
+        mul_add(raw[0], low_ghost[1], raw[2]),
+        mul_add(raw[0], low_ghost[2], raw[3]),
+        T::zero(),
+    ]
+}
+
+#[inline]
+/// Low-boundary first-derivative weights with the ghost coefficient folded in.
+fn low_boundary_weight_derivatives<T: Float>(
+    grid: &[T],
+    x: T,
+    linearize_extrapolation: bool,
+    low_ghost: [T; 3],
+) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        basis_span_weight_derivatives(grid, 0, grid[0])
+    } else {
+        basis_span_weight_derivatives(grid, 0, x)
     };
 
     [
@@ -927,6 +1121,29 @@ fn high_boundary_weights<T: Float>(
         linearized_boundary_weights(grid, n - 2, grid[n - 1], x)
     } else {
         basis_span_weights(grid, n - 2, x)
+    };
+
+    [
+        T::zero(),
+        mul_add(raw[3], high_ghost[0], raw[0]),
+        mul_add(raw[3], high_ghost[1], raw[1]),
+        mul_add(raw[3], high_ghost[2], raw[2]),
+    ]
+}
+
+#[inline]
+/// High-boundary first-derivative weights with the ghost coefficient folded in.
+fn high_boundary_weight_derivatives<T: Float>(
+    grid: &[T],
+    x: T,
+    linearize_extrapolation: bool,
+    high_ghost: [T; 3],
+) -> [T; 4] {
+    let n = grid.len();
+    let raw = if linearize_extrapolation {
+        basis_span_weight_derivatives(grid, n - 2, grid[n - 1])
+    } else {
+        basis_span_weight_derivatives(grid, n - 2, x)
     };
 
     [

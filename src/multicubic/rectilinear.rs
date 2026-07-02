@@ -32,7 +32,7 @@
 use super::Saturation;
 use crate::{
     index_arr_fixed_dims,
-    interp_math::{dot4, hermite_basis},
+    interp_math::{dot4, hermite_basis, hermite_basis_derivative},
     mul_add,
 };
 use crunchy::unroll;
@@ -218,6 +218,29 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
         Ok(())
     }
 
+    /// Evaluate the gradient on a contiguous list of observation points.
+    ///
+    /// `out[j][i]` is the derivative of observation `i` with respect to axis `j`.
+    pub fn interp_grad(&self, x: &[&[T]; N], out: &mut [&mut [T]; N]) -> Result<(), &'static str> {
+        let n = out[0].len();
+        for i in 0..N {
+            if x[i].len() != n || out[i].len() != n {
+                return Err("Dimension mismatch");
+            }
+        }
+
+        let mut tmp = [T::zero(); N];
+        for i in 0..n {
+            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            let grad = self.interp_one_grad(tmp)?;
+            for j in 0..N {
+                out[j][i] = grad[j];
+            }
+        }
+
+        Ok(())
+    }
+
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(N) and no allocation.
     ///
@@ -329,6 +352,129 @@ impl<'a, T: Float, const N: usize> MulticubicRectilinear<'a, T, N> {
 
         // Interpolate the final value
         Ok(dot4(weights[N - 1], store[N - 1]))
+    }
+
+    /// Evaluate the gradient at a point,
+    /// using fixed-size intermediate storage and no allocation.
+    pub fn interp_one_grad(&self, x: [T; N]) -> Result<[T; N], &'static str> {
+        let mut origin = [0_usize; N];
+        let mut sat = [Saturation::None; N];
+        let mut weights = [[T::zero(); FP]; N];
+        let mut dweights = [[T::zero(); FP]; N];
+        let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
+        let mut grad_store = [[[T::zero(); N]; FP]; N];
+
+        let mut acc = 1;
+        for i in 0..N {
+            if i > 0 {
+                acc *= self.dims[N - i];
+            }
+            dimprod[N - i - 1] = acc;
+
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+            let grid_cell = &self.grids[i][origin[i]..origin[i] + 4];
+            weights[i] = interp_weights(
+                grid_cell.try_into().unwrap(),
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+            );
+            dweights[i] = interp_weight_derivatives(
+                grid_cell.try_into().unwrap(),
+                x[i],
+                sat[i],
+                self.linearize_extrapolation,
+            );
+        }
+
+        const FP: usize = 4;
+        let nverts = const { FP.pow(N as u32) };
+
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
+                for j in 0..N {
+                    if j == 0 {
+                        for k in 0..N {
+                            let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
+                            loc[k] = origin[k] + offset;
+                        }
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    } else {
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
+                        let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
+                        let ind: usize = j.saturating_sub(1);
+
+                        if level {
+                            store[j][p] = dot4(weights[ind], store[ind]);
+                            for k in 0..N {
+                                grad_store[j][p][k] = if k == ind {
+                                    dot4(dweights[ind], store[ind])
+                                } else {
+                                    dot4(
+                                        weights[ind],
+                                        [
+                                            grad_store[ind][0][k],
+                                            grad_store[ind][1][k],
+                                            grad_store[ind][2][k],
+                                            grad_store[ind][3][k],
+                                        ],
+                                    )
+                                };
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        #[cfg(not(feature = "deep-unroll"))]
+        if N <= 3 {
+            unroll! {
+                for i < 64 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        #[cfg(feature = "deep-unroll")]
+        if N <= 4 {
+            unroll! {
+                for i < 256 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        let ind = N - 1;
+        let mut grad = [T::zero(); N];
+        for k in 0..N {
+            grad[k] = if k == ind {
+                dot4(dweights[ind], store[ind])
+            } else {
+                dot4(
+                    weights[ind],
+                    [
+                        grad_store[ind][0][k],
+                        grad_store[ind][1][k],
+                        grad_store[ind][2][k],
+                        grad_store[ind][3][k],
+                    ],
+                )
+            };
+        }
+        Ok(grad)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -478,6 +624,74 @@ fn interp_weights<T: Float>(
 }
 
 #[inline]
+fn interp_weight_derivatives<T: Float>(
+    grid_cell: &[T; 4],
+    x: T,
+    sat: Saturation,
+    linearize_extrapolation: bool,
+) -> [T; 4] {
+    let one = T::one();
+
+    let (mut out, scale) = match sat {
+        Saturation::None => {
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let t = (x - grid_cell[1]) / h12;
+            let k0 = centered_difference_weights(h01 / h12, one);
+            let k1 = centered_difference_weights(one, h23 / h12);
+            (interior_weight_derivatives(t, k0, k1), one / h12)
+        }
+        Saturation::InsideLow => {
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let t = -(x - grid_cell[1]) / h01;
+            (low_weight_derivatives(t, h12 / h01, false), -one / h01)
+        }
+        Saturation::OutsideLow => {
+            let h01 = grid_cell[1] - grid_cell[0];
+            let h12 = grid_cell[2] - grid_cell[1];
+            let t = -(x - grid_cell[1]) / h01;
+            (
+                low_weight_derivatives(t, h12 / h01, linearize_extrapolation),
+                -one / h01,
+            )
+        }
+        Saturation::InsideHigh => {
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let t = (x - grid_cell[2]) / h23;
+            (high_weight_derivatives(t, h12 / h23, false), one / h23)
+        }
+        Saturation::OutsideHigh => {
+            let h12 = grid_cell[2] - grid_cell[1];
+            let h23 = grid_cell[3] - grid_cell[2];
+            let t = (x - grid_cell[2]) / h23;
+            (
+                high_weight_derivatives(t, h12 / h23, linearize_extrapolation),
+                one / h23,
+            )
+        }
+    };
+
+    for item in &mut out {
+        *item = *item * scale;
+    }
+    out
+}
+
+#[inline]
+fn interior_weight_derivatives<T: Float>(t: T, k0: [T; 3], k1: [T; 3]) -> [T; 4] {
+    let [h00, h10, h01, h11] = hermite_basis_derivative(t);
+    [
+        h10 * k0[0],
+        h00 + h10 * k0[1] + h11 * k1[0],
+        h01 + h10 * k0[2] + h11 * k1[1],
+        h11 * k1[2],
+    ]
+}
+
+#[inline]
 fn low_weights<T: Float>(t: T, h12_over_h01: T, linearize_extrapolation: bool) -> [T; 4] {
     let one = T::one();
     let two = one + one;
@@ -506,6 +720,30 @@ fn low_weights<T: Float>(t: T, h12_over_h01: T, linearize_extrapolation: bool) -
 }
 
 #[inline]
+fn low_weight_derivatives<T: Float>(
+    t: T,
+    h12_over_h01: T,
+    linearize_extrapolation: bool,
+) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let k0 = centered_difference_weights(one, h12_over_h01);
+
+    if linearize_extrapolation {
+        [two + k0[0], -two + k0[1], k0[2], T::zero()]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis_derivative(t);
+        let slope_factor = h11 - h10;
+        [
+            h01 + two * h11 + slope_factor * k0[0],
+            h00 - two * h11 + slope_factor * k0[1],
+            slope_factor * k0[2],
+            T::zero(),
+        ]
+    }
+}
+
+#[inline]
 fn high_weights<T: Float>(t: T, h12_over_h23: T, linearize_extrapolation: bool) -> [T; 4] {
     let one = T::one();
     let two = one + one;
@@ -523,6 +761,30 @@ fn high_weights<T: Float>(t: T, h12_over_h23: T, linearize_extrapolation: bool) 
         ]
     } else {
         let [h00, h10, h01, h11] = hermite_basis(t);
+        let slope_factor = h10 - h11;
+        [
+            T::zero(),
+            slope_factor * k0[0],
+            h00 - two * h11 + slope_factor * k0[1],
+            h01 + two * h11 + slope_factor * k0[2],
+        ]
+    }
+}
+
+#[inline]
+fn high_weight_derivatives<T: Float>(
+    t: T,
+    h12_over_h23: T,
+    linearize_extrapolation: bool,
+) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let k0 = centered_difference_weights(h12_over_h23, one);
+
+    if linearize_extrapolation {
+        [T::zero(), -k0[0], -two - k0[1], two - k0[2]]
+    } else {
+        let [h00, h10, h01, h11] = hermite_basis_derivative(t);
         let slope_factor = h10 - h11;
         [
             T::zero(),

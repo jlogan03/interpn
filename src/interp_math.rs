@@ -24,3 +24,19 @@ pub(crate) fn hermite_basis<T: Float>(t: T) -> [T; 4] {
         mul_add(t2, t - one, T::zero()),
     ]
 }
+
+#[inline]
+pub(crate) fn hermite_basis_derivative<T: Float>(t: T) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let three = two + one;
+    let six = three + three;
+    let t2 = t * t;
+
+    [
+        six * (t2 - t),
+        three * t2 - (two + two) * t + one,
+        six * (t - t2),
+        three * t2 - two * t,
+    ]
+}
