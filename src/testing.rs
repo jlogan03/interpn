@@ -2,6 +2,9 @@ use rand::RngExt;
 use rand::SeedableRng;
 use rand::distr::StandardUniform;
 use rand::rngs::StdRng;
+use std::fmt::Debug;
+
+use num_traits::Float;
 
 /// Fixed random seed to support repeatable testing
 const SEED: [u8; 32] = [
@@ -22,4 +25,15 @@ where
     std::iter::repeat_with(|| rng.random::<T>())
         .take(n)
         .collect()
+}
+
+/// Assert that two floating-point values are within an absolute tolerance.
+pub fn assert_close<T>(got: T, expected: T, atol: T)
+where
+    T: Float + Debug,
+{
+    assert!(
+        (got - expected).abs() <= atol,
+        "got {got:?}, expected {expected:?}, tolerance {atol:?}"
+    );
 }
