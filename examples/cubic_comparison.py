@@ -51,25 +51,30 @@ if __name__ == "__main__":
     rng = np.random.RandomState(42)
 
     fn_defs = [
-        ("Quadratic", lambda x: x**2, 0.5),
-        ("Sine", np.sin, 0.5),
-        ("Step", _step, 0.5),
+        ("Quadratic", lambda x: x**2, lambda x: 2.0 * x, 0.5),
+        ("Sine", np.sin, np.cos, 0.5),
+        ("Step", _step, lambda x: np.zeros_like(x), 0.5),
     ]
 
     for kind in ["Regular", "Rectilinear"]:
         fn_titles = [name for name, *_ in fn_defs]
-        subplot_titles = fn_titles + [f"Error, {name}" for name in fn_titles]
+        subplot_titles = (
+            fn_titles
+            + [f"Error, {name}" for name in fn_titles]
+            + [f"Gradient, {name}" for name in fn_titles]
+            + [f"Gradient Error, {name}" for name in fn_titles]
+        )
         fig_1d = make_subplots(
-            rows=2,
+            rows=4,
             cols=3,
             shared_xaxes=True,
             subplot_titles=subplot_titles,
-            vertical_spacing=0.2,
+            vertical_spacing=0.09,
             horizontal_spacing=0.07,
         )
         legend_tracker: set[str] = set()
 
-        for i, (_fnname, fn, data_res) in enumerate(fn_defs):
+        for i, (_fnname, fn, grad_fn, data_res) in enumerate(fn_defs):
             xdata = np.arange(-2.0, 2.5, data_res)
             if kind == "Rectilinear":
                 xdata += rng.uniform(-0.45 * data_res, 0.45 * data_res, xdata.size)
@@ -81,27 +86,35 @@ if __name__ == "__main__":
                 dims = np.asarray([xdata.size])
                 starts = np.asarray([-2.0])
                 steps = np.asarray([data_res])
-                y_interpn = MulticubicRegular.new(
+                interpn_interp = MulticubicRegular.new(
                     dims, starts, steps, ydata, linearize_extrapolation=False
-                ).eval([xinterp])
-                y_bspline = MultiBsplineRegular.new(
+                )
+                bspline_interp = MultiBsplineRegular.new(
                     dims, starts, steps, ydata, linearize_extrapolation=False
-                ).eval([xinterp])
+                )
             else:
-                y_interpn = MulticubicRectilinear.new(
+                interpn_interp = MulticubicRectilinear.new(
                     [xdata], ydata, linearize_extrapolation=False
-                ).eval([xinterp])
-                y_bspline = MultiBsplineRectilinear.new(
+                )
+                bspline_interp = MultiBsplineRectilinear.new(
                     [xdata], ydata, linearize_extrapolation=False
-                ).eval([xinterp])
+                )
 
-            y_sp = RegularGridInterpolator(
+            y_interpn = interpn_interp.eval([xinterp])
+            y_interpn_grad = interpn_interp.eval_grad([xinterp])[0]
+            y_bspline = bspline_interp.eval([xinterp])
+            y_bspline_grad = bspline_interp.eval_grad([xinterp])[0]
+            scipy_interp = RegularGridInterpolator(
                 [xdata], ydata, bounds_error=None, fill_value=None, method="cubic"
-            )(xinterp)
+            )
+            y_sp = scipy_interp(xinterp)
+            y_sp_grad = scipy_interp(xinterp[:, None], nu=(1,))
 
             col = i + 1
             _add_interpolating_region(fig_1d, 1, col, xdata.min(), xdata.max())
             _add_interpolating_region(fig_1d, 2, col, xdata.min(), xdata.max())
+            _add_interpolating_region(fig_1d, 3, col, xdata.min(), xdata.max())
+            _add_interpolating_region(fig_1d, 4, col, xdata.min(), xdata.max())
 
             fig_1d.add_trace(
                 go.Scatter(
@@ -212,10 +225,118 @@ if __name__ == "__main__":
             )
             legend_tracker.add("Scipy Error")
 
+            truth_grad = grad_fn(xinterp)
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=truth_grad,
+                    mode="lines",
+                    line=dict(color="#2ca02c", width=2),
+                    name="Exact Gradient",
+                    legendgroup="exact_grad",
+                    showlegend="Exact Gradient" not in legend_tracker,
+                ),
+                row=3,
+                col=col,
+            )
+            legend_tracker.add("Exact Gradient")
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_interpn_grad,
+                    mode="lines",
+                    line=dict(color="black", width=2),
+                    name=f"{INTERPN_CUBIC_LABEL} Gradient",
+                    legendgroup="interpn_grad",
+                    showlegend=f"{INTERPN_CUBIC_LABEL} Gradient" not in legend_tracker,
+                ),
+                row=3,
+                col=col,
+            )
+            legend_tracker.add(f"{INTERPN_CUBIC_LABEL} Gradient")
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_bspline_grad,
+                    mode="lines",
+                    line=dict(color="#1f77b4", width=2, dash="dash"),
+                    name=f"{INTERPN_BSPLINE_LABEL} Gradient",
+                    legendgroup="multibspline_grad",
+                    showlegend=f"{INTERPN_BSPLINE_LABEL} Gradient"
+                    not in legend_tracker,
+                ),
+                row=3,
+                col=col,
+            )
+            legend_tracker.add(f"{INTERPN_BSPLINE_LABEL} Gradient")
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_sp_grad,
+                    mode="lines",
+                    line=dict(color="black", width=2, dash="dot"),
+                    opacity=0.7,
+                    name="Scipy Gradient",
+                    legendgroup="scipy_grad",
+                    showlegend="Scipy Gradient" not in legend_tracker,
+                ),
+                row=3,
+                col=col,
+            )
+            legend_tracker.add("Scipy Gradient")
+
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_interpn_grad - truth_grad,
+                    mode="lines",
+                    line=dict(color="black", width=2),
+                    name=f"{INTERPN_CUBIC_LABEL} Gradient Error",
+                    legendgroup="interpn_grad_err",
+                    showlegend=f"{INTERPN_CUBIC_LABEL} Gradient Error"
+                    not in legend_tracker,
+                ),
+                row=4,
+                col=col,
+            )
+            legend_tracker.add(f"{INTERPN_CUBIC_LABEL} Gradient Error")
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_bspline_grad - truth_grad,
+                    mode="lines",
+                    line=dict(color="#1f77b4", width=2, dash="dash"),
+                    name=f"{INTERPN_BSPLINE_LABEL} Gradient Error",
+                    legendgroup="multibspline_grad_err",
+                    showlegend=f"{INTERPN_BSPLINE_LABEL} Gradient Error"
+                    not in legend_tracker,
+                ),
+                row=4,
+                col=col,
+            )
+            legend_tracker.add(f"{INTERPN_BSPLINE_LABEL} Gradient Error")
+            fig_1d.add_trace(
+                go.Scatter(
+                    x=xinterp,
+                    y=y_sp_grad - truth_grad,
+                    mode="lines",
+                    line=dict(color="black", width=2, dash="dot"),
+                    opacity=0.7,
+                    name="Scipy Gradient Error",
+                    legendgroup="scipy_grad_err",
+                    showlegend="Scipy Gradient Error" not in legend_tracker,
+                ),
+                row=4,
+                col=col,
+            )
+            legend_tracker.add("Scipy Gradient Error")
+
         for col in range(1, 4):
-            fig_1d.update_xaxes(title_text="x", row=2, col=col)
+            fig_1d.update_xaxes(title_text="x", row=4, col=col)
         fig_1d.update_yaxes(title_text="f(x)", row=1, col=1)
         fig_1d.update_yaxes(title_text="Error", row=2, col=1)
+        fig_1d.update_yaxes(title_text="df/dx", row=3, col=1)
+        fig_1d.update_yaxes(title_text="Gradient Error", row=4, col=1)
         fig_1d.update_xaxes(
             showline=True,
             linecolor="black",
@@ -245,7 +366,7 @@ if __name__ == "__main__":
                 y=0.97,
                 yanchor="top",
             ),
-            height=500,
+            height=900,
             legend=dict(
                 orientation="v",
                 yanchor="top",
@@ -281,48 +402,59 @@ if __name__ == "__main__":
         yinterp = np.linspace(-5.0, 5.0, 30, endpoint=True)
         xinterpmesh, yinterpmesh = np.meshgrid(xinterp, yinterp, indexing="ij")
         zinterp = xinterpmesh**2 + yinterpmesh**2
+        gx_truth = 2.0 * xinterpmesh
+        gy_truth = 2.0 * yinterpmesh
+        grad_truth = np.sqrt(gx_truth**2 + gy_truth**2)
+        obs_2d = [xinterpmesh.flatten(), yinterpmesh.flatten()]
+        scipy_points = np.column_stack(obs_2d)
 
         if kind == "Regular":
             dims = np.asarray([xdata.size, ydata.size])
             starts = np.asarray([-3.0, -3.0])
             steps = np.asarray([xmesh[1, 0] - xmesh[0, 0], ymesh[0, 1] - ymesh[0, 0]])
-            z_interpn = (
-                MulticubicRegular.new(
-                    dims, starts, steps, zmesh, linearize_extrapolation=False
-                )
-                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
-                .reshape(xinterpmesh.shape)
+            interpn_interp = MulticubicRegular.new(
+                dims, starts, steps, zmesh, linearize_extrapolation=False
             )
-            z_bspline = (
-                MultiBsplineRegular.new(
-                    dims, starts, steps, zmesh, linearize_extrapolation=False
-                )
-                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
-                .reshape(xinterpmesh.shape)
+            bspline_interp = MultiBsplineRegular.new(
+                dims, starts, steps, zmesh, linearize_extrapolation=False
             )
         else:
-            z_interpn = (
-                MulticubicRectilinear.new(
-                    [xdata, ydata], zmesh, linearize_extrapolation=False
-                )
-                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
-                .reshape(xinterpmesh.shape)
+            interpn_interp = MulticubicRectilinear.new(
+                [xdata, ydata], zmesh, linearize_extrapolation=False
             )
-            z_bspline = (
-                MultiBsplineRectilinear.new(
-                    [xdata, ydata], zmesh, linearize_extrapolation=False
-                )
-                .eval([xinterpmesh.flatten(), yinterpmesh.flatten()])
-                .reshape(xinterpmesh.shape)
+            bspline_interp = MultiBsplineRectilinear.new(
+                [xdata, ydata], zmesh, linearize_extrapolation=False
             )
 
-        z_sp = RegularGridInterpolator(
+        z_interpn = interpn_interp.eval(obs_2d).reshape(xinterpmesh.shape)
+        grad_interpn_raw = interpn_interp.eval_grad(obs_2d)
+        gx_interpn = grad_interpn_raw[0].reshape(xinterpmesh.shape)
+        gy_interpn = grad_interpn_raw[1].reshape(xinterpmesh.shape)
+        grad_interpn = np.sqrt(gx_interpn**2 + gy_interpn**2)
+        grad_interpn_err = np.sqrt(
+            (gx_interpn - gx_truth) ** 2 + (gy_interpn - gy_truth) ** 2
+        )
+
+        z_bspline = bspline_interp.eval(obs_2d).reshape(xinterpmesh.shape)
+        grad_bspline_raw = bspline_interp.eval_grad(obs_2d)
+        gx_bspline = grad_bspline_raw[0].reshape(xinterpmesh.shape)
+        gy_bspline = grad_bspline_raw[1].reshape(xinterpmesh.shape)
+        grad_bspline = np.sqrt(gx_bspline**2 + gy_bspline**2)
+        grad_bspline_err = np.sqrt(
+            (gx_bspline - gx_truth) ** 2 + (gy_bspline - gy_truth) ** 2
+        )
+
+        scipy_interp = RegularGridInterpolator(
             [xdata, ydata], zmesh, bounds_error=None, fill_value=None, method="cubic"
-        )((xinterpmesh, yinterpmesh))
+        )
+        z_sp = scipy_interp((xinterpmesh, yinterpmesh))
+        gx_sp = scipy_interp(scipy_points, nu=(1, 0)).reshape(xinterpmesh.shape)
+        gy_sp = scipy_interp(scipy_points, nu=(0, 1)).reshape(xinterpmesh.shape)
+        grad_sp = np.sqrt(gx_sp**2 + gy_sp**2)
+        grad_sp_err = np.sqrt((gx_sp - gx_truth) ** 2 + (gy_sp - gy_truth) ** 2)
 
         ncols_2d = 4 if z_bspline is not None else 3
-        top_specs = [{"type": "heatmap"}] * ncols_2d
-        bottom_specs = [{"type": "heatmap"}] * ncols_2d
+        heatmap_specs = [{"type": "heatmap"}] * ncols_2d
         top_data = [
             (zinterp, "Truth"),
             (z_interpn, INTERPN_CUBIC_LABEL),
@@ -336,18 +468,37 @@ if __name__ == "__main__":
         if z_bspline is not None:
             bottom_data.append((z_bspline - zinterp, f"Error, {INTERPN_BSPLINE_LABEL}"))
         bottom_data.append((z_sp - zinterp, "Error, Scipy"))
-        subplot_titles_2d = [name for _, name in top_data] + [
-            "",
-            *[name for _, name in bottom_data],
+        gradient_data = [
+            (grad_truth, "Gradient Norm, Truth"),
+            (grad_interpn, f"Gradient Norm, {INTERPN_CUBIC_LABEL}"),
         ]
+        if z_bspline is not None:
+            gradient_data.append(
+                (grad_bspline, f"Gradient Norm, {INTERPN_BSPLINE_LABEL}")
+            )
+        gradient_data.append((grad_sp, "Gradient Norm, Scipy"))
+        gradient_error_data = [
+            (grad_interpn_err, f"Gradient Error Norm, {INTERPN_CUBIC_LABEL}"),
+        ]
+        if z_bspline is not None:
+            gradient_error_data.append(
+                (grad_bspline_err, f"Gradient Error Norm, {INTERPN_BSPLINE_LABEL}")
+            )
+        gradient_error_data.append((grad_sp_err, "Gradient Error Norm, Scipy"))
+        subplot_titles_2d = (
+            [name for _, name in top_data]
+            + ["", *[name for _, name in bottom_data]]
+            + [name for _, name in gradient_data]
+            + ["", *[name for _, name in gradient_error_data]]
+        )
 
         fig_2d = make_subplots(
-            rows=2,
+            rows=4,
             cols=ncols_2d,
-            specs=[top_specs, bottom_specs],
+            specs=[heatmap_specs, heatmap_specs, heatmap_specs, heatmap_specs],
             subplot_titles=subplot_titles_2d,
             horizontal_spacing=0.06,
-            vertical_spacing=0.18,
+            vertical_spacing=0.09,
         )
 
         for col, (z_data, title) in enumerate(top_data, start=1):
@@ -405,7 +556,19 @@ if __name__ == "__main__":
                 col=col,
             )
 
-        for col in range(2, ncols_2d + 1):
+        for row in (2, 4):
+            for col in range(2, ncols_2d + 1):
+                fig_2d.add_shape(
+                    type="rect",
+                    x0=-3.0,
+                    x1=3.0,
+                    y0=-3.0,
+                    y1=3.0,
+                    line=dict(color="white"),
+                    row=row,
+                    col=col,
+                )
+        for col in range(1, ncols_2d + 1):
             fig_2d.add_shape(
                 type="rect",
                 x0=-3.0,
@@ -413,7 +576,7 @@ if __name__ == "__main__":
                 y0=-3.0,
                 y1=3.0,
                 line=dict(color="white"),
-                row=2,
+                row=3,
                 col=col,
             )
 
@@ -432,7 +595,37 @@ if __name__ == "__main__":
                 col=col,
             )
 
-        for row in (1, 2):
+        for col, (z_data, name) in enumerate(gradient_data, start=1):
+            showscale = col == ncols_2d
+            fig_2d.add_trace(
+                go.Heatmap(
+                    x=xinterp,
+                    y=yinterp,
+                    z=z_data.T,
+                    coloraxis="coloraxis3",
+                    showscale=showscale,
+                    name=name,
+                ),
+                row=3,
+                col=col,
+            )
+
+        for col, (z_data, name) in enumerate(gradient_error_data, start=2):
+            showscale = col == ncols_2d
+            fig_2d.add_trace(
+                go.Heatmap(
+                    x=xinterp,
+                    y=yinterp,
+                    z=z_data.T,
+                    coloraxis="coloraxis4",
+                    showscale=showscale,
+                    name=name,
+                ),
+                row=4,
+                col=col,
+            )
+
+        for row in (1, 2, 3, 4):
             for col in range(1, ncols_2d + 1):
                 fig_2d.update_xaxes(
                     showticklabels=False,
@@ -458,7 +651,7 @@ if __name__ == "__main__":
                 y=0.97,
                 yanchor="top",
             ),
-            height=500,
+            height=900,
             margin=dict(t=80, l=60, r=40, b=80),
             legend=dict(
                 orientation="h",
@@ -474,7 +667,7 @@ if __name__ == "__main__":
                     [0.0, "#ffffff"],
                     [1.0, "#000000"],
                 ],
-                colorbar=dict(len=0.55, x=1.2, y=0.78),
+                colorbar=dict(len=0.18, x=1.05, y=0.88),
             ),
             coloraxis2=dict(
                 colorscale=[
@@ -483,13 +676,30 @@ if __name__ == "__main__":
                     [1.0, "#000000"],
                 ],
                 cmid=0.0,
-                colorbar=dict(len=0.4, x=1.2, y=0.25),
+                colorbar=dict(len=0.18, x=1.05, y=0.63),
+            ),
+            coloraxis3=dict(
+                colorscale=[
+                    [0.0, "#ffffff"],
+                    [1.0, "#000000"],
+                ],
+                colorbar=dict(len=0.18, x=1.05, y=0.37),
+            ),
+            coloraxis4=dict(
+                colorscale=[
+                    [0.0, "#ffffff"],
+                    [1.0, "#000000"],
+                ],
+                colorbar=dict(len=0.18, x=1.05, y=0.12),
             ),
             font=dict(color="black"),
         )
-        scale_axes = [(1, col) for col in range(1, ncols_2d + 1)] + [
-            (2, col) for col in range(2, ncols_2d + 1)
-        ]
+        scale_axes = (
+            [(1, col) for col in range(1, ncols_2d + 1)]
+            + [(2, col) for col in range(2, ncols_2d + 1)]
+            + [(3, col) for col in range(1, ncols_2d + 1)]
+            + [(4, col) for col in range(2, ncols_2d + 1)]
+        )
         for row, col in scale_axes:
             x_name = _axis_name("x", row, col, ncols_2d)
             fig_2d.update_yaxes(
