@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2 2026-07-02
+
+### Changed
+
+* Implement analytic gradients for multidimensional methods
+
 ## 0.11.1 2026-06-13
 
 ### Changed
