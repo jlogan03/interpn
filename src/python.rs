@@ -7,6 +7,7 @@ use crate::multicubic;
 use crate::multilinear;
 use crate::nearest;
 use crate::{GridInterpMethod, GridKind};
+use num_traits::Float;
 
 /// Maximum number of dimensions for linear interpn convenience methods
 const MAXDIMS: usize = 8;
@@ -18,11 +19,15 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     // Multilinear regular grid
     m.add_function(wrap_pyfunction!(interpn_linear_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_linear_regular_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_linear_regular_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_linear_regular_grad_f32, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_regular_f32, m)?)?;
     // Multilinear rectilinear grid
     m.add_function(wrap_pyfunction!(interpn_linear_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_linear_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_linear_rectilinear_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_linear_rectilinear_grad_f32, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(check_bounds_rectilinear_f32, m)?)?;
     // Nearest-neighbor regular grid
@@ -34,19 +39,27 @@ fn interpn<'py>(_py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     // Multicubic with regular grid
     m.add_function(wrap_pyfunction!(interpn_cubic_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_cubic_regular_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_cubic_regular_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_cubic_regular_grad_f32, m)?)?;
     // Multicubic with rectilinear grid
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(interpn_cubic_rectilinear_grad_f32, m)?)?;
     // MultiBspline with regular grid
     m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(coefficients_bspline_regular_f32, m)?)?;
     m.add_function(wrap_pyfunction!(_eval_bspline_regular_f64, m)?)?;
     m.add_function(wrap_pyfunction!(_eval_bspline_regular_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_regular_grad_f32, m)?)?;
     // MultiBspline with rectilinear grid
     m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(coefficients_bspline_rectilinear_f32, m)?)?;
     m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f64, m)?)?;
     m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_grad_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(_eval_bspline_rectilinear_grad_f32, m)?)?;
     // Top-level interpn dispatch
     m.add_function(wrap_pyfunction!(interpn_f64, m)?)?;
     m.add_function(wrap_pyfunction!(interpn_f32, m)?)?;
@@ -65,6 +78,35 @@ macro_rules! unpack_vec_of_arr {
         }
         let $outname = &_arr[..n];
     };
+}
+
+fn interp_grad_flat<T: Float, const N: usize>(
+    obs: &[&[T]; N],
+    out: &mut [T],
+    mut interp_one_grad: impl FnMut([T; N]) -> Result<[T; N], &'static str>,
+) -> Result<(), &'static str> {
+    let nobs = obs[0].len();
+    for axis in 0..N {
+        if obs[axis].len() != nobs {
+            return Err("Dimension mismatch");
+        }
+    }
+    if out.len() != N * nobs {
+        return Err("Dimension mismatch");
+    }
+
+    let mut tmp = [T::zero(); N];
+    for i in 0..nobs {
+        for axis in 0..N {
+            tmp[axis] = obs[axis][i];
+        }
+        let grad = interp_one_grad(tmp)?;
+        for axis in 0..N {
+            out[axis * nobs + i] = grad[axis];
+        }
+    }
+
+    Ok(())
 }
 
 macro_rules! interpn_linear_regular_impl {
@@ -98,6 +140,56 @@ macro_rules! interpn_linear_regular_impl {
 
 interpn_linear_regular_impl!(interpn_linear_regular_f64, f64);
 interpn_linear_regular_impl!(interpn_linear_regular_f32, f32);
+
+macro_rules! interpn_linear_regular_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            dims: Vec<usize>,
+            starts: PyReadonlyArray1<$T>,
+            steps: PyReadonlyArray1<$T>,
+            vals: PyReadonlyArray1<$T>,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(obs, obs, $T);
+            let ndims = dims.len();
+            let starts = starts.as_slice()?;
+            let steps = steps.as_slice()?;
+            let vals = vals.as_slice()?;
+            let out = out.as_slice_mut()?;
+            if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    match multilinear::MultilinearRegular::<$T, N>::new(
+                        dims.try_into().unwrap(),
+                        starts.try_into().unwrap(),
+                        steps.try_into().unwrap(),
+                        vals,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_linear_regular_grad_impl!(interpn_linear_regular_grad_f64, f64);
+interpn_linear_regular_grad_impl!(interpn_linear_regular_grad_f32, f32);
 
 macro_rules! check_bounds_regular_impl {
     ($funcname:ident, $T:ty) => {
@@ -160,6 +252,53 @@ macro_rules! interpn_linear_rectilinear_impl {
 
 interpn_linear_rectilinear_impl!(interpn_linear_rectilinear_f64, f64);
 interpn_linear_rectilinear_impl!(interpn_linear_rectilinear_f32, f32);
+
+macro_rules! interpn_linear_rectilinear_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            vals: PyReadonlyArray1<$T>,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = grids.len();
+            if obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            let vals = vals.as_slice()?;
+            let out = out.as_slice_mut()?;
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    let grids: &[&[$T]; N] = grids.try_into().unwrap();
+                    match multilinear::MultilinearRectilinear::<$T, N>::new(
+                        grids,
+                        vals,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_linear_rectilinear_grad_impl!(interpn_linear_rectilinear_grad_f64, f64);
+interpn_linear_rectilinear_grad_impl!(interpn_linear_rectilinear_grad_f32, f32);
 
 macro_rules! interpn_nearest_regular_impl {
     ($funcname:ident, $T:ty) => {
@@ -274,6 +413,58 @@ macro_rules! interpn_cubic_regular_impl {
 interpn_cubic_regular_impl!(interpn_cubic_regular_f64, f64);
 interpn_cubic_regular_impl!(interpn_cubic_regular_f32, f32);
 
+macro_rules! interpn_cubic_regular_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            dims: Vec<usize>,
+            starts: PyReadonlyArray1<$T>,
+            steps: PyReadonlyArray1<$T>,
+            vals: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(obs, obs, $T);
+            let ndims = dims.len();
+            let starts = starts.as_slice()?;
+            let steps = steps.as_slice()?;
+            let vals = vals.as_slice()?;
+            let out = out.as_slice_mut()?;
+            if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    match multicubic::MulticubicRegular::<$T, N>::new(
+                        dims.try_into().unwrap(),
+                        starts.try_into().unwrap(),
+                        steps.try_into().unwrap(),
+                        vals,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_cubic_regular_grad_impl!(interpn_cubic_regular_grad_f64, f64);
+interpn_cubic_regular_grad_impl!(interpn_cubic_regular_grad_f32, f32);
+
 macro_rules! interpn_cubic_rectilinear_impl {
     ($funcname:ident, $T:ty) => {
         #[pyfunction]
@@ -305,6 +496,55 @@ macro_rules! interpn_cubic_rectilinear_impl {
 
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f64, f64);
 interpn_cubic_rectilinear_impl!(interpn_cubic_rectilinear_f32, f32);
+
+macro_rules! interpn_cubic_rectilinear_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            vals: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = grids.len();
+            if obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            let vals = vals.as_slice()?;
+            let out = out.as_slice_mut()?;
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    let grids: &[&[$T]; N] = grids.try_into().unwrap();
+                    match multicubic::MulticubicRectilinear::<$T, N>::new(
+                        grids,
+                        vals,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+interpn_cubic_rectilinear_grad_impl!(interpn_cubic_rectilinear_grad_f64, f64);
+interpn_cubic_rectilinear_grad_impl!(interpn_cubic_rectilinear_grad_f32, f32);
 
 macro_rules! coefficients_bspline_regular_impl {
     ($funcname:ident, $T:ty) => {
@@ -390,6 +630,59 @@ macro_rules! eval_bspline_regular_impl {
 eval_bspline_regular_impl!(_eval_bspline_regular_f64, f64);
 eval_bspline_regular_impl!(_eval_bspline_regular_f32, f32);
 
+macro_rules! eval_bspline_regular_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            dims: Vec<usize>,
+            starts: PyReadonlyArray1<$T>,
+            steps: PyReadonlyArray1<$T>,
+            coeffs: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = dims.len();
+            let starts = starts.as_slice()?;
+            let steps = steps.as_slice()?;
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+            if starts.len() != ndims || steps.len() != ndims || obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    match multibspline::MultiBsplineRegular::<$T, N>::new(
+                        dims.try_into().unwrap(),
+                        starts.try_into().unwrap(),
+                        steps.try_into().unwrap(),
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+eval_bspline_regular_grad_impl!(_eval_bspline_regular_grad_f64, f64);
+eval_bspline_regular_grad_impl!(_eval_bspline_regular_grad_f32, f32);
+
 macro_rules! coefficients_bspline_rectilinear_impl {
     ($funcname:ident, $T:ty) => {
         #[pyfunction]
@@ -470,6 +763,55 @@ macro_rules! eval_bspline_rectilinear_impl {
 
 eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f64, f64);
 eval_bspline_rectilinear_impl!(_eval_bspline_rectilinear_f32, f32);
+
+macro_rules! eval_bspline_rectilinear_grad_impl {
+    ($funcname:ident, $T:ty) => {
+        #[pyfunction]
+        fn $funcname(
+            grids: Vec<PyReadonlyArray1<$T>>,
+            coeffs: PyReadonlyArray1<$T>,
+            linearize_extrapolation: bool,
+            obs: Vec<PyReadonlyArray1<$T>>,
+            mut out: PyReadwriteArray1<$T>,
+        ) -> PyResult<()> {
+            unpack_vec_of_arr!(grids, grids, $T);
+            unpack_vec_of_arr!(obs, obs, $T);
+
+            let ndims = grids.len();
+            if obs.len() != ndims {
+                return Err(exceptions::PyAssertionError::new_err("Dimension mismatch"));
+            }
+            let coeffs = coeffs.as_slice()?;
+            let out = out.as_slice_mut()?;
+            match crate::dispatch_ndims!(
+                ndims,
+                "Dimension exceeds maximum (8). Use interpolator struct directly for higher dimensions.",
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                |N| {
+                    let grids: &[&[$T]; N] = grids.try_into().unwrap();
+                    match multibspline::MultiBsplineRectilinear::<$T, N>::new(
+                        grids,
+                        coeffs,
+                        linearize_extrapolation,
+                    ) {
+                        Ok(interpolator) => {
+                            interp_grad_flat(obs.try_into().unwrap(), out, |x| {
+                                interpolator.interp_one_grad(x)
+                            })
+                        }
+                        Err(msg) => Err(msg),
+                    }
+                }
+            ) {
+                Ok(()) => Ok(()),
+                Err(msg) => Err(exceptions::PyAssertionError::new_err(msg)),
+            }
+        }
+    };
+}
+
+eval_bspline_rectilinear_grad_impl!(_eval_bspline_rectilinear_grad_f64, f64);
+eval_bspline_rectilinear_grad_impl!(_eval_bspline_rectilinear_grad_f32, f32);
 
 fn parse_grid_interp_method(method: &str) -> Result<GridInterpMethod, PyErr> {
     match method.to_ascii_lowercase().as_str() {

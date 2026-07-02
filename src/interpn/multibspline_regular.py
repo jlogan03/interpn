@@ -18,6 +18,8 @@ from .interpn import (
     coefficients_bspline_regular_f32,
     _eval_bspline_regular_f64,
     _eval_bspline_regular_f32,
+    _eval_bspline_regular_grad_f64,
+    _eval_bspline_regular_grad_f32,
     check_bounds_regular_f64,
     check_bounds_regular_f32,
 )
@@ -138,6 +140,60 @@ class MultiBsplineRegular(BaseModel):
                 self.linearize_extrapolation,
                 obs,
                 out_inner,
+            )
+        else:
+            raise TypeError(f"Unexpected data type: {dtype}")
+
+        return out_inner
+
+    def eval_grad(self, obs: list[NDArray], out: NDArray | None = None) -> NDArray:
+        """Evaluate the interpolator gradient at a set of observation points."""
+        out_inner = (
+            out
+            if out is not None
+            else np.zeros((self.ndims(), *obs[0].shape), dtype=self.coeffs.data.dtype)
+        )
+        assert out_inner.shape == (self.ndims(), *obs[0].shape), (
+            "Gradient output shape must be (ndims, *obs[0].shape)"
+        )
+        assert out_inner.flags.c_contiguous, "Output array must be C-contiguous"
+        self.eval_grad_unchecked(obs, out_inner)
+
+        return out_inner
+
+    def eval_grad_unchecked(
+        self, obs: list[NDArray], out: NDArray | None = None
+    ) -> NDArray:
+        """
+        Evaluate the interpolator gradient, skipping Python-side contiguity checks.
+        """
+        dtype = self.coeffs.data.dtype
+        out_inner = (
+            out
+            if out is not None
+            else np.zeros((self.ndims(), *obs[0].shape), dtype=dtype)
+        )
+        out_flat = out_inner.reshape(-1)
+
+        if dtype == np.float64:
+            _eval_bspline_regular_grad_f64(
+                self.dims,
+                self.starts.data,
+                self.steps.data,
+                self.coeffs.data,
+                self.linearize_extrapolation,
+                obs,
+                out_flat,
+            )
+        elif dtype == np.float32:
+            _eval_bspline_regular_grad_f32(
+                self.dims,
+                self.starts.data,
+                self.steps.data,
+                self.coeffs.data,
+                self.linearize_extrapolation,
+                obs,
+                out_flat,
             )
         else:
             raise TypeError(f"Unexpected data type: {dtype}")
