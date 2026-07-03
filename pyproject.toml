@@ -35,13 +35,13 @@ test = [
     "ruff >= 0.13.3",
     "pyright == 1.1.407",
     "mktestdocs == 0.2.1",
-    "scipy >= 1.11.4",
+    "scipy >= 1.15",
     # More kaleido>1 crashes when used with plotly
     "kaleido==0.2.1",
     "plotly>=6,<7",
 ]
 bench = [
-    "scipy >= 1.11.4",
+    "scipy >= 1.15",
     "kaleido==0.2.1",
     "plotly>=6,<7",
     "memory_profiler >= 0.61.0",
