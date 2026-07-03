@@ -165,6 +165,9 @@ pub mod utils;
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod testing;
 
+#[cfg(all(test, feature = "std"))]
+mod test_gradients;
+
 #[cfg(feature = "python")]
 pub mod python;
 

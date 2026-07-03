@@ -337,7 +337,7 @@ bench = [
     { name = "kaleido", specifier = "==0.2.1" },
     { name = "memory-profiler", specifier = ">=0.61.0" },
     { name = "plotly", specifier = ">=6,<7" },
-    { name = "scipy", specifier = ">=1.11.4" },
+    { name = "scipy", specifier = ">=1.15" },
 ]
 doc = [
     { name = "mkdocs", specifier = ">=1.5.3" },
@@ -352,7 +352,7 @@ test = [
     { name = "pytest", specifier = ">=9" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.13.3" },
-    { name = "scipy", specifier = ">=1.11.4" },
+    { name = "scipy", specifier = ">=1.15" },
 ]
 
 [[package]]

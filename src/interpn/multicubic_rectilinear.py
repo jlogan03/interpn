@@ -16,6 +16,8 @@ from .serialization import Array, ArrayF32, ArrayF64
 from .interpn import (
     interpn_cubic_rectilinear_f64,
     interpn_cubic_rectilinear_f32,
+    interpn_cubic_rectilinear_grad_f64,
+    interpn_cubic_rectilinear_grad_f32,
     check_bounds_rectilinear_f64,
     check_bounds_rectilinear_f32,
 )
@@ -173,6 +175,56 @@ class MulticubicRectilinear(BaseModel):
                 self.linearize_extrapolation,
                 obs,
                 out_inner,
+            )
+        else:
+            raise TypeError(f"Unexpected data type: {dtype}")
+
+        return out_inner
+
+    def eval_grad(self, obs: list[NDArray], out: NDArray | None = None) -> NDArray:
+        """Evaluate the interpolator gradient at a set of observation points."""
+        out_inner = (
+            out
+            if out is not None
+            else np.zeros((self.ndims(), *obs[0].shape), dtype=self.vals.data.dtype)
+        )
+        assert out_inner.shape == (self.ndims(), *obs[0].shape), (
+            "Gradient output shape must be (ndims, *obs[0].shape)"
+        )
+        assert out_inner.flags.c_contiguous, "Output array must be C-contiguous"
+        self.eval_grad_unchecked(obs, out_inner)
+
+        return out_inner
+
+    def eval_grad_unchecked(
+        self, obs: list[NDArray], out: NDArray | None = None
+    ) -> NDArray:
+        """
+        Evaluate the interpolator gradient, skipping Python-side contiguity checks.
+        """
+        dtype = self.vals.data.dtype
+        out_inner = (
+            out
+            if out is not None
+            else np.zeros((self.ndims(), *obs[0].shape), dtype=dtype)
+        )
+        out_flat = out_inner.reshape(-1)
+
+        if dtype == np.float64:
+            interpn_cubic_rectilinear_grad_f64(
+                [x.data for x in self.grids],
+                self.vals.data,
+                self.linearize_extrapolation,
+                obs,
+                out_flat,
+            )
+        elif dtype == np.float32:
+            interpn_cubic_rectilinear_grad_f32(
+                [x.data for x in self.grids],
+                self.vals.data,
+                self.linearize_extrapolation,
+                obs,
+                out_flat,
             )
         else:
             raise TypeError(f"Unexpected data type: {dtype}")

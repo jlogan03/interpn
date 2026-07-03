@@ -301,6 +301,29 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
         Ok(())
     }
 
+    /// Evaluate the gradient on a contiguous list of observation points.
+    ///
+    /// `out[j][i]` is the derivative of observation `i` with respect to axis `j`.
+    pub fn interp_grad(&self, x: &[&[T]; N], out: &mut [&mut [T]; N]) -> Result<(), &'static str> {
+        let n = out[0].len();
+        for i in 0..N {
+            if x[i].len() != n || out[i].len() != n {
+                return Err("Dimension mismatch");
+            }
+        }
+
+        let mut tmp = [T::zero(); N];
+        for i in 0..n {
+            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            let grad = self.interp_one_grad(tmp)?;
+            for j in 0..N {
+                out[j][i] = grad[j];
+            }
+        }
+
+        Ok(())
+    }
+
     /// Interpolate the value at one point.
     ///
     /// Uses fixed-size intermediate storage of O(N) and no allocation.
@@ -376,6 +399,123 @@ impl<'a, T: Float, const N: usize> MultiBsplineRegular<'a, T, N> {
         }
 
         Ok(dot4(weights[N - 1], store[N - 1]))
+    }
+
+    /// Evaluate the gradient at one point.
+    ///
+    /// Uses fixed-size intermediate storage and no allocation.
+    pub fn interp_one_grad(&self, x: [T; N]) -> Result<[T; N], &'static str> {
+        let mut origin = [0_usize; N];
+        let mut sat = [Saturation::None; N];
+        let mut weights = [[T::zero(); FP]; N];
+        let mut dweights = [[T::zero(); FP]; N];
+        let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
+        let mut grad_store = [[[T::zero(); N]; FP]; N];
+
+        populate_dimprod(self.dims, &mut dimprod);
+
+        for i in 0..N {
+            (origin[i], sat[i]) = self.get_loc(x[i], i)?;
+            let origin_f =
+                <T as NumCast>::from(origin[i] + 1).ok_or("Unrepresentable coordinate value")?;
+            let index_one_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
+            let t = (x[i] - index_one_loc) / self.steps[i];
+            weights[i] = interp_weights(t, sat[i], self.linearize_extrapolation);
+            dweights[i] = interp_weight_derivatives(
+                t,
+                sat[i],
+                self.linearize_extrapolation,
+                T::one() / self.steps[i],
+            );
+        }
+
+        let nverts = const { FP.pow(N as u32) };
+
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
+                for j in 0..N {
+                    if j == 0 {
+                        for k in 0..N {
+                            let offset: usize = ($i & (3 << (2 * k))) >> (2 * k);
+                            loc[k] = origin[k] + offset;
+                        }
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.coeffs);
+                    } else {
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
+                        let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
+                        let ind: usize = j.saturating_sub(1);
+
+                        if level {
+                            store[j][p] = dot4(weights[ind], store[ind]);
+                            for k in 0..N {
+                                grad_store[j][p][k] = if k == ind {
+                                    dot4(dweights[ind], store[ind])
+                                } else {
+                                    dot4(
+                                        weights[ind],
+                                        [
+                                            grad_store[ind][0][k],
+                                            grad_store[ind][1][k],
+                                            grad_store[ind][2][k],
+                                            grad_store[ind][3][k],
+                                        ],
+                                    )
+                                };
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        #[cfg(not(feature = "deep-unroll"))]
+        if N <= 3 {
+            unroll! {
+                for i < 64 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        #[cfg(feature = "deep-unroll")]
+        if N <= 4 {
+            unroll! {
+                for i < 256 in 0..nverts {
+                    unroll_vertices_body!(i);
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i);
+            }
+        }
+
+        let ind = N - 1;
+        let mut grad = [T::zero(); N];
+        for k in 0..N {
+            grad[k] = if k == ind {
+                dot4(dweights[ind], store[ind])
+            } else {
+                dot4(
+                    weights[ind],
+                    [
+                        grad_store[ind][0][k],
+                        grad_store[ind][1][k],
+                        grad_store[ind][2][k],
+                        grad_store[ind][3][k],
+                    ],
+                )
+            };
+        }
+        Ok(grad)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,
@@ -761,6 +901,32 @@ fn interp_weights<T: Float>(t: T, sat: Saturation, linearize_extrapolation: bool
 }
 
 #[inline]
+/// Select the appropriate first-derivative weights for an interpolation region.
+fn interp_weight_derivatives<T: Float>(
+    t: T,
+    sat: Saturation,
+    linearize_extrapolation: bool,
+    inv_step: T,
+) -> [T; 4] {
+    let mut out = match sat {
+        Saturation::None => cubic_bspline_weight_derivatives(t),
+        Saturation::InsideLow => low_boundary_weight_derivatives(t + T::one(), false),
+        Saturation::OutsideLow => {
+            low_boundary_weight_derivatives(t + T::one(), linearize_extrapolation)
+        }
+        Saturation::InsideHigh => high_boundary_weight_derivatives(t - T::one(), false),
+        Saturation::OutsideHigh => {
+            high_boundary_weight_derivatives(t - T::one(), linearize_extrapolation)
+        }
+    };
+
+    for item in &mut out {
+        *item = *item * inv_step;
+    }
+    out
+}
+
+#[inline]
 /// Cubic cardinal B-spline weights for an interior unit-width span.
 fn cubic_bspline_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
@@ -779,6 +945,23 @@ fn cubic_bspline_weights<T: Float>(t: T) -> [T; 4] {
 }
 
 #[inline]
+/// First derivatives of cubic cardinal B-spline weights for a unit-width span.
+fn cubic_bspline_weight_derivatives<T: Float>(t: T) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    let three = two + one;
+    let six = three + three;
+    let t2 = t * t;
+
+    [
+        (-three + six * t - three * t2) / six,
+        (-six * two * t + three * three * t2) / six,
+        (three + six * t - three * three * t2) / six,
+        three * t2 / six,
+    ]
+}
+
+#[inline]
 /// Low-boundary weights with the ghost coefficient folded into stored coefficients.
 fn low_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
     let raw = if linearize_extrapolation {
@@ -789,6 +972,24 @@ fn low_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4]
 
     // The low-side ghost coefficient is 3*c0 - 3*c1 + c2. Fold the
     // ghost's contribution into the four stored coefficients.
+    let three = T::one() + T::one() + T::one();
+    [
+        mul_add(three, raw[0], raw[1]),
+        mul_add(-three, raw[0], raw[2]),
+        raw[0] + raw[3],
+        T::zero(),
+    ]
+}
+
+#[inline]
+/// Low-boundary first-derivative weights with the ghost coefficient folded in.
+fn low_boundary_weight_derivatives<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        low_linearized_boundary_weight_derivatives(t)
+    } else {
+        cubic_bspline_weight_derivatives(t)
+    };
+
     let three = T::one() + T::one() + T::one();
     [
         mul_add(three, raw[0], raw[1]),
@@ -819,6 +1020,24 @@ fn high_boundary_weights<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4
 }
 
 #[inline]
+/// High-boundary first-derivative weights with the ghost coefficient folded in.
+fn high_boundary_weight_derivatives<T: Float>(t: T, linearize_extrapolation: bool) -> [T; 4] {
+    let raw = if linearize_extrapolation {
+        high_linearized_boundary_weight_derivatives(t)
+    } else {
+        cubic_bspline_weight_derivatives(t)
+    };
+
+    let three = T::one() + T::one() + T::one();
+    [
+        T::zero(),
+        raw[0] + raw[3],
+        mul_add(-three, raw[3], raw[1]),
+        mul_add(three, raw[3], raw[2]),
+    ]
+}
+
+#[inline]
 /// Low-side affine continuation of the boundary span's value and first derivative.
 fn low_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
     let one = T::one();
@@ -832,6 +1051,14 @@ fn low_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
         one / six + t / two,
         T::zero(),
     ]
+}
+
+#[inline]
+/// First derivative of the low-side affine continuation.
+fn low_linearized_boundary_weight_derivatives<T: Float>(_t: T) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    [-one / two, T::zero(), one / two, T::zero()]
 }
 
 #[inline]
@@ -849,6 +1076,14 @@ fn high_linearized_boundary_weights<T: Float>(t: T) -> [T; 4] {
         (two + two) / six,
         one / six + u / two,
     ]
+}
+
+#[inline]
+/// First derivative of the high-side affine continuation.
+fn high_linearized_boundary_weight_derivatives<T: Float>(_t: T) -> [T; 4] {
+    let one = T::one();
+    let two = one + one;
+    [T::zero(), -one / two, T::zero(), one / two]
 }
 
 #[cfg(test)]

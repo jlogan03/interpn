@@ -225,6 +225,29 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         Ok(())
     }
 
+    /// Evaluate the gradient on a contiguous list of observation points.
+    ///
+    /// `out[j][i]` is the derivative of observation `i` with respect to axis `j`.
+    pub fn interp_grad(&self, x: &[&[T]; N], out: &mut [&mut [T]; N]) -> Result<(), &'static str> {
+        let n = out[0].len();
+        for i in 0..N {
+            if x[i].len() != n || out[i].len() != n {
+                return Err("Dimension mismatch");
+            }
+        }
+
+        let mut tmp = [T::zero(); N];
+        for i in 0..n {
+            (0..N).for_each(|j| tmp[j] = x[j][i]);
+            let grad = self.interp_one_grad(tmp)?;
+            for j in 0..N {
+                out[j][i] = grad[j];
+            }
+        }
+
+        Ok(())
+    }
+
     /// Interpolate the value at a point,
     /// using fixed-size intermediate storage of O(N) and no allocation.
     ///
@@ -339,6 +362,104 @@ impl<'a, T: Float, const N: usize> MultilinearRegular<'a, T, N> {
         let t = dts[N - 1];
         let interped = mul_add(t, dy, y0);
         Ok(interped)
+    }
+
+    /// Evaluate the gradient at a point,
+    /// using fixed-size intermediate storage and no allocation.
+    #[inline]
+    pub fn interp_one_grad(&self, x: [T; N]) -> Result<[T; N], &'static str> {
+        let mut origin = [0_usize; N];
+        let mut dts = [T::zero(); N];
+        let mut inv_steps = [T::zero(); N];
+        let mut dimprod = [1_usize; N];
+        let mut loc = [0_usize; N];
+        let mut store = [[T::zero(); FP]; N];
+        let mut grad_store = [[[T::zero(); N]; FP]; N];
+
+        let mut acc = 1;
+        for i in 0..N {
+            if i > 0 {
+                acc *= self.dims[N - i];
+            }
+            dimprod[N - i - 1] = acc;
+
+            origin[i] = self.get_loc(x[i], i)?;
+            let origin_f =
+                <T as NumCast>::from(origin[i]).ok_or("Unrepresentable coordinate value")?;
+            let index_zero_loc = mul_add(self.steps[i], origin_f, self.starts[i]);
+
+            dts[i] = (x[i] - index_zero_loc) / self.steps[i];
+            inv_steps[i] = T::one() / self.steps[i];
+        }
+
+        const FP: usize = 2;
+        let nverts = const { FP.pow(N as u32) };
+
+        macro_rules! unroll_vertices_body {
+            ($i:ident) => {
+                for j in 0..N {
+                    if j == 0 {
+                        for k in 0..N {
+                            let offset: usize = ($i & (1 << k)) >> k;
+                            loc[k] = origin[k] + offset;
+                        }
+                        let store_ind: usize = $i % FP;
+                        store[0][store_ind] = index_arr_fixed_dims(loc, dimprod, self.vals);
+                    } else {
+                        let q: usize = FP.pow(j as u32);
+                        let level: bool = ($i + 1).is_multiple_of(q);
+
+                        if level {
+                            let p: usize = (($i + 1) / q).saturating_sub(1) % FP;
+                            let ind: usize = j.saturating_sub(1);
+
+                            let y0 = store[ind][0];
+                            let dy = store[ind][1] - y0;
+                            let t = dts[ind];
+
+                            store[j][p] = mul_add(t, dy, y0);
+                            for k in 0..N {
+                                grad_store[j][p][k] = if k == ind {
+                                    dy * inv_steps[ind]
+                                } else {
+                                    let g0 = grad_store[ind][0][k];
+                                    let dg = grad_store[ind][1][k] - g0;
+                                    mul_add(t, dg, g0)
+                                };
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        if N <= 6 {
+            unroll! {
+                for i < 64 in 0..nverts {
+                    unroll_vertices_body!(i)
+                }
+            }
+        } else {
+            for i in 0..nverts {
+                unroll_vertices_body!(i)
+            }
+        }
+
+        let ind = N - 1;
+        let y0 = store[ind][0];
+        let dy = store[ind][1] - y0;
+        let t = dts[ind];
+        let mut grad = [T::zero(); N];
+        for k in 0..N {
+            grad[k] = if k == ind {
+                dy * inv_steps[ind]
+            } else {
+                let g0 = grad_store[ind][0][k];
+                let dg = grad_store[ind][1][k] - g0;
+                mul_add(t, dg, g0)
+            };
+        }
+        Ok(grad)
     }
 
     /// Get the two-lower index along this dimension where `x` is found,

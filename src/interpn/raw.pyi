@@ -15,20 +15,32 @@ __all__ = [
     "interpn_f32",
     "interpn_linear_regular_f64",
     "interpn_linear_regular_f32",
+    "interpn_linear_regular_grad_f64",
+    "interpn_linear_regular_grad_f32",
     "interpn_linear_rectilinear_f64",
     "interpn_linear_rectilinear_f32",
+    "interpn_linear_rectilinear_grad_f64",
+    "interpn_linear_rectilinear_grad_f32",
     "interpn_nearest_regular_f64",
     "interpn_nearest_regular_f32",
     "interpn_nearest_rectilinear_f64",
     "interpn_nearest_rectilinear_f32",
     "interpn_cubic_regular_f64",
     "interpn_cubic_regular_f32",
+    "interpn_cubic_regular_grad_f64",
+    "interpn_cubic_regular_grad_f32",
     "interpn_cubic_rectilinear_f64",
     "interpn_cubic_rectilinear_f32",
+    "interpn_cubic_rectilinear_grad_f64",
+    "interpn_cubic_rectilinear_grad_f32",
     "coefficients_bspline_regular_f64",
     "coefficients_bspline_regular_f32",
+    "_eval_bspline_regular_grad_f64",
+    "_eval_bspline_regular_grad_f32",
     "coefficients_bspline_rectilinear_f64",
     "coefficients_bspline_rectilinear_f32",
+    "_eval_bspline_rectilinear_grad_f64",
+    "_eval_bspline_rectilinear_grad_f32",
     "check_bounds_regular_f64",
     "check_bounds_regular_f32",
     "check_bounds_rectilinear_f64",
@@ -73,6 +85,22 @@ def interpn_linear_regular_f32(
     obs: Sequence[NDArrayF32],
     out: NDArrayF32,
 ) -> None: ...
+def interpn_linear_regular_grad_f64(
+    dims: IntArray,
+    starts: NDArrayF64,
+    steps: NDArrayF64,
+    vals: NDArrayF64,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def interpn_linear_regular_grad_f32(
+    dims: IntArray,
+    starts: NDArrayF32,
+    steps: NDArrayF32,
+    vals: NDArrayF32,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+) -> None: ...
 def interpn_linear_rectilinear_f64(
     grids: Sequence[NDArrayF64],
     vals: NDArrayF64,
@@ -80,6 +108,18 @@ def interpn_linear_rectilinear_f64(
     out: NDArrayF64,
 ) -> None: ...
 def interpn_linear_rectilinear_f32(
+    grids: Sequence[NDArrayF32],
+    vals: NDArrayF32,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+) -> None: ...
+def interpn_linear_rectilinear_grad_f64(
+    grids: Sequence[NDArrayF64],
+    vals: NDArrayF64,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def interpn_linear_rectilinear_grad_f32(
     grids: Sequence[NDArrayF32],
     vals: NDArrayF32,
     obs: Sequence[NDArrayF32],
@@ -131,6 +171,24 @@ def interpn_cubic_regular_f32(
     obs: Sequence[NDArrayF32],
     out: NDArrayF32,
 ) -> None: ...
+def interpn_cubic_regular_grad_f64(
+    dims: IntArray,
+    starts: NDArrayF64,
+    steps: NDArrayF64,
+    vals: NDArrayF64,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def interpn_cubic_regular_grad_f32(
+    dims: IntArray,
+    starts: NDArrayF32,
+    steps: NDArrayF32,
+    vals: NDArrayF32,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+) -> None: ...
 def interpn_cubic_rectilinear_f64(
     grids: Sequence[NDArrayF64],
     vals: NDArrayF64,
@@ -139,6 +197,20 @@ def interpn_cubic_rectilinear_f64(
     out: NDArrayF64,
 ) -> None: ...
 def interpn_cubic_rectilinear_f32(
+    grids: Sequence[NDArrayF32],
+    vals: NDArrayF32,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+) -> None: ...
+def interpn_cubic_rectilinear_grad_f64(
+    grids: Sequence[NDArrayF64],
+    vals: NDArrayF64,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def interpn_cubic_rectilinear_grad_f32(
     grids: Sequence[NDArrayF32],
     vals: NDArrayF32,
     linearize_extrapolation: bool,
@@ -157,6 +229,24 @@ def coefficients_bspline_regular_f32(
     coeffs: NDArrayF32,
     scratch: NDArrayF32,
 ) -> None: ...
+def _eval_bspline_regular_grad_f64(
+    dims: IntArray,
+    starts: NDArrayF64,
+    steps: NDArrayF64,
+    coeffs: NDArrayF64,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def _eval_bspline_regular_grad_f32(
+    dims: IntArray,
+    starts: NDArrayF32,
+    steps: NDArrayF32,
+    coeffs: NDArrayF32,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
+) -> None: ...
 def coefficients_bspline_rectilinear_f64(
     grids: Sequence[NDArrayF64],
     vals: NDArrayF64,
@@ -168,6 +258,20 @@ def coefficients_bspline_rectilinear_f32(
     vals: NDArrayF32,
     coeffs: NDArrayF32,
     scratch: NDArrayF32,
+) -> None: ...
+def _eval_bspline_rectilinear_grad_f64(
+    grids: Sequence[NDArrayF64],
+    coeffs: NDArrayF64,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF64],
+    out: NDArrayF64,
+) -> None: ...
+def _eval_bspline_rectilinear_grad_f32(
+    grids: Sequence[NDArrayF32],
+    coeffs: NDArrayF32,
+    linearize_extrapolation: bool,
+    obs: Sequence[NDArrayF32],
+    out: NDArrayF32,
 ) -> None: ...
 def check_bounds_regular_f64(
     dims: IntArray,

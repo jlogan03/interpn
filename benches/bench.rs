@@ -3,8 +3,9 @@
 use criterion::*;
 use gridgen::*;
 use interpn::{
-    Linear1D, LinearHoldLast1D, MultilinearRegular, RectilinearGrid1D, RegularGrid1D, multibspline,
-    multicubic, multilinear, nearest,
+    Linear1D, LinearHoldLast1D, MultiBsplineRectilinear, MultiBsplineRegular,
+    MulticubicRectilinear, MulticubicRegular, MultilinearRectilinear, MultilinearRegular,
+    RectilinearGrid1D, RegularGrid1D, multibspline, multicubic, multilinear, nearest,
     one_dim::{
         Interp1D,
         hold::{Left1D, Nearest1D},
@@ -13,8 +14,29 @@ use interpn::{
 
 use std::hint::black_box;
 
+macro_rules! with_grad_out {
+    (1, $size:expr, $out:ident, $body:block) => {{
+        let mut out0 = vec![0.0; $size];
+        let mut $out = [&mut out0[..]];
+        $body
+    }};
+    (2, $size:expr, $out:ident, $body:block) => {{
+        let mut out0 = vec![0.0; $size];
+        let mut out1 = vec![0.0; $size];
+        let mut $out = [&mut out0[..], &mut out1[..]];
+        $body
+    }};
+    (3, $size:expr, $out:ident, $body:block) => {{
+        let mut out0 = vec![0.0; $size];
+        let mut out1 = vec![0.0; $size];
+        let mut out2 = vec![0.0; $size];
+        let mut $out = [&mut out0[..], &mut out1[..], &mut out2[..]];
+        $body
+    }};
+}
+
 macro_rules! bench_interp_specific {
-    ($group:ident, $ndims:expr, $gridsize:expr, $size:expr) => {
+    ($group:ident, $ndims:tt, $gridsize:expr, $size:expr) => {
         $group.throughput(Throughput::Elements(*$size as u64));
         // $group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
         let scan_or_shuffle = "Shuffled Order";
@@ -53,6 +75,38 @@ macro_rules! bench_interp_specific {
                             MultilinearRegular::new(dims, starts, steps, &z).unwrap();
                         interpolator.interp(obs, &mut out).unwrap()
                     })
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Gradient Linear Regular {}x{}D MAXDIMS={}, {}",
+                    $gridsize, $ndims, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let interpolator: MultilinearRegular<'_, _, $ndims> =
+                    MultilinearRegular::new(dims, starts, steps, &z).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
                 });
             },
         );
@@ -138,6 +192,44 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
+                    "Gradient Bspline Regular {}x{}D Precomputed Coeffs, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let coeff_len = MultiBsplineRegular::<f64, $ndims>::coeff_storage_len(dims);
+                let scratch_len =
+                    MultiBsplineRegular::<f64, $ndims>::construction_scratch_len(dims);
+                let mut coeffs = vec![0.0; coeff_len];
+                let mut scratch = vec![0.0; scratch_len];
+                multibspline::regular::coefficients(dims, &z, &mut coeffs, &mut scratch).unwrap();
+                let interpolator: MultiBsplineRegular<'_, _, $ndims> =
+                    MultiBsplineRegular::new(dims, starts, steps, &coeffs, false).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
                     "Bspline Regular {}x{}D With Construction, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
@@ -192,6 +284,56 @@ macro_rules! bench_interp_specific {
         $group.bench_with_input(
             BenchmarkId::new(
                 format!(
+                    "Gradient Bspline Regular {}x{}D With Construction, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let coeff_len = MultiBsplineRegular::<f64, $ndims>::coeff_storage_len(dims);
+                let scratch_len =
+                    MultiBsplineRegular::<f64, $ndims>::construction_scratch_len(dims);
+                let mut coeffs = vec![0.0; coeff_len];
+                let mut scratch = vec![0.0; scratch_len];
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| {
+                        black_box({
+                            let interpolator: MultiBsplineRegular<'_, _, $ndims> =
+                                MultiBsplineRegular::from_values_with_workspace(
+                                    dims,
+                                    starts,
+                                    steps,
+                                    &z,
+                                    &mut coeffs,
+                                    &mut scratch,
+                                    false,
+                                )
+                                .unwrap();
+                            interpolator.interp_grad(obs, &mut out).unwrap()
+                        })
+                    });
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
                     "Linear Rectilinear {}x{}D MAXDIMS=8, {}",
                     $gridsize, $ndims, scan_or_shuffle
                 ),
@@ -215,6 +357,70 @@ macro_rules! bench_interp_specific {
                     black_box(
                         multilinear::rectilinear::interpn(&gridslice, &z, &obs, &mut out).unwrap(),
                     )
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Gradient Linear Rectilinear {}x{}D MAXDIMS=8, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+                let grids: &[&[f64]; $ndims] = (&gridslice[..]).try_into().unwrap();
+                let interpolator: MultilinearRectilinear<'_, _, $ndims> =
+                    MultilinearRectilinear::new(grids, &z).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Gradient Bspline Rectilinear {}x{}D Precomputed Coeffs, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+                let grids: &[&[f64]; $ndims] = (&gridslice[..]).try_into().unwrap();
+                let dims = [$gridsize; $ndims];
+                let coeff_len = MultiBsplineRectilinear::<f64, $ndims>::coeff_storage_len(dims);
+                let scratch_len =
+                    MultiBsplineRectilinear::<f64, $ndims>::construction_scratch_len(dims);
+                let mut coeffs = vec![0.0; coeff_len];
+                let mut scratch = vec![0.0; scratch_len];
+                multibspline::rectilinear::coefficients(grids, &z, &mut coeffs, &mut scratch)
+                    .unwrap();
+                let interpolator: MultiBsplineRectilinear<'_, _, $ndims> =
+                    MultiBsplineRectilinear::new(grids, &coeffs, false).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
                 });
             },
         );
@@ -246,6 +452,38 @@ macro_rules! bench_interp_specific {
                         nearest::regular::interpn(&dims, &starts, &steps, &z, &obs[..], &mut out)
                             .unwrap()
                     })
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Gradient Cubic Regular {}x{}D MAXDIMS=8, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 0.0);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let dims = [$gridsize; $ndims];
+                let mut starts = [0.0; $ndims];
+                let mut steps = [0.0; $ndims];
+                (0..$ndims).for_each(|i| starts[i] = grids[i][0]);
+                (0..$ndims).for_each(|i| steps[i] = grids[i][1] - grids[i][0]);
+
+                let interpolator: MulticubicRegular<'_, _, $ndims> =
+                    MulticubicRegular::new(dims, starts, steps, &z, false).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
                 });
             },
         );
@@ -340,6 +578,34 @@ macro_rules! bench_interp_specific {
                         multicubic::rectilinear::interpn(&gridslice, &z, false, &obs, &mut out)
                             .unwrap(),
                     )
+                });
+            },
+        );
+
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!(
+                    "Gradient Cubic Rectilinear {}x{}D MAXDIMS=8, {}",
+                    $gridsize, $ndims, scan_or_shuffle
+                ),
+                $size,
+            ),
+            $size,
+            |b, &size| {
+                let (grids, z) = gen_grid($ndims, $gridsize, 1e-3);
+
+                let m: usize = ((size as f64).powf(1.0 / ($ndims as f64)) + 2.0) as usize;
+                let gridobs_t = gen_interp_obs_grid(&grids, m, true);
+                let obs: Vec<&[f64]> = gridobs_t.iter().map(|x| &x[..size]).collect();
+                let obs: &[&[f64]; $ndims] = (&obs[..]).try_into().unwrap();
+
+                let gridslice: Vec<&[f64]> = grids.iter().map(|x| &x[..]).collect();
+                let grids: &[&[f64]; $ndims] = (&gridslice[..]).try_into().unwrap();
+                let interpolator: MulticubicRectilinear<'_, _, $ndims> =
+                    MulticubicRectilinear::new(grids, &z, false).unwrap();
+
+                with_grad_out!($ndims, size, out, {
+                    b.iter(|| black_box({ interpolator.interp_grad(obs, &mut out).unwrap() }));
                 });
             },
         );
