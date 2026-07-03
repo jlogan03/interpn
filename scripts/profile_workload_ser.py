@@ -44,6 +44,14 @@ def _evaluate(interpolator, points: list[np.ndarray]) -> None:
     interpolator.eval(points, out)
 
 
+def _evaluate_grad(interpolator, points: list[np.ndarray]) -> None:
+    # Without preallocated output
+    interpolator.eval_grad(points)
+    # With preallocated output
+    out = np.empty((len(points), *points[0].shape), dtype=points[0].dtype)
+    interpolator.eval_grad(points, out)
+
+
 def main() -> None:
     rng = np.random.default_rng(2394587)
 
@@ -109,6 +117,23 @@ def main() -> None:
 
                     print(
                         f"Completed {type(interpolator).__name__} "
+                        f"dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
+                    )
+
+                for interpolator in (
+                    linear_regular,
+                    linear_rect,
+                    cubic_regular,
+                    bspline_regular,
+                    cubic_rect,
+                    bspline_rect,
+                ):
+                    for _ in range(nreps):
+                        points = _observation_points(rng, ndims, nobs, dtype)
+                        _evaluate_grad(interpolator, points)
+
+                    print(
+                        f"Completed {type(interpolator).__name__} gradients "
                         f"dtype={np.dtype(dtype).name} ndims={ndims} nobs={nobs}"
                     )
 
