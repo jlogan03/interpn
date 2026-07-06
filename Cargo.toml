@@ -36,6 +36,8 @@ itertools = { version = "0.15.0", optional = true }
 rand = "0.10.1"
 criterion = "0.8.2"
 ndarray = "0.17.2"
+ninterp = "0.8.2"
+plotly = "0.13.5"
 
 [features]
 default = ["std", "crunchy/limit_64", "par"]
